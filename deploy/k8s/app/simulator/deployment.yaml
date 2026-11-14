@@ -20,6 +20,9 @@ spec:
       automountServiceAccountToken: false
       # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
       enableServiceLinks: false
+      # Graceful shutdown: preStop waits 5 s while the endpoint leaves the Service (the backend's demo panel calls
+      # the control endpoint), then SIGTERM; 30 s in total before SIGKILL.
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -29,6 +32,9 @@ spec:
         - name: simulator
           image: filegrid-simulator
           imagePullPolicy: Never
+          lifecycle:
+            preStop:
+              sleep: {seconds: 5}   # kubelet's own sleep action: no shell or sleep binary needed in the image
           ports:
             - {name: http, containerPort: 8080}
           envFrom:

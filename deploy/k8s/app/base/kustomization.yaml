@@ -3,3 +3,4 @@ kind: Kustomization
 namespace: filegrid
 resources:
   - serviceaccount.yaml
+  - security-headers.yaml

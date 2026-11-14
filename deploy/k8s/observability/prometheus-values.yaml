@@ -1,6 +1,7 @@
-# prometheus-community/prometheus: server + alertmanager + kube-state-metrics; node-exporter si pushgateway oprite.
+# prometheus-community/prometheus: server + alertmanager + kube-state-metrics + node-exporter; pushgateway oprit.
 # Retentie 2d. Scrape: podurile adnotate prometheus.io/scrape="true" (+ prometheus.io/port, prometheus.io/path),
-# cAdvisor prin kubelet (doar metricile de container folosite), kube-state-metrics si probele blackbox spre storage-uri.
+# cAdvisor prin kubelet (doar metricile de container folosite), kube-state-metrics, node-exporter (RAM + disc) si
+# probele blackbox spre storage-uri.
 server:
   retention: 2d
   retentionSize: 1GB
@@ -23,8 +24,23 @@ configmapReload:
       requests: {cpu: 5m, memory: 12Mi}
       limits: {cpu: 50m, memory: 24Mi}
 
+# node-exporter doar pentru NodeMemoryHigh / NodeDiskHigh: colectoarele meminfo si filesystem (~7 MiB RAM).
+# Fara hostNetwork/hostPID (implicit in chart): altfel ar asculta pe :9100 pe toate interfetele nodului, inclusiv
+# IP-ul public, si NetworkPolicy-urile nu s-ar aplica. /proc, /sys si / ale nodului vin montate read-only in
+# /host/*, deci valorile sunt ale nodului; podul ramane in namespace-ul monitoring (default-deny + same-namespace).
 prometheus-node-exporter:
-  enabled: false
+  enabled: true
+  hostNetwork: false
+  hostPID: false
+  extraArgs:
+    - --collector.disable-defaults
+    - --collector.meminfo
+    - --collector.filesystem
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/kubelet/.+|var/lib/rancher/k3s/agent/containerd/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs|erofs)$
+  resources:
+    requests: {cpu: 5m, memory: 16Mi}
+    limits: {cpu: 100m, memory: 32Mi}
 prometheus-pushgateway:
   enabled: false
 
@@ -160,6 +176,27 @@ serverFiles:
         static_configs:
           - targets: [prometheus-kube-state-metrics.monitoring.svc.cluster.local:8080]
 
+      # node-exporter (DaemonSet): un target per nod, instance = numele nodului; doar metricile alertelor.
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces: {names: [monitoring]}
+            selectors:
+              - role: pod
+                label: app.kubernetes.io/name=prometheus-node-exporter
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9100"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: keep
+            regex: node_(memory_MemAvailable_bytes|memory_MemTotal_bytes|filesystem_avail_bytes|filesystem_size_bytes)
+
       # Probe TCP independente de aplicatie: blackbox-exporter (namespace filegrid, eticheta storage-client)
       # -> postgres/s3/ftp. Eticheta storage foloseste numele din contract: db, s3, ftp.
       - job_name: blackbox-storage
@@ -181,7 +218,8 @@ serverFiles:
           - target_label: __address__
             replacement: blackbox-exporter.filegrid.svc.cluster.local:9115
 
-  # Validate cu promtool in podul prometheus (make obs-status / obs-up).
+  # Validate cu promtool: make obs-rules-test inainte de deploy (teste unitare: alerting-rules.test.yml),
+  # make obs-rules-check in podul Prometheus (ruleaza si la obs-up).
   alerting_rules.yml:
     groups:
       - name: filegrid
@@ -215,24 +253,21 @@ serverFiles:
                 catre el. Cerinta din brief: degradare controlata, fara blocarea celorlalte categorii; investigati
                 storage-ul si urmariti revenirea circuitului (half-open -> closed).
 
-          # Trimise vs stocate pe ACEEASI fereastra [t-7m, t-2m] (offset 2m = toleranta pentru citirile in zbor/retry);
-          # ferestre egale, altfel alerta pornea abia peste ~28% pierderi. Backend nescrapuit/cazut => stocate = 0
-          # (or vector(0)), deci alerta porneste in loc sa taca. "> 1" absoarbe zgomotul de extrapolare al increase().
-          # Contract (P2): filegrid_sim_readings_sent_total numara citiri UNICE (un reading_id o singura data, fara
-          # reincercari/duplicate intentionate) si filegrid_meter_readings_stored_total doar prima stocare.
+          # Contract V1/V2: backend-ul expune gauge-ul filegrid_meter_readings_lost (fara etichete), calculat de
+          # ACELASI evaluator si cu aceeasi definitie ca GET /api/v1/guarantees pentru meter_readings (0 cand nu s-a
+          # pierdut nimic). Alerta si statistica "Pierdute" din dashboard folosesc DOAR acest gauge (diferenta
+          # trimise - stocate din contoarele simulatorului dadea alerte false). max(): fiecare replica backend
+          # expune aceeasi valoare.
           - alert: MeterReadingsLost
-            expr: |
-              sum(increase(filegrid_sim_readings_sent_total[5m] offset 2m))
-                - (sum(increase(filegrid_meter_readings_stored_total[5m] offset 2m)) or vector(0))
-              > 1
-            for: 5m
+            expr: max(filegrid_meter_readings_lost) > 0
+            for: 2m
             labels: {severity: critical}
             annotations:
               summary: "Citiri de contor pierdute"
               description: >-
-                Simulatorul a trimis cu {{ $value | printf "%.0f" }} mai multe citiri decat a stocat platforma (dupa 2
-                minute de toleranta pentru citirile in curs). Cerinta din brief: nicio citire de contor nu are voie sa se
-                piarda; verificati retry-urile, storage-ul db si logurile dupa trace_id.
+                Garantia meter_readings raporteaza {{ $value | printf "%.0f" }} citiri pierdute de cel putin 2 minute
+                (filegrid_meter_readings_lost, aceeasi valoare ca GET /api/v1/guarantees). Cerinta din brief: nicio
+                citire de contor nu are voie sa se piarda; verificati retry-urile, storage-ul db si logurile dupa trace_id.
 
           - alert: MeterReadingsDuplicateStored
             expr: sum(increase(filegrid_meter_readings_duplicate_stored_total[5m])) > 0
@@ -285,3 +320,66 @@ serverFiles:
                 Rata de eroare pentru drone_videos este {{ $value | humanizePercentage }} de 10 minute. Cerinta din
                 brief: videoclipurile mari de inspectie cu drona trebuie transferate fiabil (reluare/retry), fara a
                 bloca celelalte categorii.
+
+      # Sanatatea platformei (nu o cerinta de business anume, ci premisa tuturor): tinte nescrapuite, poduri care
+      # repornesc in bucla, containere la limita de memorie (OOMKill), nodul fara RAM sau disc.
+      - name: infra
+        rules:
+          - alert: TargetDown
+            expr: up == 0
+            for: 2m
+            labels: {severity: warning}
+            annotations:
+              summary: "Tinta {{ $labels.job }} nu mai poate fi scrapuita ({{ $labels.instance }})"
+              description: >-
+                Prometheus nu mai citeste metricile de la {{ $labels.job }} / {{ $labels.instance }}
+                {{ with $labels.pod }}(pod {{ . }}){{ end }} de cel putin 2 minute. Alertele care depind de aceste
+                metrici nu mai pot porni; verificati podul (kubectl get pods -A) si NetworkPolicy-urile.
+
+          - alert: PodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+            labels: {severity: warning}
+            annotations:
+              summary: "Containerul {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) reporneste in bucla"
+              description: >-
+                {{ $value | printf "%.0f" }} restarturi in ultimele 15 minute. Verificati
+                kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }} (OOMKilled? probe esuate?) si logurile
+                containerului anterior (kubectl logs --previous).
+
+          # cAdvisor: container="" = cgroup-ul podului (ignorat); limita 0 = container fara limita (ignorat).
+          - alert: ContainerMemoryNearLimit
+            expr: |
+              max by (namespace, pod, container) (container_memory_working_set_bytes{container!=""})
+                / on (namespace, pod, container)
+              max by (namespace, pod, container) (container_spec_memory_limit_bytes{container!=""} > 0)
+              > 0.9
+            for: 10m
+            labels: {severity: warning}
+            annotations:
+              summary: "Containerul {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) e aproape de limita de memorie"
+              description: >-
+                Memoria folosita (working set) e {{ $value | humanizePercentage }} din limita de cel putin 10 minute;
+                la 100% kernel-ul opreste containerul (OOMKilled). Ridicati limita din manifest sau din valorile helm.
+
+          - alert: NodeMemoryHigh
+            expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+            for: 10m
+            labels: {severity: warning}
+            annotations:
+              summary: "Nodul {{ $labels.node }} are memoria aproape plina"
+              description: >-
+                {{ $value | humanizePercentage }} din RAM-ul nodului e folosit de cel putin 10 minute. Urmeaza OOMKill-uri
+                si evacuari de poduri; verificati kubectl top pods -A.
+
+          - alert: NodeDiskHigh
+            expr: |
+              1 - node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"}
+              > 0.85
+            for: 10m
+            labels: {severity: warning}
+            annotations:
+              summary: "Discul {{ $labels.mountpoint }} de pe nodul {{ $labels.node }} e aproape plin"
+              description: >-
+                {{ $value | humanizePercentage }} din {{ $labels.mountpoint }} ({{ $labels.device }}) e ocupat de cel putin
+                10 minute. Volumele local-path (Postgres, S3, FTP, Prometheus, Loki) si imaginile stau pe acest disc;
+                un disc plin opreste scrierile tuturor storage-urilor.

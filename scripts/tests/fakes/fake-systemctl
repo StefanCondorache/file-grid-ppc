@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fake systemctl for scripts/tests. Every call is appended to $FAKE_STATE/calls.
+#   systemctl restart k3s: k3s starts with encryption (state "true start" for the fake k3s) when $K3S_CONFIG says
+#   secrets-encryption: true and there was no encryption config yet; $FAKE_STATE/k3s-ignores-config disables that.
+printf 'systemctl %s\n' "$*" >> "$FAKE_STATE/calls"
+if [ "$*" = "restart k3s" ] && [ ! -f "$FAKE_STATE/k3s-ignores-config" ] && [ ! -f "$FAKE_STATE/k3s-enc" ] \
+   && grep -Eq '^secrets-encryption:[[:space:]]*true' "${K3S_CONFIG:-/nonexistent}" 2>/dev/null; then
+  echo "true start" > "$FAKE_STATE/k3s-enc"
+fi
+exit 0

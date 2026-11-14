@@ -11,12 +11,14 @@ export DOMAIN ?= ppc.filegrid.cc.cd
 # helm si kubectl (link-ul k3s) citesc acelasi cluster: kubeconfig-ul k3s, nu un ~/.kube/config oarecare
 export KUBECONFIG ?= /etc/rancher/k3s/k3s.yaml
 
-.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check
+.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check scripts-test \
+	k3s-secrets-encrypt
 
 # O singura comanda pe VPS sau pe un Ubuntu curat, ca root. Idempotenta: a doua rulare nu schimba nimic.
 # host-bootstrap.sh instaleaza doar ce lipseste (curl/openssl/jq, k3s, helm) si asteapta clusterul;
-# urmeaza storage-urile, HTTPS (cert-manager, placeholder) si starea. Storage-urile vin inainte de HTTPS: nu depind
-# de el, iar k8s-tls-up asteapta contul ACME la Let's Encrypt. Nu foloseste infra/.env.
+# urmeaza storage-urile, HTTPS (cert-manager, Traefik), observabilitatea, aplicatia (cu placeholder-ul pe "/" cat timp
+# nu exista frontend) si starea. Storage-urile vin inainte de HTTPS: nu depind de el, iar k8s-tls-up asteapta contul
+# ACME la Let's Encrypt. Nu foloseste infra/.env.
 up:
 	./scripts/host-bootstrap.sh
 	$(MAKE) --no-print-directory k8s-storage-up
@@ -31,7 +33,9 @@ status:
 	@echo
 	@kubectl -n filegrid get pods,certificate
 	@echo
-	@kubectl -n filegrid get ingress -o jsonpath='{range .items[*]}App:      https://{.spec.rules[0].host}{"\n"}{end}'
+	@# fiecare host o singura data (filegrid-frontend/placeholder, filegrid-api si grafana au acelasi host)
+	@kubectl get ingress -A -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\n"}{end}{end}' | sort -u | \
+		sed -n 's|^\(..*\)$$|App:      https://\1  (/ aplicatia, /api backend, /grafana Grafana)|p'
 	@host=$$(kubectl -n filegrid get ingress -o jsonpath='{.items[0].spec.rules[0].host}'); \
 	if [ "$$(kubectl -n filegrid get certificate -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')" != True ]; then \
 		echo "          certificate not Ready yet (needs DNS $$host -> this machine and ports 80/443 open);"; \
@@ -57,11 +61,12 @@ infra-ps:
 infra-logs:
 	$(COMPOSE) logs -f --tail=100
 
-# Domeniu public + HTTPS in k3s (cert-manager, ClusterIssuers, redirect Traefik, placeholder).
+# Domeniu public + HTTPS in k3s (cert-manager, ClusterIssuers, redirect Traefik).
 # helm ruleaza doar daca release-ul cert-manager lipseste sau difera (versiune ori valori); CRD-urile vin cu
 # chart-ul, iar --wait (plus job-ul startupapicheck) asteapta webhook-ul inainte de ClusterIssuers.
 # k8s-traefik-config.sh asteapta re-rularea helm-install-traefik doar daca HelmChartConfig-ul s-a schimbat.
-# DOMAIN inlocuieste ppc.filegrid.cc.cd in placeholder.yaml la aplicare.
+# Placeholder-ul NU e aplicat aici: "/" (placeholder sau frontend) si certificatul lui sunt gestionate doar de
+# make app-up (scripts/k8s-app-up.sh), altfel fiecare `make up` ar recrea placeholder-ul langa frontend.
 k8s-tls-up:
 	@printf '%s\n' "$$DOMAIN" | grep -Eqx '[a-z0-9]([a-z0-9.-]*[a-z0-9])?' || { echo "invalid DOMAIN: $$DOMAIN" >&2; exit 1; }
 	@if [ "$$(helm -n cert-manager list --deployed -f '^cert-manager$$' -o json | jq -r '.[0].chart // ""')" = "cert-manager-$(CERT_MANAGER_VERSION)" ] && \
@@ -75,7 +80,6 @@ k8s-tls-up:
 	fi
 	./scripts/k8s-traefik-config.sh
 	kubectl apply -f deploy/k8s/cluster-issuers.yaml
-	sed "s/ppc\.filegrid\.cc\.cd/$$DOMAIN/g" deploy/k8s/placeholder.yaml | kubectl apply -f -
 	kubectl wait --for=condition=Ready clusterissuer/letsencrypt-staging clusterissuer/letsencrypt-prod --timeout=120s
 
 tls-status:
@@ -109,5 +113,17 @@ k8s-storage-up: k8s-secrets
 # Test al verificarii (trebuie sa pice): ISOCHECK_FAULT=leak|nopod|notool|badtoken|s3down make storage-isolation-check
 storage-isolation-check:
 	./scripts/storage-isolation-check.sh
+
+# Criptarea Secret-elor Kubernetes in datastore-ul k3s (at rest, cheie AES-CBC a k3s). Oprita pana rulati aceasta
+# tinta ca root (k3s-ul de pe VPS a fost instalat fara --secrets-encryption). NU face parte din `make up`: activarea
+# reporneste k3s (API-ul lipseste ~1 minut, podurile merg mai departe). Idempotenta: rescrie toate Secret-ele cu
+# cheia activa si verifica (k3s secrets-encrypt status + datastore); a doua rulare doar verifica.
+k3s-secrets-encrypt:
+	./scripts/k3s-secrets-encrypt.sh
+
+# Teste pentru scripturile din scripts/ si tintele make (fara cluster, fara root: kubectl/helm/k3s/systemctl/docker
+# sunt inlocuite cu fake-uri din scripts/tests/fakes)
+scripts-test:
+	./scripts/tests/run.sh
 
 -include mk/*.mk
