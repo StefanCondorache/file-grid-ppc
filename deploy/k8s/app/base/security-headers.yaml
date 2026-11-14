@@ -1,0 +1,24 @@
+# Security headers that Traefik sets on every response of the Ingresses in namespace filegrid (placeholder,
+# filegrid-frontend, filegrid-api), through their annotation
+#   traefik.ingress.kubernetes.io/router.middlewares: filegrid-security-headers@kubernetescrd
+# Traefik only resolves Middlewares from the Ingress's own namespace (allowCrossNamespace is off), so Grafana's
+# Ingress uses the same Middleware declared in monitoring (deploy/k8s/observability/grafana-ingress.yaml).
+# Keep the two identical. A header with the same name coming from the app is replaced by Traefik's value.
+# - HSTS 1 year, sent on HTTPS responses only; no includeSubDomains and no preload: they would bind every
+#   subdomain of the parent domain (and the browsers' preload list) to HTTPS, which this deploy does not own.
+# - nosniff, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY (nothing here is framed).
+# Applied with the app (kustomize base), so it exists whenever an Ingress of the app or the placeholder does; an
+# Ingress pointing at a missing Middleware would be dropped by Traefik (404).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: filegrid
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: false
+    stsPreload: false
+    contentTypeNosniff: true
+    referrerPolicy: strict-origin-when-cross-origin
+    frameDeny: true
