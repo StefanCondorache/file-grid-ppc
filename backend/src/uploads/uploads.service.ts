@@ -20,6 +20,9 @@ export function uploadNotFound(): AppError {
   return new AppError(404, 'UPLOAD_NOT_FOUND', 'Încărcarea nu există sau nu vă aparține.');
 }
 
+/** Parts dropped per sweep of abandoned uploads (the next sweep takes the rest). */
+const SWEEP_BATCH = 500;
+
 /** Passes the request body through and stops it once it exceeds `limit` bytes. */
 async function* limited(
   body: AsyncIterable<Uint8Array>,
@@ -312,6 +315,46 @@ export class UploadsService {
   }
 
   /** Best-effort removal of the staged parts (after completion or abort). */
+  /**
+   * Abandoned uploads (a closed tab, a client that gave up): expires the open sessions past their
+   * expiry, then drops the staged parts of expired and aborted sessions, a batch at a time. A part's
+   * row goes only once its object is deleted, so a storage that is down keeps it for the next
+   * sweep. Safe on every replica at once: the expiry is one UPDATE and deleting is idempotent.
+   * Returns the number of parts dropped.
+   */
+  async sweepExpired(): Promise<number> {
+    await this.db
+      .updateTable('upload_sessions')
+      .set({ status: 'expired', updated_at: new Date() })
+      .where('status', '=', 'open')
+      .where('expires_at', '<', new Date())
+      .execute();
+    const parts = await this.db
+      .selectFrom('upload_parts')
+      .innerJoin('upload_sessions', 'upload_sessions.id', 'upload_parts.upload_id')
+      .select([
+        'upload_parts.upload_id',
+        'upload_parts.part_number',
+        'upload_parts.storage',
+        'upload_parts.storage_key',
+        'upload_sessions.category',
+      ])
+      .where('upload_sessions.status', 'in', ['expired', 'aborted'])
+      .limit(SWEEP_BATCH)
+      .execute();
+    let dropped = 0;
+    for (const part of parts) {
+      if (!(await this.store.delete(part.category, part.storage, part.storage_key))) continue;
+      await this.db
+        .deleteFrom('upload_parts')
+        .where('upload_id', '=', part.upload_id)
+        .where('part_number', '=', part.part_number)
+        .execute();
+      dropped += 1;
+    }
+    return dropped;
+  }
+
   async dropStaging(session: SessionRow): Promise<void> {
     const parts = await this.parts(session.id);
     await Promise.all(

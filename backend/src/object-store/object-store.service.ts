@@ -264,11 +264,13 @@ export class ObjectStoreService {
     );
   }
 
-  async delete(category: Category, storage: StorageName, key: string): Promise<void> {
+  /** Deletes a stored object; true when it is gone (or was), false when the storage failed. */
+  async delete(category: Category, storage: StorageName, key: string): Promise<boolean> {
     try {
       await withCategory(category, () => this.registry.get(storage).delete(key));
+      return true;
     } catch (error) {
-      if (error instanceof ObjectNotFound) return;
+      if (error instanceof ObjectNotFound) return true;
       this.logger.warn({
         message: 'could not delete a stored object (left for cleanup)',
         category,
@@ -276,6 +278,7 @@ export class ObjectStoreService {
         operation: 'delete',
         error: error instanceof Error ? error.message : String(error),
       });
+      return false;
     }
   }
 
