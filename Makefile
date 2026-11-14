@@ -2,7 +2,7 @@ COMPOSE = docker compose -f infra/docker-compose.yml --env-file infra/.env
 
 CERT_MANAGER_VERSION = v1.21.3
 
-.PHONY: infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry
+.PHONY: infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up
 
 infra-up:
 	./infra/gen-env.sh
@@ -44,3 +44,16 @@ tls-retry:
 		xargs -r kubectl -n filegrid delete certificaterequest
 	@sleep 5
 	$(MAKE) tls-status
+
+# Secret filegrid-storage-credentials (generat o singura data) in filegrid-storage si copiat in filegrid
+k8s-secrets:
+	./scripts/k8s-secrets.sh
+
+# Postgres + SeaweedFS (S3) + FTP in namespace filegrid-storage.
+# Job-ul s3-init e sters si recreat la fiecare rulare (template-ul unui Job terminat e imutabil); e idempotent.
+k8s-storage-up: k8s-secrets
+	kubectl apply -k deploy/k8s/storage
+	kubectl -n filegrid-storage rollout status statefulset/postgres statefulset/s3 statefulset/ftp --timeout=300s
+	kubectl -n filegrid-storage delete job s3-init --ignore-not-found --wait=true
+	kubectl apply -f deploy/k8s/storage/s3-init-job.yaml
+	kubectl -n filegrid-storage wait --for=condition=complete job/s3-init --timeout=180s
