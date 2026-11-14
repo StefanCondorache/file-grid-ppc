@@ -48,6 +48,8 @@ const decimal = (n: number, min: number, max: number) =>
 const times = (n: number) => decimal(n, 0, 1);
 /** Milliseconds below 0,1 s ("42 ms"), seconds above ("0,6 s", "0,25 s", "3,4 s"). */
 const duration = (ms: number) => (ms < 100 ? `${formatInt(ms)}${NBSP}ms` : `${decimal(ms / 1000, 1, 2)}${NBSP}s`);
+/** A latency as the sentences quote it, so the charts and tables print the very same "0,6 s". */
+export const formatLatency = duration;
 /** Signed whole percent: "+467 %", "−12 %". */
 function delta(pct: number): string {
   const whole = Math.round(pct);

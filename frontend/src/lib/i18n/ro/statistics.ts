@@ -13,12 +13,15 @@ function and(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} și ${items[items.length - 1]}`;
 }
 
-/** How a sentence names a category: `subject` with the article ("avariile"), `bare` after "pentru" ("avarii"). */
-const category: Readonly<Record<StatsCategoryId, { subject: string; bare: string }>> = {
-  meter_readings: { subject: 'citirile de contor', bare: 'citiri de contor' },
-  fault_records: { subject: 'avariile', bare: 'avarii' },
-  connection_documents: { subject: 'documentele de racordare', bare: 'documente de racordare' },
-  drone_videos: { subject: 'video-urile de dronă', bare: 'video-uri de dronă' },
+/**
+ * How the UI names a category: `label` on charts and tables, `size` its typical file size (brief table 2.1), and in
+ * sentences `subject` with the article ("avariile") or `bare` after "pentru" ("avarii").
+ */
+const category: Readonly<Record<StatsCategoryId, { label: string; size: string; subject: string; bare: string }>> = {
+  meter_readings: { label: 'Citiri contoare', size: `1–50${NBSP}KB`, subject: 'citirile de contor', bare: 'citiri de contor' },
+  fault_records: { label: 'Avarii', size: `1–10${NBSP}MB`, subject: 'avariile', bare: 'avarii' },
+  connection_documents: { label: 'Racordări', size: `0,1–10${NBSP}MB`, subject: 'documentele de racordare', bare: 'documente de racordare' },
+  drone_videos: { label: 'Video dronă', size: `0,1–1${NBSP}GB+`, subject: 'video-urile de dronă', bare: 'video-uri de dronă' },
 };
 
 const storage: Readonly<Record<StorageId, string>> = { s3: 'S3', ftp: 'FTP', db: 'DB' };
@@ -39,6 +42,45 @@ export const statistics = {
   storage,
   zone,
   and,
+  /** The `/statistics` screen (SC-08). */
+  screen: {
+    title: 'Ce ne spun datele',
+    lead: 'Răspunsuri pentru decizii, nu doar grafice. Fiecare bloc are o interpretare și o recomandare.',
+    refresh: 'Actualizează',
+  },
+  /** The two labelled periods S2 compares (FE-12: chosen from a list, never free dates). */
+  periods: {
+    legend: 'Perioadele comparate',
+    a: 'Perioada A',
+    b: 'Perioada B',
+    group: { normal: 'Zile normale', peak: 'Zile de vârf' },
+    choose: 'Alege o perioadă',
+    none: 'Nu există încă perioade etichetate.',
+  },
+  /** The two blocks under every statistics chart (FE-10). */
+  insight: { interpretation: 'Interpretare', recommendation: 'Recomandare' },
+  /** S1 · the chart, its tag and its table. */
+  fit: {
+    eyebrow: 'S1',
+    title: 'Ce storage se potrivește fiecărei categorii?',
+    caption: 'p95 la scriere pe fiecare storage, în ultimele 7 zile',
+    note: (operations: string) => `Bare mai scurte = mai bine; fiecare categorie are scara ei. Măsurat pe ${operations}.`,
+    recommended: (storage: string) => `Recomandat: ${storage}`,
+    notMeasured: 'nemăsurat',
+    empty: 'Încă nu există măsurători pe storage-uri.',
+    column: {
+      category: 'Categorie',
+      storage: 'Storage',
+      samples: 'Operații',
+      p50: 'p50',
+      p95: 'p95',
+      throughput: 'Debit',
+      errorRate: 'Erori',
+      recommended: 'Recomandat',
+    },
+    yes: 'da',
+    no: 'nu',
+  },
   /** S1 · storage fit, one category. */
   s1: {
     faster: (p: { subject: string; times: string; fast: string; slow: string; fastP95: string; slowP95: string }) =>
