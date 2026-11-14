@@ -78,6 +78,7 @@ export const upload = {
   form,
   /** Name of a progress bar that has no file name next to it. */
   progressLabel: 'Progresul încărcării',
+  dropzone: { title: 'Trage fișierele aici', orPick: 'sau alege-le de pe dispozitiv', choose: 'Alege fișiere' },
   /** Chunk-grid cells. */
   legend: { done: 'Confirmată de server', flight: 'În transfer', failed: 'Se reîncearcă', pending: 'În așteptare' },
   validation: {
