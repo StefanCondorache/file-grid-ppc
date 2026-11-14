@@ -57,4 +57,34 @@ export const monitoring = {
     droneNear: (rate: string, min: string) => `${rate} din transferurile video s-au încheiat cu succes, aproape de pragul minim de ${min}.`,
     fallback: { ok: 'Garanția este respectată.', at_risk: 'Garanția este în pericol.', violated: 'Garanția este încălcată.' },
   },
+  /** The storage health strip in the top bar (FE-08). */
+  health: {
+    label: 'Stare storage',
+    storages: { db: 'Postgres', s3: 'S3', ftp: 'FTP' },
+    states: { ok: 'OK', degraded: 'degradat', down: 'căzut', pending: 'se verifică', unknown: 'necunoscut' },
+    circuit: { closed: 'circuit închis', half_open: 'circuit în probă', open: 'circuit deschis' },
+    lastCheck: (time: string) => `Ultima verificare ${time}`,
+    /** Announcer messages (accessibility.md §4): down assertive, degraded and recovery polite. */
+    changed: (storage: string, state: string) => `${storage}: ${state}.`,
+    recovered: (storage: string) => `${storage}: din nou OK.`,
+  },
+  /** The alert banner under the top bar and the alert list on the home page (FE-07). */
+  alerts: {
+    region: 'Alerte active',
+    details: 'Vezi detalii',
+    acknowledge: 'Confirmă',
+    acknowledgeLabel: (guarantee: string) => `Confirmă alerta ${guarantee}`,
+    acknowledged: (who: string, time: string) => `Confirmată de ${who} la ${time}`,
+    acknowledgedAt: (time: string) => `Confirmată la ${time}`,
+    acknowledgeFailed: (guarantee: string) => `Alerta ${guarantee} nu a putut fi confirmată. Încearcă din nou.`,
+    acknowledgeFailedShort: 'Confirmarea nu a reușit.',
+    listTitle: 'Alerte',
+    listLead: 'Fiecare garanție care iese din OK ridică o alertă. Confirmarea arată cine a văzut-o și când.',
+    caption: 'Alertele garanțiilor, cele mai noi primele',
+    columns: { raisedAt: 'Ridicată la', guarantee: 'Garanția', state: 'Stare', cause: 'Cauza', trace: 'Urmă', acknowledged: 'Confirmare' },
+    states: { at_risk: 'În pericol', violated: 'Încălcat', resolved: 'Rezolvată' },
+    resolvedAt: (time: string) => `rezolvată la ${time}`,
+    noTrace: '—',
+    empty: 'Nicio alertă până acum: toate garanțiile au fost respectate.',
+  },
 } as const;

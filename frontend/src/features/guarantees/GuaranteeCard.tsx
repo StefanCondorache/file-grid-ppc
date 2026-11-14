@@ -7,6 +7,7 @@ import { announce } from '@/lib/a11y/announcer';
 import { cn } from '@/lib/cn';
 import { plural, useT } from '@/lib/i18n';
 import type { CategoryId, GuaranteeState, GuaranteeStatus } from '@/lib/monitoring/contract';
+import { FLAP_MS } from './announce';
 import { MeterCounters } from './MeterCounters';
 import { decimal, metricOf, percent, seconds, sentenceFor } from './sentences';
 
@@ -26,9 +27,6 @@ const CARD_STATE: Record<GuaranteeState, string> = {
 };
 
 const EDGE: Record<Exclude<GuaranteeState, 'ok'>, string> = { at_risk: 'bg-(--fg-warn-border)', violated: 'bg-crit' };
-
-/** Flapping states are announced only once they hold for this long (accessibility.md §4). */
-const FLAP_MS = 3_000;
 
 const clock = new Intl.DateTimeFormat('ro-RO', { timeZone: 'Europe/Bucharest', hour: '2-digit', minute: '2-digit' });
 
