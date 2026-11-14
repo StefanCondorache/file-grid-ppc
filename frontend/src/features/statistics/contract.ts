@@ -106,7 +106,9 @@ export type PeriodComparison = {
   interpretation: Interpretation<ComparisonFacts & Record<string, unknown>>;
 };
 
-export type AnomalyType = 'zero' | 'negative' | 'spike' | 'silent';
+/** The real backend sends `zero` and `spike`; the mock also `negative` and `silent`. */
+export const ANOMALY_TYPES = ['zero', 'negative', 'spike', 'silent'] as const;
+export type AnomalyType = (typeof ANOMALY_TYPES)[number];
 
 export type ZoneFaults = {
   zone: Zone;

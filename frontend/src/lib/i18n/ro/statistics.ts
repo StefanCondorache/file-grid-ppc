@@ -1,4 +1,4 @@
-import type { StatsCategoryId, StorageId, Zone } from '@/features/statistics/contract';
+import type { AnomalyType, StatsCategoryId, StorageId, Zone } from '@/features/statistics/contract';
 
 const NBSP = ' ';
 const LAST_DAY = `ultimele 24${NBSP}h`;
@@ -31,6 +31,14 @@ const zone: Readonly<Record<Zone, { label: string; definite: string }>> = {
   muntenia: { label: 'Muntenia', definite: 'Muntenia' },
   banat: { label: 'Banat', definite: 'Banatul' },
   dobrogea: { label: 'Dobrogea', definite: 'Dobrogea' },
+};
+
+/** What a meter anomaly is, in the words of the S3 table. */
+const anomaly: Readonly<Record<AnomalyType, string>> = {
+  zero: 'Consum zero',
+  negative: 'Consum negativ',
+  spike: 'Vârf brusc',
+  silent: 'Contor tăcut',
 };
 
 /**
@@ -101,6 +109,24 @@ export const statistics = {
     metric: { p95Ms: 'p95 la scriere', opsPerS: 'Operații/s', errorRate: 'Rata de erori', volume: 'Volum' },
     readings: { one: 'o citire', few: '# citiri', other: '# de citiri' },
     columns: { category: 'Categorie', metric: 'Indicator', delta: 'Diferență' },
+  },
+  /** S3 · the region map, the meter anomalies and the map's table. */
+  grid: {
+    eyebrow: 'S3',
+    title: 'Ce spun datele despre rețea',
+    caption: `Avarii pe zone, în ${LAST_DAY}`,
+    /** The map's accessible name, every region with its count: "Avarii pe zone: Muntenia 38, Dobrogea 23, Banat 14". */
+    map: (regions: readonly string[]) => `Avarii pe zone: ${regions.join(', ')}`,
+    note: 'Hartă schematică, nu la scară',
+    legend: 'Avarii',
+    anomalies: 'Anomalii contoare',
+    noAnomalies: `Nicio citire anormală în ${LAST_DAY}.`,
+    /** Under a capped list: "Cele mai recente 8 din 12 citiri anormale." */
+    newest: (shown: number, total: string) => `Cele mai recente ${shown} din ${total}.`,
+    readings: { one: 'o citire anormală', few: '# citiri anormale', other: '# de citiri anormale' },
+    anomaly,
+    columns: { meter: 'Contor', zone: 'Zonă', type: 'Anomalie', detectedAt: 'Detectată' },
+    table: { zone: 'Zonă', faults: `Avarii în ${LAST_DAY}`, share: 'Din total' },
   },
   /** S1 · storage fit, one category. */
   s1: {

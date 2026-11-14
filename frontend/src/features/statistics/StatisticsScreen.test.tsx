@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('StatisticsScreen', () => {
-  it('answers S1 and S2 for the auditor, comparing the last normal day with the most recent peak', async () => {
+  it('answers S1, S2 and S3 for the auditor, comparing the last normal day with the most recent peak', async () => {
     signIn('auditor');
     renderWithClient(<StatisticsScreen />);
     expect(await screen.findByRole('heading', { level: 2, name: 'Ce ne spun datele' })).toBeInTheDocument();
@@ -52,6 +52,9 @@ describe('StatisticsScreen', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Zi normală vs. zi de vârf' })).toBeInTheDocument();
     expect(await screen.findByText('Perioada A: Zi normală · 12 nov')).toBeInTheDocument();
     expect(screen.getByText('Perioada B: Furtună · 14 nov 15:33')).toBeInTheDocument();
+    // S3 maps the faults by region under them.
+    expect(screen.getByRole('heading', { level: 2, name: 'Ce spun datele despre rețea' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'Avarii pe zone: Muntenia 38, Dobrogea 23, Banat 14' })).toBeInTheDocument();
   });
 
   it('reads the periods from the URL, ignores an unknown one and writes a new choice back', async () => {

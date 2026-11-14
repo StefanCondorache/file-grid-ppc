@@ -6,11 +6,17 @@ import { ApiError } from '@/lib/api/errors';
 import { qk } from '@/lib/api/query-keys';
 import type { operations } from '@/lib/api/schema';
 import {
+  ANOMALY_TYPES,
   COMPARISON_METRICS,
   STATS_CATEGORIES,
   STORAGE_IDS,
+  ZONES,
   type ComparisonFacts,
   type ComparisonRow,
+  type GridFacts,
+  type GridInsights,
+  type HourlyConsumption,
+  type MeterAnomaly,
   type Origin,
   type Period,
   type PeriodComparison,
@@ -18,6 +24,7 @@ import {
   type StorageFitItem,
   type StorageId,
   type StoragePerformance,
+  type Zone,
 } from './contract';
 
 /**
@@ -145,6 +152,62 @@ export function toPeriodComparison(raw: unknown): PeriodComparison {
   };
 }
 
+const zoneId = (value: unknown): Zone | null => oneOf(ZONES, value);
+const isHour = (value: number | null): value is number => value !== null && Number.isInteger(value) && value >= 0 && value <= 23;
+
+/**
+ * `GET /statistics/grid-insights` (S3). `faultsByZone` always lists the three regions in their order: a region the server
+ * left out (the real backend only groups zones that had faults) counts 0. Unknown zones, hours and anomaly types are
+ * dropped, and the anomalies come newest first whatever order the server used.
+ */
+export function toGridInsights(raw: unknown): GridInsights {
+  const body = record(raw);
+  const counts = new Map<Zone, number>();
+  for (const entry of list(body.faultsByZone)) {
+    const z = record(entry);
+    const zone = zoneId(z.zone);
+    const count = num(z.count);
+    if (zone && count !== null) counts.set(zone, (counts.get(zone) ?? 0) + Math.max(0, Math.round(count)));
+  }
+  const consumptionByHourZone = list(body.consumptionByHourZone).flatMap((entry): HourlyConsumption[] => {
+    const c = record(entry);
+    const zone = zoneId(c.zone);
+    const hour = num(c.hour);
+    const avgKwh = num(c.avgKwh);
+    return zone && isHour(hour) && avgKwh !== null ? [{ zone, hour, avgKwh }] : [];
+  });
+  const anomalies = list(body.anomalies).flatMap((entry): MeterAnomaly[] => {
+    const a = record(entry);
+    const meterId = str(a.meterId);
+    const zone = zoneId(a.zone);
+    const type = oneOf(ANOMALY_TYPES, a.type);
+    const detectedAt = str(a.detectedAt);
+    if (!meterId || !zone || !type || !detectedAt || Number.isNaN(Date.parse(detectedAt))) return [];
+    return [{ meterId, zone, type, detectedAt, value: num(a.value), fileId: str(a.fileId) }];
+  });
+  anomalies.sort((x, y) => Date.parse(y.detectedAt) - Date.parse(x.detectedAt));
+  const interpretation = record(body.interpretation);
+  const facts = record(interpretation.facts);
+  const peakHour = num(facts.peakHour);
+  return {
+    faultsByZone: ZONES.map((zone) => ({ zone, county: null, count: counts.get(zone) ?? 0 })),
+    consumptionByHourZone,
+    anomalies,
+    interpretation: {
+      text: str(interpretation.text),
+      recommendation: str(interpretation.recommendation),
+      facts: {
+        ...facts,
+        topFaultZone: zoneId(facts.topFaultZone),
+        peakHour: isHour(peakHour) ? peakHour : null,
+        anomalies: num(facts.anomalies) ?? anomalies.length,
+        peakZone: zoneId(facts.peakZone),
+        faultsTotal: num(facts.faultsTotal) ?? undefined,
+      } satisfies GridFacts,
+    },
+  };
+}
+
 /**
  * The generated client still types the S2 query with the proposal's `periodA` / `periodB`; the real backend (and the
  * mock) read `a` and `b`.
@@ -179,6 +242,15 @@ export function usePeriodComparison(a: string | null, b: string | null) {
     queryFn: async () =>
       toPeriodComparison(await unwrap(api.GET('/statistics/period-comparison', { params: { query: comparisonQuery(a ?? '', b ?? '') } }))),
     enabled: a !== null && b !== null,
+    staleTime: STATS_STALE_MS,
+  });
+}
+
+/** S3 is measured over the last 24 h; like S1 it has no period filter on the real backend. */
+export function useGridInsights() {
+  return useQuery({
+    queryKey: qk.stats.s3(null),
+    queryFn: async () => toGridInsights(await unwrap(api.GET('/statistics/grid-insights'))),
     staleTime: STATS_STALE_MS,
   });
 }
