@@ -614,8 +614,10 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     if (fire(job, { type: 'PARTS_MISSING' }) === 'uploading') startParts(job);
   }
 
+  /** The server's verdict (F4): only a match with a file id is verified; a mismatch keeps both hashes on the row. */
   function settle(job: Job, result: CompleteResult): void {
     job.result = result;
+    if (result.verdict !== 'match' || !result.fileId) return fail(job, 'checksum_mismatch');
     fire(job, { type: 'COMPLETE_MATCH' });
     repo.remove(job.id).catch(noop); // nothing left to resume
   }

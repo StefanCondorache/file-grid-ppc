@@ -204,4 +204,25 @@ describe('upload engine facade', () => {
     expect(server.calls.map((c) => c.partNumber).sort()).toEqual([1, 2, 3]);
     expect(server.api.complete).toHaveBeenCalledWith('srv-1', 'A:whole', 3);
   });
+
+  it('a hash mismatch ends in failed(checksum_mismatch) with no file id', async () => {
+    const { engine, repo } = setup(fakeServer({ verdict: 'mismatch' }));
+    await engine.restore('u1');
+
+    const id = engine.enqueue({ file: testFile('A'), category: 'drone_videos', metadata: drone });
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(item(id)).toMatchObject({
+      state: 'failed',
+      failReason: 'checksum_mismatch',
+      verdict: 'mismatch',
+      clientSha256: 'A:whole',
+      serverSha256: 'f'.repeat(64),
+      traceId: 'trace-complete',
+      error: { message: 'Amprenta nu coincide. Fișierul nu a fost păstrat.' },
+    });
+    expect(item(id).fileId ?? null).toBeNull();
+    // The failure survives a reload: the record stays, marked failed.
+    expect(repo.records.get(id)).toMatchObject({ state: 'failed', failReason: 'checksum_mismatch' });
+  });
 });
