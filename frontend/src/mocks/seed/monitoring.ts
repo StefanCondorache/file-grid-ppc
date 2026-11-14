@@ -75,7 +75,18 @@ export const STORM_FACTOR = 10;
 export const DUPLICATE_RATIO = 0.02;
 export const ZONE_SHARE: Record<Zone, number> = { muntenia: 0.45, banat: 0.3, dobrogea: 0.25 };
 
-export type Storm = { category: CategoryId; factor: number; startedAt: number; endsAt: number };
+export type Storm = { category: CategoryId; factor: number; startedAt: number; endsAt: number; periodId: string };
+
+const MONTHS = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sept', 'oct', 'nov', 'dec'];
+
+/** "Furtună · 14 nov 15:33", in Romanian time whatever the browser's zone (the S2 period picker shows it). */
+export function stormPeriodLabel(ms: number): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Bucharest', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(ms));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `Furtună · ${part('day')} ${MONTHS[Number(part('month')) - 1]} ${part('hour')}:${part('minute')}`;
+}
 
 /** The scenario's persistent state (db collection `monitoring`, one row), so a reload keeps storms and counters. */
 export type MonitoringState = {

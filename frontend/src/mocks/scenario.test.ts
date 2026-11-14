@@ -184,4 +184,40 @@ describe('monitoring scenario', () => {
     expect(compartment('fault_records').queued).toBeGreaterThan(0);
     for (const c of OTHERS) expect(compartment(c).queued).toBe(0);
   });
+
+  it('start() ticks; a storm ends by itself after durationS and leaves a labelled peak period', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-14T13:33:00Z') });
+    try {
+      const db = createDb(null);
+      const s = createScenario({ db, random: () => 0.5 });
+      const seen = record(s);
+      s.start();
+      s.startStorm('fault', 10, 10); // the proposal's id is an alias
+      expect(s.storms()).toEqual([expect.objectContaining({ category: 'fault_records', factor: 10 })]);
+      expect(db.list('periods')).toEqual([expect.objectContaining({ label: 'Furtună · 14 nov 15:33', kind: 'peak', origin: 'storm', start: '2026-11-14T13:33:00.000Z', end: null })]);
+
+      vi.advanceTimersByTime(8_000);
+      expect(s.storms()).toHaveLength(1);
+      vi.advanceTimersByTime(2_000);
+      s.stop();
+      expect(s.storms()).toEqual([]);
+      expect(seen('demo.storm')).toEqual([
+        { category: 'fault_records', factor: 10, state: 'started', endsAt: '2026-11-14T13:33:10.000Z' },
+        { category: 'fault_records', factor: 10, state: 'stopped', endsAt: null },
+      ]);
+      expect(db.list('periods')).toEqual([expect.objectContaining({ end: '2026-11-14T13:33:10.000Z' })]);
+      expect(seen('meters.counters')).toHaveLength(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('corrupt marks the stored object so the next download detects it; unknown files are refused', () => {
+    const db = createDb(null);
+    const s = createScenario({ db, random: () => 0.5 });
+    db.insert('files', { id: 'f-1', category: 'fault_records', storage: 's3', integrity: 'verified' });
+    expect(s.corrupt('f-1')).toEqual({ fileId: 'f-1', storage: 's3', corruptedAt: expect.any(String) });
+    expect(db.find<Record<string, unknown>>('files', (f) => f.id === 'f-1')).toMatchObject({ integrity: 'verified', corruptedAt: expect.any(String) });
+    expect(s.corrupt('nope')).toBeNull();
+  });
 });

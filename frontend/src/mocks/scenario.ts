@@ -8,10 +8,15 @@ import {
 import { db as sharedDb, type MockDb } from './db';
 import {
   DRONE_TRANSFERS, DUPLICATE_RATIO, FALLBACK_PENALTY, HISTORY_TICKS, JITTER, LOAD_LATENCY, MAX_CONCURRENCY, NORMAL_RATE_PER_S, PROBE_MS, PROFILES,
-  SERIES_POINTS, SMOOTHING, STORM_FACTOR, THRESHOLDS, TICK_MS, ZONE_SHARE, seedAlerts, seedMonitoringState, type MonitoringState, type Storm,
+  SERIES_POINTS, SMOOTHING, STORM_FACTOR, THRESHOLDS, TICK_MS, ZONE_SHARE, seedAlerts, seedMonitoringState, stormPeriodLabel,
+  type MonitoringState, type Storm,
 } from './seed/monitoring';
 
-export type { Storm };
+/** A running storm as the demo endpoints show it. */
+export type StormView = { category: CategoryId; factor: number; startedAt: string; endsAt: string; periodId: string };
+/** Answer of a corruption (POST /demo/corruptions). */
+export type Corruption = { fileId: string; storage: string; corruptedAt: string };
+type PeriodRow = { id: string; label: string; kind: 'normal' | 'peak'; origin: string; start: string; end: string | null };
 
 type Listener = (e: StreamEvent) => void;
 
@@ -330,6 +335,7 @@ export function createScenario(options: ScenarioOptions = {}) {
 
     /** One step of the mock server. */
     tick(): void {
+      for (const storm of state().storms) if (storm.endsAt <= now()) api.stopStorm(storm.category);
       history = [...history.slice(-(HISTORY_TICKS - 1)), { t: now(), samples: samples(load) }];
       advanceMeters(target('meter_readings') !== null);
       api.emit('meters.counters', counters());
@@ -431,15 +437,25 @@ export function createScenario(options: ScenarioOptions = {}) {
       return { window, stepS: TICK_S, series: api.series(), data };
     },
 
-    /** A `factor`× load on one category for `durationS` (BA-61); a running storm on it is replaced. */
-    startStorm(category: CategoryName, factor = 10, durationS = 60): Storm {
+    /** Running storms (GET /demo/status). */
+    storms(): StormView[] {
+      return state().storms.map((s) => ({ ...s, startedAt: iso(s.startedAt), endsAt: iso(s.endsAt) }));
+    },
+
+    /**
+     * A `factor`× load on one category for `durationS` (BA-61), recorded as a labelled peak period for S2 (BA-64).
+     * A running storm on the category is replaced; on meters it is the simulator's peak mode.
+     */
+    startStorm(category: CategoryName, factor = STORM_FACTOR, durationS = 60): StormView {
       const c = toCategoryId(category);
+      if (state().storms.some((s) => s.category === c)) api.stopStorm(c);
       const t = now();
-      const storm: Storm = { category: c, factor, startedAt: t, endsAt: t + durationS * 1000 };
-      save({ storms: [...state().storms.filter((s) => s.category !== c), storm] });
+      const storm: Storm = { category: c, factor, startedAt: t, endsAt: t + durationS * 1000, periodId: `p-storm-${c}-${t}` };
+      d.insert<PeriodRow>('periods', { id: storm.periodId, label: stormPeriodLabel(t), kind: 'peak', origin: 'storm', start: iso(t), end: null });
+      save({ storms: [...state().storms, storm] });
       if (c === 'meter_readings') setSim({ mode: 'peak', ratePerS: NORMAL_RATE_PER_S * factor, stormEndsAt: storm.endsAt });
       api.emit('demo.storm', { category: c, factor, state: 'started', endsAt: iso(storm.endsAt) });
-      return storm;
+      return api.storms().find((s) => s.category === c)!;
     },
 
     /** Back to normal load; false when no storm was running on the category. */
@@ -448,9 +464,20 @@ export function createScenario(options: ScenarioOptions = {}) {
       const storm = state().storms.find((s) => s.category === c);
       if (!storm) return false;
       save({ storms: state().storms.filter((s) => s.category !== c) });
+      d.update<PeriodRow>('periods', (p) => p.id === storm.periodId, { end: iso(now()) });
       if (c === 'meter_readings') setSim({ mode: 'normal', ratePerS: NORMAL_RATE_PER_S, stormEndsAt: null });
       api.emit('demo.storm', { category: c, factor: storm.factor, state: 'stopped', endsAt: null });
       return true;
+    },
+
+    /**
+     * Flips the stored object of a file (POST /demo/corruptions): the db row gets `corruptedAt`; integrity stays as it
+     * was until the next download or verification detects it (409 FILE_CORRUPT, then `corrupt`). Null for an unknown file.
+     */
+    corrupt(fileId: string): Corruption | null {
+      const corruptedAt = iso(now());
+      const row = d.update<Record<string, unknown>>('files', (f) => f.id === fileId, { corruptedAt });
+      return row ? { fileId, storage: String(row.storage ?? '').toLowerCase(), corruptedAt } : null;
     },
   };
   return api;
