@@ -9,6 +9,9 @@ import { fileHandlers } from './files';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
 import { statisticsHandlers } from './statistics';
+import { monitoringHandlers } from './monitoring';
+import { demoHandlers } from './demo';
+import { meterHandlers } from './meters';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
@@ -17,10 +20,10 @@ export const groupHandlers: Record<Group, RequestHandler[]> = {
   uploads: [...uploadHandlers],
   files: [...fileHandlers],
   audit: [...auditHandlers],
-  meters: [],
-  monitoring: [],
+  meters: [...meterHandlers],
+  monitoring: [...monitoringHandlers],
   statistics: [...statisticsHandlers],
-  demo: [...actingRoleHandlers],
+  demo: [...actingRoleHandlers, ...demoHandlers],
   stream: createStreamHandlers(),
 };
 

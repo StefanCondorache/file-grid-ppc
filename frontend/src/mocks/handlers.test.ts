@@ -35,7 +35,8 @@ describe('buildHandlers', () => {
   afterAll(() => server.close());
 
   it('serves every proposal path from the baseline', async () => {
-    const res = await fetch(new URL(apiUrl('/guarantees'), location.origin));
+    // A group no slice of this wave hand-writes (monitoring is hand-written since 6e.1).
+    const res = await fetch(new URL(apiUrl('/audit-events'), location.origin));
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty('data');
   });

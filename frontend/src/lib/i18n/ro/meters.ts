@@ -1,0 +1,23 @@
+/** Contoare live (slice 6g): counters, rate, zones and recent readings. Numbers arrive pre-formatted. */
+export const meters = {
+  title: 'Contoare live',
+  lead: 'Citirile trimise de simulatorul de contoare, numărate de server: nicio citire pierdută, niciun duplicat stocat.',
+  readSummary: 'Citește rezumatul',
+  summary: (received: string, lost: string) => `${received} primite, ${lost} pierdute`,
+  summaryUnknown: (received: string) => `${received} primite, pierderi necunoscute (simulatorul nu răspunde)`,
+  countersTitle: 'Contoare',
+  rate: 'Ritm acum',
+  rateUnit: 'citiri/s',
+  simulatorMode: (mode: string) => `simulator: ritm ${mode}`,
+  queue: (n: string) => `${n} în coada simulatorului`,
+  zonesTitle: 'Pe zone',
+  zone: (received: string, rate: string) => `${received} primite · ${rate} citiri/s`,
+  recentTitle: 'Ultimele citiri',
+  recentCaption: 'Ultimele citiri primite, cele mai noi primele',
+  columns: { receivedAt: 'Primită la', meter: 'Contor', zone: 'Zonă', kwh: 'kWh', sequence: 'Secvență', storage: 'Storage', file: 'Fișier' },
+  openFile: 'Deschide fișierul',
+  openFileLabel: (meter: string, sequence: string) => `Deschide fișierul citirii ${sequence} de la contorul ${meter}`,
+  origins: { simulator: 'simulator', storm: 'furtună', seed: 'istoric' } as Record<string, string>,
+  noReadings: 'Nicio citire încă. Pornește simulatorul.',
+  updated: (time: string) => `Actualizat la ${time}`,
+} as const;
