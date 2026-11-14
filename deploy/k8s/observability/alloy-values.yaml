@@ -25,11 +25,12 @@ alloy:
   mounts:
     varlog: true
   clustering: {enabled: false}
+  # 192Mi: la 112Mi Alloy ajungea la limita (restarturi); GOMEMLIMIT ~80% din limita
   resources:
     requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 112Mi}
+    limits: {cpu: 500m, memory: 192Mi}
   extraEnv:
-    - {name: GOMEMLIMIT, value: "90MiB"}
+    - {name: GOMEMLIMIT, value: "150MiB"}
   configMap:
     content: |-
       // Podurile de pe nodul curent (chart-ul seteaza HOSTNAME = spec.nodeName).

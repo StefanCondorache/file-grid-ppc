@@ -40,13 +40,33 @@ test_security_headers_middleware_exists_in_filegrid_and_monitoring_with_the_requ
   done
 }
 
-# valuesContent of the k3s HelmChartConfig for Traefik, as JSON (wrapped in a dummy object for the YAML parser)
-traefik_values() {
-  local vc
-  vc=$(KUBECONFIG=/dev/null kubectl annotate --local -f "$REPO/deploy/k8s/traefik-config.yaml" x=y -o json \
-    | jq -r .spec.valuesContent)
-  { printf 'apiVersion: test.filegrid.io/v1\nkind: Values\nmetadata: {name: v}\nvalues:\n'; sed 's/^/  /' <<<"$vc"; } \
+# A YAML document (helm values) on stdin as JSON (wrapped in a dummy object for kubectl's offline YAML parser)
+yaml_json() {
+  { printf 'apiVersion: test.filegrid.io/v1\nkind: Values\nmetadata: {name: v}\nvalues:\n'; sed 's/^/  /'; } \
     | KUBECONFIG=/dev/null kubectl annotate --local -f - x=y -o json | jq -c .values
+}
+values() { yaml_json < "$REPO/deploy/k8s/observability/$1-values.yaml"; }
+# valuesContent of the k3s HelmChartConfig for Traefik, as JSON
+traefik_values() {
+  KUBECONFIG=/dev/null kubectl annotate --local -f "$REPO/deploy/k8s/traefik-config.yaml" x=y -o json \
+    | jq -r .spec.valuesContent | yaml_json
+}
+
+test_grafana_cookies_are_secure_and_strict_metrics_off_no_phone_home_version_hidden() {
+  local v
+  v=$(values grafana)
+  assert_eq "$(jq -c '.["grafana.ini"].security' <<<"$v")" '{"cookie_samesite":"strict","cookie_secure":true}' "security"
+  assert_eq "$(jq -r '.["grafana.ini"].metrics.enabled' <<<"$v")" false "metrics.enabled"
+  assert_eq "$(jq -r '.["grafana.ini"]["auth.anonymous"].hide_version' <<<"$v")" true "auth.anonymous.hide_version"
+  assert_eq "$(jq -r '.["grafana.ini"]["auth.anonymous"].enabled' <<<"$v")" false "auth.anonymous.enabled"
+  assert_eq "$(jq -c '.["grafana.ini"].analytics | [.reporting_enabled, .check_for_updates, .check_for_plugin_updates,
+    .feedback_links_enabled]' <<<"$v")" '[false,false,false,false]' "analytics"
+}
+
+test_grafana_sidecar_and_alloy_get_the_raised_memory_limits() {
+  assert_eq "$(values grafana | jq -r '.resources.limits.memory')" 256Mi "grafana memory limit"
+  assert_eq "$(values grafana | jq -r '.sidecar.resources.limits.memory')" 160Mi "grafana sidecar memory limit"
+  assert_eq "$(values alloy | jq -r '.alloy.resources.limits.memory')" 192Mi "alloy memory limit"
 }
 
 test_traefik_keeps_the_client_ip_and_trusts_forwarded_headers_only_from_the_pod_cidr() {
