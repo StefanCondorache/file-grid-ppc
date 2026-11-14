@@ -93,11 +93,11 @@ export const policyHandlers = [
     if (request.headers.get('X-Requested-With') !== 'filegrid') return fail(403, 'CSRF_REJECTED', 'Cererea nu are antetul anti-CSRF.');
     touchSession();
     if (!CAPABILITIES[session.activeRole].includes('edit_policies')) return fail(403, 'FORBIDDEN', 'Doar administratorul poate modifica politicile.');
+    const body = ((await request.json().catch(() => null)) ?? {}) as Record<string, unknown>;
+    // No await from here on: read, version check and write are one atomic step, like the backend's transaction.
     const c = toCategory(params.category);
     const current = c && read(c);
     if (!c || !current) return fail(404, 'POLICY_NOT_FOUND', 'Categoria nu există.');
-
-    const body = ((await request.json().catch(() => null)) ?? {}) as Record<string, unknown>;
     const fieldErrors = validate(body);
     if (fieldErrors.length) return fail(422, 'VALIDATION_ERROR', 'Politica nu este validă.', { fieldErrors });
     if (body.baseVersion !== current.version) {
