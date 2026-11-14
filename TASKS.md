@@ -125,7 +125,7 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
 **Answers for P1:** the metric names and `outcome` values in the README are confirmed (`success` / `mismatch` / `error` for uploads), and `filegrid_sim_readings_sent_total` counts unique readings. Details are in `docs/api.md`, section "Metrics".
 
 **Left to do:**
-- [ ] Test the S3/FTP adapters against the real storages in the cluster. Locally they ran against embedded Postgres and in-process S3/FTP servers.
+- [x] Test the S3/FTP adapters against the real storages in the cluster (14.11, through `kubectl port-forward`): health, 1 KB and 20 MiB objects with matching SHA-256, early stop, missing object, cleanup. Note: the first FTP operation of a process takes ~4-6 s (pure-ftpd login), later ones reuse the connection.
 - [ ] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS.
 - [ ] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it.
 - [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
