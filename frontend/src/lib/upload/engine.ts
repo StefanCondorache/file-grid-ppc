@@ -687,25 +687,18 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     }
   }
 
-  function fromRecord(rec: PersistedUpload): Job {
+  type JobIdentity = Pick<Job, 'id' | 'clientKey' | 'userId' | 'role' | 'category' | 'size' | 'displayName' | 'createdAt' | 'state'>;
+
+  /** A job with no work in progress yet. */
+  function newJob(identity: JobIdentity, rest: Partial<Job> = {}): Job {
     return {
-      id: rec.localId,
-      clientKey: rec.clientKey,
-      userId: rec.userId,
-      role: rec.startedByRole,
-      category: rec.category,
-      size: rec.fingerprint.size,
-      displayName: rec.displayName,
-      createdAt: rec.createdAt,
-      state: rec.state,
-      pauseReason: rec.pauseReason,
-      failReason: rec.failReason,
-      rec,
+      ...identity,
+      rec: null,
       file: null,
       handle: null,
       metadata: null,
       result: null,
-      error: rec.failReason ? { code: rec.failReason.toUpperCase(), message: ro.upload.failure[rec.failReason] } : undefined,
+      error: undefined,
       hashedBytes: 0,
       inFlight: new Map(),
       retrying: new Set(),
@@ -716,7 +709,17 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       ac: new AbortController(),
       gen: 0,
       reconciles: 0,
+      ...rest,
     };
+  }
+
+  /** A record from IndexedDB, without its file (the user or a stored handle gives it back). */
+  function fromRecord(rec: PersistedUpload): Job {
+    const { localId: id, clientKey, userId, startedByRole: role, category, displayName, createdAt, state, pauseReason, failReason } = rec;
+    return newJob(
+      { id, clientKey, userId, role, category, size: rec.fingerprint.size, displayName, createdAt, state },
+      { rec, pauseReason, failReason, error: failReason ? { code: failReason.toUpperCase(), message: ro.upload.failure[failReason] } : undefined },
+    );
   }
 
   /**
@@ -740,34 +743,21 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
   const engine: UploadEngine = {
     enqueue({ file, category, metadata, handle }) {
       if (owner === null) throw new Error('uploadEngine.restore(userId) must run before enqueue');
-      const job: Job = {
-        id: deps.newId(),
-        clientKey: deps.newId(),
-        userId: owner,
-        role: null,
-        category,
-        size: file.size,
-        // A connection document's file name may contain personal data ("CI_Popescu_Ion.pdf"): never shown.
-        displayName: metadata.kind === 'connection' ? ro.upload.connectionLabel(metadata.requestNumber) : file.name,
-        createdAt: clock.now(),
-        state: 'queued',
-        rec: null,
-        file,
-        handle: handle ?? null,
-        metadata,
-        result: null,
-        error: undefined,
-        hashedBytes: 0,
-        inFlight: new Map(),
-        retrying: new Set(),
-        retryAt: undefined,
-        offline: false,
-        speed: createSpeedMeter(),
-        scheduler: null,
-        ac: new AbortController(),
-        gen: 0,
-        reconciles: 0,
-      };
+      const job = newJob(
+        {
+          id: deps.newId(),
+          clientKey: deps.newId(),
+          userId: owner,
+          role: null,
+          category,
+          size: file.size,
+          // A connection document's file name may contain personal data ("CI_Popescu_Ion.pdf"): never shown.
+          displayName: metadata.kind === 'connection' ? ro.upload.connectionLabel(metadata.requestNumber) : file.name,
+          createdAt: clock.now(),
+          state: 'queued',
+        },
+        { file, handle: handle ?? null, metadata },
+      );
       jobs.set(job.id, job);
       changed(job, true);
       queueMicrotask(pumpQueue); // the caller sees the row `queued` first
