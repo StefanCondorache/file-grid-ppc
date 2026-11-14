@@ -2,7 +2,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 
-const PORT = 3100;
+// E2E_PORT=3000 reuses a `next dev` you already run (Next 16 allows one dev server per project).
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: 'tests/e2e',

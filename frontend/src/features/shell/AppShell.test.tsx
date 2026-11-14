@@ -41,7 +41,7 @@ describe('AppShell', () => {
 
   it('renders the exact footer text and a skip link to main', () => {
     renderWithClient(<AppShell me={meFor('admin')}>x</AppShell>);
-    expect(screen.getByText('Prototip FileGrid · Hackathon PPC')).toBeInTheDocument();
+    expect(screen.getByText('© 2026 FileGrid')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Sari la conținut' })).toHaveAttribute('href', '#main');
     expect(document.getElementById('main')).not.toBeNull();
   });

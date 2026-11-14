@@ -14,7 +14,7 @@ const figtree = localFont({
 
 export const metadata: Metadata = {
   title: 'FileGrid',
-  description: 'Prototip FileGrid · Hackathon PPC',
+  description: 'Fișierele de teren ale rețelei: încărcate sigur, verificate și ușor de găsit.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

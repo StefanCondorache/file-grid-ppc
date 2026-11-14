@@ -5,7 +5,7 @@ test('beat 1: log in as admin and land on Garanții', async ({ page }) => {
   await loginAs(page, 'admin');
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Garanții de business' })).toBeVisible();
-  await expect(page.getByText('Prototip FileGrid · Hackathon PPC')).toBeVisible();
+  await expect(page.getByText('© 2026 FileGrid')).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Live' })).toBeVisible({ timeout: 15_000 });
   await expectNoAxeViolations(page);
 });
