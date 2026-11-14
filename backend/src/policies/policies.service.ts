@@ -62,6 +62,38 @@ function toPolicy(row: PolicyRow): Policy {
   };
 }
 
+/** The API shape of a policy (GET /policies/{category}), also used for each version's snapshot. */
+function policyView(policy: Policy, updatedAt: string, updatedBy: UserRef): PolicyView {
+  return {
+    category: policy.category,
+    version: policy.version,
+    primaryStorage: policy.primaryStorage,
+    fallbackStorage: policy.fallbackStorage,
+    encryptionAtRest: policy.encrypted,
+    encryptionLocked: policy.category === 'connection_documents',
+    encryptionAlgorithm: policy.encrypted ? 'AES-256-GCM' : null,
+    chunkSize: policy.chunkSize,
+    maxParallel: policy.maxParallel,
+    maxConcurrency: policy.maxConcurrency,
+    maxFileSize: policy.maxFileSize,
+    allowedTypes: policy.allowedTypes,
+    retentionDays: policy.retentionDays,
+    updatedAt,
+    updatedBy,
+  };
+}
+
+/**
+ * A version's snapshot as a Policy. The versions seeded by the first migration hold the raw table
+ * row (`to_jsonb(policies.*)`, snake_case); later ones hold `toPolicy()`.
+ */
+function snapshotPolicy(snapshot: unknown): Policy {
+  const object = snapshot as Record<string, unknown>;
+  return 'primary_storage' in object
+    ? toPolicy(object as unknown as PolicyRow)
+    : (object as unknown as Policy);
+}
+
 function bytes(value: number): string {
   return value % MiB === 0 ? `${value / MiB} MiB` : `${value} B`;
 }
@@ -203,35 +235,26 @@ export class PoliciesService {
       .limit(100)
       .execute();
     const users = await this.users(rows.map((row) => row.changed_by));
-    return rows.map((row) => ({
-      version: row.version,
-      policy: row.snapshot,
-      changedAt: row.changed_at.toISOString(),
-      changedBy: users.get(row.changed_by) ?? SYSTEM_USER,
-      changes: row.changes,
-    }));
+    return rows.map((row) => {
+      const changedAt = row.changed_at.toISOString();
+      const changedBy = users.get(row.changed_by) ?? SYSTEM_USER;
+      return {
+        version: row.version,
+        policy: policyView(snapshotPolicy(row.snapshot), changedAt, changedBy),
+        changedAt,
+        changedBy,
+        changes: row.changes,
+      };
+    });
   }
 
   private async view(row: PolicyRow): Promise<PolicyView> {
     const users = await this.users([row.updated_by]);
-    const policy = toPolicy(row);
-    return {
-      category: policy.category,
-      version: policy.version,
-      primaryStorage: policy.primaryStorage,
-      fallbackStorage: policy.fallbackStorage,
-      encryptionAtRest: policy.encrypted,
-      encryptionLocked: policy.category === 'connection_documents',
-      encryptionAlgorithm: policy.encrypted ? 'AES-256-GCM' : null,
-      chunkSize: policy.chunkSize,
-      maxParallel: policy.maxParallel,
-      maxConcurrency: policy.maxConcurrency,
-      maxFileSize: policy.maxFileSize,
-      allowedTypes: policy.allowedTypes,
-      retentionDays: policy.retentionDays,
-      updatedAt: row.updated_at.toISOString(),
-      updatedBy: users.get(row.updated_by) ?? SYSTEM_USER,
-    };
+    return policyView(
+      toPolicy(row),
+      row.updated_at.toISOString(),
+      users.get(row.updated_by) ?? SYSTEM_USER,
+    );
   }
 
   private async users(usernames: readonly string[]): Promise<Map<string, UserRef>> {
