@@ -1,0 +1,287 @@
+# prometheus-community/prometheus: server + alertmanager + kube-state-metrics; node-exporter si pushgateway oprite.
+# Retentie 2d. Scrape: podurile adnotate prometheus.io/scrape="true" (+ prometheus.io/port, prometheus.io/path),
+# cAdvisor prin kubelet (doar metricile de container folosite), kube-state-metrics si probele blackbox spre storage-uri.
+server:
+  retention: 2d
+  retentionSize: 1GB
+  global:
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    evaluation_interval: 30s
+  persistentVolume:
+    enabled: true
+    size: 2Gi
+  extraEnv:
+    - {name: GOMEMLIMIT, value: "240MiB"}
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: "1", memory: 288Mi}
+
+configmapReload:
+  prometheus:
+    resources:
+      requests: {cpu: 5m, memory: 12Mi}
+      limits: {cpu: 50m, memory: 24Mi}
+
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+
+kube-state-metrics:
+  enabled: true
+  # Lista implicita fara "secrets" (si deci fara list/watch pe secrets in ClusterRole: list intoarce si datele).
+  collectors:
+    - certificatesigningrequests
+    - configmaps
+    - cronjobs
+    - daemonsets
+    - deployments
+    - endpointslices
+    - horizontalpodautoscalers
+    - ingresses
+    - jobs
+    - leases
+    - limitranges
+    - mutatingwebhookconfigurations
+    - namespaces
+    - networkpolicies
+    - nodes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - poddisruptionbudgets
+    - pods
+    - replicasets
+    - replicationcontrollers
+    - resourcequotas
+    - services
+    - statefulsets
+    - storageclasses
+    - validatingwebhookconfigurations
+    - volumeattachments
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 48Mi}
+
+# Alertmanager: deocamdata receiver "null" (decizia echipei: fara webhook). Configuratia NU sta in git si nici in
+# ConfigMap-ul chart-ului, ci in Secret-ul monitoring/alertmanager-config (cheia alertmanager.yml), creat o singura
+# data de scripts/obs-secrets.sh. Pentru Discord/Telegram se schimba DOAR Secret-ul, de ex.:
+#   receivers:
+#     - name: discord
+#       discord_configs: [{webhook_url: "https://discord.com/api/webhooks/..."}]
+#     # sau: telegram_configs: [{bot_token: "...", chat_id: 123456}]
+#   route: {receiver: discord, group_by: [alertname, storage, category]}
+# apoi: kubectl -n monitoring rollout restart statefulset/prometheus-alertmanager
+alertmanager:
+  enabled: true
+  config:
+    enabled: false
+  configmapReload:
+    enabled: false
+  extraSecretMounts:
+    - name: alertmanager-config
+      mountPath: /etc/alertmanager-secret
+      secretName: alertmanager-config
+      readOnly: true
+  extraArgs:
+    config.file: /etc/alertmanager-secret/alertmanager.yml
+  persistence:
+    enabled: false
+  resources:
+    requests: {cpu: 5m, memory: 24Mi}
+    limits: {cpu: 100m, memory: 48Mi}
+
+# Jobs implicite ale chart-ului (scrapeConfigs) dezactivate: folosim doar lista lean de mai jos.
+scrapeConfigs: null
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: [localhost:9090]
+
+      # Contract: poduri adnotate prometheus.io/scrape="true", prometheus.io/port, prometheus.io/path (implicit /metrics)
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: drop
+            regex: Pending|Succeeded|Failed|Completed
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+            replacement: "[$2]:$1"
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);((([0-9]+?)(\.|$)){4})
+            replacement: $2:$1
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+
+      # cAdvisor direct din kubelet (<node>:10250/metrics/cadvisor, autorizat prin nodes/metrics din ClusterRole-ul
+      # chart-ului; proxy-ul API server-ului ar cere nodes/proxy). Certificatul kubelet k3s e self-signed.
+      # Pastram doar metricile de container folosite (RAM mic).
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(kubernetes_io_hostname)
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: keep
+            regex: container_(cpu_usage_seconds_total|memory_working_set_bytes|network_receive_bytes_total|network_transmit_bytes_total|cpu_cfs_throttled_periods_total|cpu_cfs_periods_total|oom_events_total|spec_memory_limit_bytes)
+          - source_labels: [container]
+            action: drop
+            regex: POD
+
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: [prometheus-kube-state-metrics.monitoring.svc.cluster.local:8080]
+
+      # Probe TCP independente de aplicatie: blackbox-exporter (namespace filegrid, eticheta storage-client)
+      # -> postgres/s3/ftp. Eticheta storage foloseste numele din contract: db, s3, ftp.
+      - job_name: blackbox-storage
+        metrics_path: /probe
+        params:
+          module: [tcp_connect]
+        static_configs:
+          - targets: [postgres.filegrid-storage.svc.cluster.local:5432]
+            labels: {storage: db}
+          - targets: [s3.filegrid-storage.svc.cluster.local:8333]
+            labels: {storage: s3}
+          - targets: [ftp.filegrid-storage.svc.cluster.local:21]
+            labels: {storage: ftp}
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: blackbox-exporter.filegrid.svc.cluster.local:9115
+
+  # Validate cu promtool in podul prometheus (make obs-status / obs-up).
+  alerting_rules.yml:
+    groups:
+      - name: filegrid
+        rules:
+          # Ultima ramura: blackbox-exporter cazut/nescrapuit -> probe_success dispare, dar up{job=blackbox-storage}=0
+          # (cu eticheta storage statica pe target), deci monitorizarea nu devine oarba in tacere.
+          - alert: FileGridStorageDown
+            expr: |
+              max by (storage) (probe_success{job="blackbox-storage"}) == 0
+              or
+              max by (storage) (filegrid_storage_up) == 0
+              or
+              max by (storage) (up{job="blackbox-storage"}) == 0
+            for: 1m
+            labels: {severity: critical}
+            annotations:
+              summary: "Storage-ul {{ $labels.storage }} este indisponibil"
+              description: >-
+                Storage-ul {{ $labels.storage }} nu raspunde de cel putin 1 minut (proba TCP blackbox sau
+                filegrid_storage_up=0). Cerinta din brief: fisierele fiecarei categorii trebuie salvate fara pierderi
+                chiar daca un storage cade; verificati ca uploadurile ajung in coada/retry si ca restul platformei functioneaza.
+
+          - alert: FileGridCircuitOpen
+            expr: max by (storage) (filegrid_storage_circuit_state) == 2
+            for: 1m
+            labels: {severity: warning}
+            annotations:
+              summary: "Circuit breaker deschis pentru storage-ul {{ $labels.storage }}"
+              description: >-
+                Backend-ul a deschis circuitul spre {{ $labels.storage }} (erori repetate) si nu mai trimite operatii
+                catre el. Cerinta din brief: degradare controlata, fara blocarea celorlalte categorii; investigati
+                storage-ul si urmariti revenirea circuitului (half-open -> closed).
+
+          # Trimise vs stocate pe ACEEASI fereastra [t-7m, t-2m] (offset 2m = toleranta pentru citirile in zbor/retry);
+          # ferestre egale, altfel alerta pornea abia peste ~28% pierderi. Backend nescrapuit/cazut => stocate = 0
+          # (or vector(0)), deci alerta porneste in loc sa taca. "> 1" absoarbe zgomotul de extrapolare al increase().
+          # Contract (P2): filegrid_sim_readings_sent_total numara citiri UNICE (un reading_id o singura data, fara
+          # reincercari/duplicate intentionate) si filegrid_meter_readings_stored_total doar prima stocare.
+          - alert: MeterReadingsLost
+            expr: |
+              sum(increase(filegrid_sim_readings_sent_total[5m] offset 2m))
+                - (sum(increase(filegrid_meter_readings_stored_total[5m] offset 2m)) or vector(0))
+              > 1
+            for: 5m
+            labels: {severity: critical}
+            annotations:
+              summary: "Citiri de contor pierdute"
+              description: >-
+                Simulatorul a trimis cu {{ $value | printf "%.0f" }} mai multe citiri decat a stocat platforma (dupa 2
+                minute de toleranta pentru citirile in curs). Cerinta din brief: nicio citire de contor nu are voie sa se
+                piarda; verificati retry-urile, storage-ul db si logurile dupa trace_id.
+
+          - alert: MeterReadingsDuplicateStored
+            expr: sum(increase(filegrid_meter_readings_duplicate_stored_total[5m])) > 0
+            labels: {severity: critical}
+            annotations:
+              summary: "Citiri de contor stocate de doua ori"
+              description: >-
+                In ultimele 5 minute s-au stocat {{ $value | printf "%.0f" }} citiri duplicate. Cerinta din brief: o
+                citire reincercata trebuie deduplicata (idempotenta), nu salvata din nou; reincercarile deduplicate
+                (filegrid_meter_readings_duplicates_total) sunt normale, acestea nu.
+
+          - alert: FaultUploadsSlow
+            expr: |
+              histogram_quantile(0.95,
+                sum by (le) (rate(filegrid_upload_duration_seconds_bucket{category="fault_records"}[5m]))
+              ) > 5
+            for: 5m
+            labels: {severity: warning}
+            annotations:
+              summary: "Uploadurile de inregistrari de defect sunt lente (p95 > 5s)"
+              description: >-
+                p95 pentru uploadurile fault_records este {{ $value | printf "%.1f" }}s de 5 minute. Cerinta din brief:
+                inregistrarile de defect sunt urgente pentru echipele de interventie si trebuie salvate rapid.
+
+          # outcome != succes: contractul nu fixeaza valorile; consideram esec orice in afara de success/ok/duplicate.
+          - alert: FaultUploadsFailing
+            expr: |
+              sum(rate(filegrid_uploads_total{category="fault_records",outcome!~"success|ok|duplicate"}[5m]))
+                / sum(rate(filegrid_uploads_total{category="fault_records"}[5m]))
+              > 0.05
+            for: 5m
+            labels: {severity: critical}
+            annotations:
+              summary: "Peste 5% din uploadurile fault_records esueaza"
+              description: >-
+                Rata de eroare pentru inregistrarile de defect este {{ $value | humanizePercentage }} de 5 minute.
+                Cerinta din brief: inregistrarile de defect nu au voie sa se piarda; verificati storage-ul tinta si
+                circuit breaker-ul.
+
+          - alert: VideoTransfersFailing
+            expr: |
+              sum(rate(filegrid_uploads_total{category="drone_videos",outcome!~"success|ok|duplicate"}[10m]))
+                / sum(rate(filegrid_uploads_total{category="drone_videos"}[10m]))
+              > 0.10
+            for: 10m
+            labels: {severity: warning}
+            annotations:
+              summary: "Peste 10% din transferurile video de la drone esueaza"
+              description: >-
+                Rata de eroare pentru drone_videos este {{ $value | humanizePercentage }} de 10 minute. Cerinta din
+                brief: videoclipurile mari de inspectie cu drona trebuie transferate fiabil (reluare/retry), fara a
+                bloca celelalte categorii.

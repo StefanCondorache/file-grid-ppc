@@ -1,0 +1,7 @@
+# Build context is backend/: send only the P1 packages (BuildKit reads <Dockerfile>.dockerignore).
+*
+!app/storage
+!app/crypto
+**/__pycache__
+**/.pytest_cache
+**/*.pyc

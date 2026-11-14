@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftp
+  namespace: filegrid-storage
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: ftp}
+  ports:
+    - {name: ftp, port: 21, targetPort: 21}
+    - {name: pasv-21000, port: 21000, targetPort: 21000}
+    - {name: pasv-21001, port: 21001, targetPort: 21001}
+    - {name: pasv-21002, port: 21002, targetPort: 21002}
+    - {name: pasv-21003, port: 21003, targetPort: 21003}
+    - {name: pasv-21004, port: 21004, targetPort: 21004}
+    - {name: pasv-21005, port: 21005, targetPort: 21005}
+    - {name: pasv-21006, port: 21006, targetPort: 21006}
+    - {name: pasv-21007, port: 21007, targetPort: 21007}
+    - {name: pasv-21008, port: 21008, targetPort: 21008}
+    - {name: pasv-21009, port: 21009, targetPort: 21009}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ftp
+  namespace: filegrid-storage
+spec:
+  serviceName: ftp
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ftp}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ftp
+        app.kubernetes.io/part-of: filegrid-storage
+    spec:
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: pure-ftpd
+          image: stilliard/pure-ftpd:bookworm-1.0.50
+          ports:
+            - {name: ftp, containerPort: 21}
+            - {name: pasv-21000, containerPort: 21000}
+            - {name: pasv-21001, containerPort: 21001}
+            - {name: pasv-21002, containerPort: 21002}
+            - {name: pasv-21003, containerPort: 21003}
+            - {name: pasv-21004, containerPort: 21004}
+            - {name: pasv-21005, containerPort: 21005}
+            - {name: pasv-21006, containerPort: 21006}
+            - {name: pasv-21007, containerPort: 21007}
+            - {name: pasv-21008, containerPort: 21008}
+            - {name: pasv-21009, containerPort: 21009}
+          env:
+            - name: FTP_USER_NAME
+              valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: FTP_USER}}
+            - name: FTP_USER_PASS
+              valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: FTP_PASSWORD}}
+            - name: FTP_USER_HOME
+              value: /home/ftpuser
+            # PASV replies advertise the pod IP (downward API), which in-cluster clients can reach directly.
+            - name: PUBLICHOST
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - name: ADDED_FLAGS
+              value: "-p 21000:21009 -E"
+          readinessProbe:
+            exec: {command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/21"]}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            exec: {command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/21"]}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false   # image needs root + chroot caps, so no drop-ALL / non-root
+          volumeMounts:
+            - {name: data, mountPath: /home/ftpuser}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests: {storage: 5Gi}

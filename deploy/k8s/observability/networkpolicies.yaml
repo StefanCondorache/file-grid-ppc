@@ -1,0 +1,67 @@
+# NetworkPolicy-uri pentru stack-ul de observabilitate (aplicate de `make obs-up`).
+# 1) monitoring: Loki (auth_enabled=false), Prometheus (--web.enable-lifecycle), API-ul Alertmanager si UI-ul Alloy
+#    nu au autentificare, deci accesul din alte namespace-uri e interzis. Raman permise: traficul intern din
+#    monitoring (Alloy->Loki, Grafana->Prometheus/Loki, Prometheus->Alertmanager/kube-state-metrics) si
+#    Traefik (kube-system) -> Grafana:3000 pentru https://<DOMAIN>/grafana. Egress-ul nu e restrictionat
+#    (Prometheus scrapeaza podurile din alte namespace-uri).
+# 2) filegrid: blackbox-exporter are eticheta storage-client=true (trece de NetworkPolicy-urile storage); doar
+#    Prometheus din monitoring are voie sa-i ceara probe pe :9115, altfel orice pod l-ar putea folosi ca proxy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-grafana
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - {protocol: TCP, port: 3000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blackbox-exporter-from-monitoring
+  namespace: filegrid
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-blackbox-exporter
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - {protocol: TCP, port: 9115}
