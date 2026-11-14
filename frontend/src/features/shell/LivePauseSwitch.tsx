@@ -28,7 +28,7 @@ export function LivePauseSwitch() {
       aria-checked={!paused}
       onClick={toggle}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-pill border-[1.5px] px-3 text-sm font-semibold whitespace-nowrap transition-colors duration-(--fg-dur-fast)',
+        'relative inline-flex h-8 items-center gap-1.5 rounded-pill after:absolute after:-inset-1 after:rounded-pill border-[1.5px] px-3 text-sm font-semibold whitespace-nowrap transition-colors duration-(--fg-dur-fast)',
         paused ? 'border-(--fg-warn-border) bg-warn-tint text-warn-ink' : 'border-border bg-surface text-ink hover:bg-surface-2',
       )}
     >

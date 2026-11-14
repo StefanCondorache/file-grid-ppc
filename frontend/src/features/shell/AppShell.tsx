@@ -22,7 +22,7 @@ export function AppShell({ me, children, onLogout }: { me: Me; children: ReactNo
       <div className="flex min-w-0 flex-col">
         <TopBar me={me} onLogout={onLogout} />
         <AlertBanner />
-        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-8">
+        <main id="main" tabIndex={-1} className="enter mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-8">
           {children}
         </main>
         <Footer />

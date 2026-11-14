@@ -49,13 +49,13 @@ export function ConfirmAction({
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-(--fg-scrim)" />
+        <AlertDialog.Overlay className="scrim fixed inset-0 z-40 bg-(--fg-scrim)" />
         <AlertDialog.Content
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             cancelRef.current?.focus();
           }}
-          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-card bg-card p-6 shadow-e3"
+          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong rounded-card border p-6 shadow-e3"
         >
           <AlertDialog.Title className="text-xl font-bold">{title}</AlertDialog.Title>
           <AlertDialog.Description className="text-ink-2">{body}</AlertDialog.Description>

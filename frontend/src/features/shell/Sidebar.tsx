@@ -14,7 +14,7 @@ export function Sidebar({ me }: { me: Me }) {
   const items = NAV.filter((n) => n.visible(me));
   const groups = [...new Set(items.map((n) => n.group))];
   return (
-    <nav aria-label={t.shell.mainNav} className="sticky top-0 flex h-screen w-[72px] flex-col bg-sidebar px-3 py-5 text-sidebar-foreground lg:w-[264px]">
+    <nav aria-label={t.shell.mainNav} className="sticky top-0 flex h-screen w-[72px] flex-col glass-chrome px-3 py-5 text-sidebar-foreground lg:w-[264px]">
       <Link href="/" className="mb-5 flex items-center gap-2.5 px-2.5 text-sidebar-foreground no-underline">
         <Wordmark onDark />
         <span className="hidden lg:block">
@@ -37,7 +37,7 @@ export function Sidebar({ me }: { me: Me }) {
                   href={n.href}
                   aria-current={current ? 'page' : undefined}
                   className={cn(
-                    'relative flex min-h-10 items-center gap-3 rounded-[10px] px-3 py-2.5 text-[15px] text-sidebar-foreground no-underline hover:bg-(--fg-chrome-2)',
+                    'relative flex min-h-10 items-center gap-3 rounded-[10px] px-3 py-2.5 text-[15px] text-sidebar-foreground no-underline transition-colors duration-(--fg-dur-fast) hover:bg-(--fg-chrome-2)',
                     current && 'bg-(--fg-chrome-2) font-semibold before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-1 before:rounded-r before:bg-brand-orange',
                   )}
                 >

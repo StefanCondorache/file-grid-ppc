@@ -133,6 +133,33 @@
   --fg-dur-slow: 600ms;     /* only: status change pulse on a guarantee card (once) */
   --fg-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --fg-ease-sharp: cubic-bezier(0.4, 0, 0.2, 1);
+  --fg-dur-quick: 120ms;    /* popover/dialog exit */
+  --fg-dur-pop: 180ms;      /* popover/dialog enter */
+  --fg-dur-enter: 240ms;    /* page content rise on route enter */
+  --fg-dur-shimmer: 1400ms; /* skeleton sweep */
+  --fg-dur-pulse: 2000ms;   /* live dot ring; critical edge */
+  --fg-stagger: 40ms;       /* delay between entering page sections */
+  --fg-rise: 6px;           /* page content rises this far */
+  --fg-lift: -2px;          /* card hover lift */
+  --fg-press: 1px;          /* button press depth */
+  --fg-pop-scale: 0.96;     /* dialog/popover start scale */
+
+  /* ---- backdrop + glass (2026-11-15). Glass only on chrome, dialogs, popovers, login card; data stays solid. ---- */
+  --fg-backdrop:
+    radial-gradient(1100px 620px at 0% 0%, rgba(0, 160, 220, .10), transparent 65%),
+    radial-gradient(900px 520px at 100% 0%, rgba(255, 75, 0, .07), transparent 60%),
+    linear-gradient(180deg, #F5F5F5 0%, #EEF0F3 100%);
+  --fg-glass: rgba(255, 255, 255, .78);          /* top bar: ink stays ≥ 13:1 over the blurred page */
+  --fg-glass-strong: rgba(255, 255, 255, .9);    /* dialogs, menus, login card */
+  --fg-glass-chrome: rgba(35, 41, 54, .9);       /* sidebar: on-chrome text stays ≥ 10:1 */
+  --fg-glass-border: rgba(35, 41, 54, .12);
+  --fg-glass-filter: blur(16px) saturate(140%);
+
+  /* ---- soft depth ---- */
+  --fg-shadow-raise: inset 0 1px 0 rgba(255, 255, 255, .22), 0 1px 2px rgba(35, 41, 54, .12), 0 3px 8px -3px rgba(35, 41, 54, .14);
+  --fg-shadow-press: inset 0 1px 3px rgba(35, 41, 54, .22);
+  --fg-shadow-inset: inset 0 1px 2px rgba(35, 41, 54, .08), inset 0 0 0 1px rgba(35, 41, 54, .02);
+  --fg-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, .6), transparent);
 }
 
 /* ---- dark "dispecerat" theme: control-room screens, projector-friendly dark ---- */
@@ -194,8 +221,27 @@
   --fg-shadow-e1: 0 0 0 1px #262D3B;
   --fg-shadow-e2: 0 0 0 1px #2C3445, 0 6px 18px rgba(0, 0, 0, .35);
   --fg-shadow-e3: 0 0 0 1px #2C3445, 0 20px 48px rgba(0, 0, 0, .55);
+
+  --fg-backdrop:
+    radial-gradient(1100px 620px at 0% 0%, rgba(26, 147, 192, .12), transparent 65%),
+    radial-gradient(900px 520px at 100% 0%, rgba(255, 90, 31, .06), transparent 60%),
+    linear-gradient(180deg, #0F131A 0%, #0B0F15 100%);
+  --fg-glass: rgba(23, 28, 38, .78);
+  --fg-glass-strong: rgba(23, 28, 38, .9);
+  --fg-glass-chrome: rgba(11, 14, 20, .86);
+  --fg-glass-border: rgba(174, 182, 196, .16);
+
+  --fg-shadow-raise: inset 0 1px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .5);
+  --fg-shadow-press: inset 0 1px 3px rgba(0, 0, 0, .55);
+  --fg-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, .45);
+  --fg-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, .06), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --fg-dur-fast: 0ms; --fg-dur-normal: 120ms; --fg-dur-slow: 0ms; }
+  :root {
+    --fg-dur-fast: 0ms; --fg-dur-normal: 120ms; --fg-dur-slow: 0ms;
+    /* new motion off: no travel, no scale, no stagger (keyframe animations are also dropped in globals.css) */
+    --fg-dur-pop: 0ms; --fg-dur-quick: 0ms; --fg-dur-enter: 0ms; --fg-stagger: 0ms;
+    --fg-rise: 0px; --fg-lift: 0px; --fg-press: 0px; --fg-pop-scale: 1;
+  }
 }

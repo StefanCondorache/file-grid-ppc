@@ -94,7 +94,7 @@ export function AlertsList() {
     body = <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} />;
   } else {
     body = (
-      <div aria-hidden="true" className="h-32 animate-pulse rounded-card border border-border bg-surface-2 motion-reduce:animate-none" />
+      <div aria-hidden="true" className="h-32 skeleton rounded-card border border-border bg-surface-2" />
     );
   }
 
