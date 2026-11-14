@@ -21,6 +21,7 @@ import {
   sessionCookieFrom,
   testDb,
 } from './helpers';
+import { memoryLogDestination } from './log-capture';
 import { TestOnlyModule } from './test-only.module';
 
 const EIGHT_HOURS_S = 480 * 60;
@@ -371,6 +372,234 @@ describe('auth', () => {
       app = await createTestApp({ env: { FILEGRID_DEMO_MODE: 'false' } });
 
       expect((await login(app, 'auditor', TEST_ADMIN_PASSWORD)).status).toBe(401);
+    });
+  });
+
+  describe('passwordless login (FILEGRID_PASSWORDLESS_LOGIN, demo mode only)', () => {
+    const PASSWORDLESS = { FILEGRID_PASSWORDLESS_LOGIN: 'true' };
+    const loginOptions = () => request(app.getHttpServer()).get('/api/v1/auth/login-options');
+    const loginWithoutPassword = (username: string) =>
+      request(app.getHttpServer()).post('/api/v1/auth/login').set(CSRF_HEADER).send({ username });
+
+    it('is off by default: login-options says so and a password is required', async () => {
+      const options = await loginOptions();
+      const withoutPassword = await loginWithoutPassword('auditor');
+
+      expect(options.status).toBe(200);
+      expect(options.body).toEqual({ passwordless: false });
+      expect(withoutPassword.status).toBe(422);
+      expect(withoutPassword.body.fieldErrors).toEqual([
+        expect.objectContaining({ field: 'password' }),
+      ]);
+    });
+
+    it('serves login-options publicly, briefly cacheable, without secrets', async () => {
+      await app.close();
+      app = await createTestApp({ env: PASSWORDLESS, logDestination: memoryLogDestination() });
+
+      const response = await loginOptions();
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ passwordless: true });
+      expect(response.headers['cache-control']).toBe('public, max-age=5');
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    describe('when on, with demo mode on', () => {
+      beforeEach(async () => {
+        await app.close();
+        app = await createTestApp({
+          env: PASSWORDLESS,
+          extraModules: [TestOnlyModule],
+          logDestination: memoryLogDestination(),
+        });
+      });
+
+      it.each([
+        ['teren', 'Echipă de teren'],
+        ['dispecerat', 'Dispecerat'],
+        ['racordari', 'Angajat racordări'],
+        ['auditor', 'Auditor'],
+        ['admin', 'Administrator'],
+      ])('logs %s in without a password', async (role, displayName) => {
+        const response = await loginWithoutPassword(role);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          user: { username: role, role, displayName },
+          activeRole: role,
+          demoMode: true,
+        });
+        expect(String(response.headers['set-cookie'])).toMatch(
+          /^__Host-fg_session=[^;]+; Path=\/; HttpOnly; SameSite=Strict; Max-Age=\d+; Secure$/,
+        );
+        const profile = await me({ Cookie: sessionCookieFrom(response) });
+        expect(profile.status).toBe(200);
+        expect(profile.body.user.username).toBe(role);
+      });
+
+      it('keeps the 8 h absolute and 30 min idle expiry', async () => {
+        const response = await loginWithoutPassword('auditor');
+
+        const cookie = String(response.headers['set-cookie']);
+        expect(Number(/Max-Age=(\d+)/.exec(cookie)?.[1])).toBeGreaterThan(EIGHT_HOURS_S - 5);
+        const absolute = Date.parse(response.body.expiresAt) - Date.now();
+        const idle = Date.parse(response.body.idleExpiresAt) - Date.now();
+        expect(absolute).toBeGreaterThan((EIGHT_HOURS_S - 60) * 1000);
+        expect(absolute).toBeLessThanOrEqual(EIGHT_HOURS_S * 1000);
+        expect(idle).toBeGreaterThan(29 * 60_000);
+        expect(idle).toBeLessThanOrEqual(30 * 60_000);
+      });
+
+      it('lets a passwordless admin switch the acting role, then log out', async () => {
+        const cookie = sessionCookieFrom(await loginWithoutPassword('admin'));
+
+        const switched = await request(app.getHttpServer())
+          .post('/api/v1/demo/acting-role')
+          .set(browser(cookie))
+          .send({ role: 'auditor' });
+        const logout = await request(app.getHttpServer())
+          .post('/api/v1/auth/logout')
+          .set(browser(sessionCookieFrom(switched)));
+
+        expect(switched.status).toBe(200);
+        expect(switched.body).toMatchObject({
+          activeRole: 'auditor',
+          user: { role: 'auditor' },
+          realUser: { username: 'admin', role: 'admin' },
+        });
+        expect(logout.status).toBe(204);
+        expect(String(logout.headers['set-cookie'])).toMatch(/^__Host-fg_session=; .*Max-Age=0/);
+      });
+
+      it('keeps the capabilities of the role', async () => {
+        const asTeren = await request(app.getHttpServer())
+          .get('/api/v1/test-only/policies-admin')
+          .set(browser(sessionCookieFrom(await loginWithoutPassword('teren'))));
+        const asAdmin = await request(app.getHttpServer())
+          .get('/api/v1/test-only/policies-admin')
+          .set(browser(sessionCookieFrom(await loginWithoutPassword('admin'))));
+
+        expect(asTeren.status).toBe(403);
+        expect(asAdmin.status).toBe(200);
+      });
+
+      it('ignores a password if one is sent', async () => {
+        const response = await login(app, 'auditor', fakeSecret());
+
+        expect(response.status).toBe(200);
+        expect(response.body.user.username).toBe('auditor');
+      });
+
+      it('still rejects an unknown username with the usual 401', async () => {
+        const response = await loginWithoutPassword('ghost');
+
+        expect(response.status).toBe(401);
+        expect(response.body).toMatchObject({
+          code: 'INVALID_CREDENTIALS',
+          message: 'Utilizator sau parolă greșită.',
+        });
+      });
+
+      it('still rate-limits failed logins', async () => {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          expect((await loginWithoutPassword('ghost')).status).toBe(401);
+        }
+
+        const blocked = await loginWithoutPassword('ghost');
+
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.code).toBe('RATE_LIMITED');
+      });
+
+      it('still requires the CSRF header', async () => {
+        const response = await request(app.getHttpServer())
+          .post('/api/v1/auth/login')
+          .send({ username: 'admin' });
+
+        expect(response.status).toBe(403);
+        expect(response.body.code).toBe('CSRF_REJECTED');
+      });
+
+      it('marks passwordless logins in the audit log', async () => {
+        await loginWithoutPassword('auditor');
+        await loginWithoutPassword('ghost');
+
+        const db = testDb();
+        try {
+          const rows = await db
+            .selectFrom('audit_log')
+            .select(['actor', 'action', 'outcome', 'demo', 'details'])
+            .orderBy('id')
+            .execute();
+          expect(rows).toEqual([
+            {
+              actor: 'auditor',
+              action: 'login',
+              outcome: 'success',
+              demo: true,
+              details: 'passwordless',
+            },
+            {
+              actor: 'ghost',
+              action: 'login',
+              outcome: 'failure',
+              demo: true,
+              details: 'passwordless',
+            },
+          ]);
+        } finally {
+          await db.destroy();
+        }
+      });
+    });
+
+    it('logs a warning at start while it is on', async () => {
+      await app.close();
+      const destination = memoryLogDestination();
+      app = await createTestApp({ env: PASSWORDLESS, logDestination: destination });
+
+      const warning = destination
+        .lines()
+        .find((line) => line.level === 'warn' && String(line.message).includes('passwordless'));
+      expect(warning).toBeDefined();
+    });
+
+    describe('when on but demo mode is off', () => {
+      let logs: ReturnType<typeof memoryLogDestination>;
+
+      beforeEach(async () => {
+        await app.close();
+        logs = memoryLogDestination();
+        app = await createTestApp({
+          env: { ...PASSWORDLESS, FILEGRID_DEMO_MODE: 'false' },
+          logDestination: logs,
+        });
+      });
+
+      it('is ignored: login-options says false and the password is required', async () => {
+        const options = await loginOptions();
+        const withoutPassword = await loginWithoutPassword('admin');
+        const wrongPassword = await login(app, 'admin', fakeSecret());
+        const rightPassword = await login(app);
+
+        expect(options.body).toEqual({ passwordless: false });
+        expect(withoutPassword.status).toBe(422);
+        expect(withoutPassword.body.code).toBe('VALIDATION_ERROR');
+        expect(wrongPassword.status).toBe(401);
+        expect(rightPassword.status).toBe(200);
+      });
+
+      it('warns at start that the flag is ignored', () => {
+        const warning = logs
+          .lines()
+          .find(
+            (line) =>
+              line.level === 'warn' &&
+              String(line.message).includes('FILEGRID_PASSWORDLESS_LOGIN is ignored'),
+          );
+        expect(warning).toBeDefined();
+      });
     });
   });
 

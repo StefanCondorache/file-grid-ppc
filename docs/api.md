@@ -31,7 +31,8 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. Errors: `401 INVALID_CREDENTIALS`, `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
+| `GET /auth/login-options` | anyone | `{passwordless: boolean}`: whether the login form asks for a password. `Cache-Control: public, max-age=5` |
+| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. `password` may be left out while passwordless login is on. Errors: `401 INVALID_CREDENTIALS`, `422 VALIDATION_ERROR` (no `password` while passwordless login is off), `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
 | `POST /auth/logout` | session | `204`, expires the cookie |
 | `GET /auth/me` | session | `Me` |
 | `POST /auth/refresh` | session | `200 Me`, with a new idle window |
@@ -53,6 +54,12 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   (ADR-0022). The username is the role id (`teren`, `dispecerat`, `racordari`, `auditor`). The password is
   `DEMO_USERS_PASSWORD`, or `ADMIN_PASSWORD` when that is unset. With demo mode off these accounts are
   removed.
+- **Passwordless login (temporary, for the demo):** with `FILEGRID_PASSWORDLESS_LOGIN=true` and demo mode on,
+  `POST /auth/login` accepts `{username}` alone and logs in that existing account (a role id, or the admin by
+  `ADMIN_USERNAME`) without checking the password; a password that is sent is ignored. An unknown username
+  still gets `401 INVALID_CREDENTIALS`. The rate limit, cookie, CSRF, expiries and capabilities do not change;
+  the audit rows are marked `demo: true`, `details: "passwordless"`. With demo mode off the flag is ignored
+  and the backend logs a warning at start. Set it to `false` to require passwords again (no code change).
 - **Roles:** `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. The capability matrix is the one in
   `docs/frontend/prd.md` FE-01, enforced in `backend/src/common/domain.ts`.
 - **Visibility:** a file the active role may not see answers 404.
@@ -279,6 +286,7 @@ The variables come from the k3s Secrets `filegrid-storage-credentials` and `file
 
 Optional:
 - `FILEGRID_DEMO_MODE` (default `true`)
+- `FILEGRID_PASSWORDLESS_LOGIN` (default `false`; only takes effect with demo mode on, see "Auth and session")
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)
 - `SESSION_TTL_MINUTES` (480) and `SESSION_IDLE_MINUTES` (30)

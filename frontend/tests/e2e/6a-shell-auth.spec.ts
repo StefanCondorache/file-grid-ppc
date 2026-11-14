@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoAxeViolations, loginAs } from './helpers';
+import { ROLE_LABELS, expectNoAxeViolations, loginAs } from './helpers';
 
 test('beat 1: log in as admin and land on Garanții', async ({ page }) => {
   await loginAs(page, 'admin');
@@ -48,4 +48,17 @@ test('shell is accessible in the dispecerat theme', async ({ page }) => {
   await loginAs(page, 'admin');
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dispecerat'));
   await expectNoAxeViolations(page);
+});
+
+test('passwordless demo login: the role-only page is accessible and logs in', async ({ page }) => {
+  // The mock knob mirrors FILEGRID_PASSWORDLESS_LOGIN=true; set before the page reads GET /auth/login-options.
+  await page.addInitScript(() => window.localStorage.setItem('fg.mock', JSON.stringify({ passwordless: true })));
+  await page.goto('/login');
+  await expect(page.getByText('Mod demo: autentificare fără parolă.')).toBeVisible();
+  await expect(page.getByLabel('Rol', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Parolă')).toHaveCount(0);
+  await expectNoAxeViolations(page);
+  await page.getByLabel('Rol', { exact: true }).selectOption('dispecerat');
+  await page.getByRole('button', { name: 'Intră în cont' }).click();
+  await expect(page.getByText(`Rol activ: ${ROLE_LABELS.dispecerat}`)).toBeVisible();
 });
