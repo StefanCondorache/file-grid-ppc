@@ -5,7 +5,8 @@
 #    Traefik (kube-system) -> Grafana:3000 pentru https://<DOMAIN>/grafana. Egress-ul nu e restrictionat
 #    (Prometheus scrapeaza podurile din alte namespace-uri).
 # 2) filegrid: blackbox-exporter are eticheta storage-client=true (trece de NetworkPolicy-urile storage); doar
-#    Prometheus din monitoring are voie sa-i ceara probe pe :9115, altfel orice pod l-ar putea folosi ca proxy.
+#    podul Prometheus server (namespace monitoring + etichetele lui) are voie sa-i ceara probe pe :9115, altfel orice
+#    pod (inclusiv Grafana/Loki/Alloy din monitoring) l-ar putea folosi ca proxy TCP spre storage-uri.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -60,8 +61,14 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
+        # namespaceSelector + podSelector in ACELASI element = ambele conditii (nu oricare)
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+              app.kubernetes.io/component: server
+              app.kubernetes.io/instance: prometheus
       ports:
         - {protocol: TCP, port: 9115}
