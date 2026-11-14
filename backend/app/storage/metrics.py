@@ -21,7 +21,9 @@ All metrics live in the default ``prometheus_client`` registry, so the backend's
     Labels: ``storage``, ``operation``, ``category``, ``error_type``. One increment per failed or rejected
     operation. ``error_type`` is ``CircuitOpen`` (rejected), ``IdleTimeout`` (no progress), ``Timeout``,
     ``ObjectNotFound``, ``IntegrityError``, ``SourceError`` (the caller's input stream failed, e.g. client
-    disconnected mid-upload; not the storage's fault) or the class name of the underlying error.
+    disconnected mid-upload; not the storage's fault), ``HealthCheckFailed`` (operation ``health``) or the
+    class name of the underlying error (e.g. ``ConnectionRefusedError``, ``EndpointConnectionError``).
+    Health probes are recorded with ``category="system"``.
     Error rate: ``sum by (storage, category) (rate(filegrid_storage_errors_total[5m]))
     / sum by (storage, category) (rate(filegrid_storage_operation_seconds_count[5m]))``
 

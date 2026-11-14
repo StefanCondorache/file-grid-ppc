@@ -54,6 +54,8 @@ log = logging.getLogger("filegrid.storage.db")
 SCHEMA = "blobstore"
 _SCHEMA_LOCK_ID = 0x46470001  # advisory lock id for ensure_schema ("FG" 0001)
 _KEY_LOCK_CLASS = 0x4647  # first half of the two-int advisory lock taken per key
+# Waiting for a free pooled connection (all busy) is overload, not an outage: allow longer than a connect.
+ACQUIRE_TIMEOUT_S = 10.0
 
 _DDL = """
 CREATE SCHEMA IF NOT EXISTS blobstore;
@@ -128,7 +130,7 @@ class DbStorage(StorageAdapter):
             raise _translate(exc) from exc
 
     async def _ensure_schema(self, pool: asyncpg.Pool) -> None:
-        async with pool.acquire(timeout=self._settings.connect_timeout) as conn:
+        async with pool.acquire(timeout=ACQUIRE_TIMEOUT_S) as conn:
             async with conn.transaction():
                 await conn.execute("SELECT pg_advisory_xact_lock($1)", _SCHEMA_LOCK_ID)
                 await conn.execute(_DDL)
@@ -145,7 +147,7 @@ class DbStorage(StorageAdapter):
         hashing = HashingStream(chunks)
         try:
             pool = await self._get_pool()
-            async with pool.acquire(timeout=self._settings.connect_timeout) as conn:
+            async with pool.acquire(timeout=ACQUIRE_TIMEOUT_S) as conn:
                 async with conn.transaction():
                     await conn.execute(
                         "SELECT pg_advisory_xact_lock($1, hashtext($2))", _KEY_LOCK_CLASS, key
@@ -183,7 +185,7 @@ class DbStorage(StorageAdapter):
     async def _get(self, key: str) -> AsyncIterator[bytes]:
         try:
             pool = await self._get_pool()
-            async with pool.acquire(timeout=self._settings.connect_timeout) as conn:
+            async with pool.acquire(timeout=ACQUIRE_TIMEOUT_S) as conn:
                 async with conn.transaction(isolation="repeatable_read", readonly=True):
                     size = await conn.fetchval("SELECT size FROM blobstore.objects WHERE key = $1", key)
                     if size is None:
@@ -206,7 +208,7 @@ class DbStorage(StorageAdapter):
         validate_key(key)
         try:
             pool = await self._get_pool()
-            async with pool.acquire(timeout=self._settings.connect_timeout) as conn:
+            async with pool.acquire(timeout=ACQUIRE_TIMEOUT_S) as conn:
                 await conn.execute("DELETE FROM blobstore.objects WHERE key = $1", key)
         except Exception as exc:
             raise _translate(exc, key) from exc
