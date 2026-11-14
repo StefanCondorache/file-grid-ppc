@@ -4,13 +4,14 @@ import { API_BASE } from '@/lib/api/base';
 import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
 import { actingRoleHandlers, authHandlers } from './auth';
+import { policyHandlers } from './policies';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
   auth: [...authHandlers],
-  policies: [],
+  policies: [...policyHandlers],
   uploads: [...uploadHandlers],
   files: [],
   audit: [],
