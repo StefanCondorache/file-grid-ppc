@@ -38,7 +38,7 @@ describe('meter readings', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    storages.reset();
+    await storages.reset();
   });
 
   afterAll(async () => {

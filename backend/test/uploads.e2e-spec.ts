@@ -118,7 +118,7 @@ describe('uploads, downloads and files', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    storages.reset();
+    await storages.reset();
     admin = await loginCookie(app);
   });
 
