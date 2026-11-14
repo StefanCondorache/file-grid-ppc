@@ -138,6 +138,11 @@ Seed policies:
      `503 STORAGE_UNAVAILABLE`.
    - **Hash mismatch:** the answer is `verdict: "mismatch"` with `fileId: null`, and no file is kept.
 5. **`DELETE /uploads/{id}`** returns `204` and drops the staged parts.
+6. **Abandoned uploads:** a session expires `UPLOAD_SESSION_TTL_HOURS` (24) after its last part. Every
+   `UPLOAD_SWEEP_INTERVAL_S` (300) each replica marks expired sessions `expired` and drops their staged parts
+   (and those of aborted sessions); a part whose storage is down is kept for the next sweep. A part sent
+   again with the same `X-Part-SHA256` is answered `alreadyReceived` only after its body has been read, so a
+   retrying client over HTTP/2 is not cut off mid-body.
 6. **`GET` or `HEAD /ping`** returns `204`, as a connectivity probe for the resume logic.
 
 How the server handles an upload:
@@ -357,6 +362,7 @@ Optional:
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)
 - `SESSION_TTL_MINUTES` (480) and `SESSION_IDLE_MINUTES` (30)
+- `UPLOAD_SESSION_TTL_HOURS` (24) and `UPLOAD_SWEEP_INTERVAL_S` (300), see "Resumable upload"
 - `COOKIE_SECURE` (default `true`)
 - `FILEGRID_STORAGE_DRIVER=memory` (no S3/FTP; for local runs)
 - `LOG_LEVEL`
