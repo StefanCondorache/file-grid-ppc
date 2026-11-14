@@ -28,6 +28,10 @@ spec:
       automountServiceAccountToken: true
       # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
       enableServiceLinks: false
+      # Graceful shutdown (rollouts, HPA scale-down): preStop waits 5 s while the endpoint is removed from the
+      # Service and Traefik, so no new request reaches a stopping pod; then SIGTERM, and the backend drains in-flight
+      # requests and closes the DB pool. 30 s in total before SIGKILL.
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -37,6 +41,9 @@ spec:
         - name: backend
           image: filegrid-backend
           imagePullPolicy: Never
+          lifecycle:
+            preStop:
+              sleep: {seconds: 5}   # kubelet's own sleep action: no shell or sleep binary needed in the image
           ports:
             - {name: http, containerPort: 8000}
           envFrom:

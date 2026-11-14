@@ -108,4 +108,23 @@ test_node_exporter_is_on_without_host_network_and_with_small_limits() {
     "node-exporter scrape job"
 }
 
+test_blackbox_exporter_accepts_9115_only_from_the_prometheus_server_pod() {
+  local np
+  np=$(q '[.[] | select(.kind == "NetworkPolicy" and .metadata.namespace == "filegrid"
+          and .spec.podSelector.matchLabels["app.kubernetes.io/name"] == "prometheus-blackbox-exporter")]')
+  assert_eq "$(jq 'length' <<<"$np")" 1 "NetworkPolicies selecting blackbox-exporter"
+  assert_eq "$(jq -c '.[0].spec.ingress' <<<"$np")" \
+    '[{"from":[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"monitoring"}},"podSelector":{"matchLabels":{"app.kubernetes.io/component":"server","app.kubernetes.io/instance":"prometheus","app.kubernetes.io/name":"prometheus"}}}],"ports":[{"port":9115,"protocol":"TCP"}]}]' \
+    "blackbox-exporter ingress"
+}
+
+test_backend_and_simulator_drain_before_shutdown() {
+  local d
+  for d in filegrid-backend filegrid-simulator; do
+    assert_eq "$(q --arg d "$d" '.[] | select(.kind == "Deployment" and .metadata.name == $d) | .spec.template.spec
+        | [.terminationGracePeriodSeconds, .containers[0].lifecycle.preStop.sleep.seconds] | tojson')" '[30,5]' \
+      "$d terminationGracePeriodSeconds, preStop sleep"
+  done
+}
+
 run_tests
