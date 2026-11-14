@@ -225,4 +225,40 @@ describe('upload engine facade', () => {
     // The failure survives a reload: the record stays, marked failed.
     expect(repo.records.get(id)).toMatchObject({ state: 'failed', failReason: 'checksum_mismatch' });
   });
+
+  // Review Focus 1: reload, then the user picks a different file with the same name, size and date.
+  it('rejects a reattached file whose sampled part hashes differ', async () => {
+    const server = fakeServer({ latencyMs: 1000 });
+    const repo = memoryRepo();
+    const hasher = fakeHasher();
+    const before = setup(server, repo, hasher);
+    await before.engine.restore('u1');
+    const id = before.engine.enqueue({ file: testFile('A'), category: 'drone_videos', metadata: drone });
+    await vi.advanceTimersByTimeAsync(1500); // parts 1 and 2 confirmed, part 3 in flight
+    expect(item(id).bytesConfirmed).toBe(2 * MiB);
+    before.engine.pauseAll('session'); // the tab goes away mid-upload
+
+    // F5: a new engine on the same IndexedDB and the same server.
+    const after = setup(server, repo, hasher);
+    await after.engine.restore('u1');
+    expect(item(id).state).toBe('needs_file');
+    const sent = server.calls.length;
+
+    await after.engine.reattach(id, testFile('B')); // same name, size and lastModified; different bytes
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(hasher.sampled.at(-1)).toEqual([1, 2, 3]); // first, middle and last part were re-read
+    expect(item(id)).toMatchObject({
+      state: 'failed',
+      failReason: 'different_file',
+      error: { message: 'Fișierul ales este diferit de cel început.' },
+    });
+    expect(server.calls.length).toBe(sent); // not one byte of the other file went out
+
+    // The right file is accepted and only the missing part is sent.
+    await after.engine.reattach(id, testFile('A'));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(item(id).state).toBe('verified');
+    expect(server.calls.slice(sent).map((c) => c.partNumber)).toEqual([3]);
+  });
 });

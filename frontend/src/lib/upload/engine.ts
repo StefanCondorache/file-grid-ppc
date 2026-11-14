@@ -697,11 +697,20 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     };
   }
 
-  /** Same size, last-modified time and name (§8.4 steps 1–2). */
+  /**
+   * Same size, last-modified time and name, then the first, middle and last part re-hashed against the hashes the
+   * upload started with (§8.4, Review Focus 1): a same-name, same-size file with other bytes never mixes in.
+   */
   async function isSameFile(rec: PersistedUpload, file: File): Promise<boolean> {
     const fp = rec.fingerprint;
     if (file.size !== fp.size || file.lastModified !== fp.lastModified) return false;
-    return (await deps.sha256Text(file.name)) === fp.nameHash;
+    if ((await deps.sha256Text(file.name)) !== fp.nameHash) return false;
+    const { chunkSize, partCount: count, partSha256 } = rec;
+    // Not hashed yet: the hash-first pass will run on this file, so nothing of the other one was sent.
+    if (!chunkSize || !count || !partSha256) return true;
+    const parts = samplePartNumbers(count);
+    const hashes = await hasher.sample(file, chunkSize, parts);
+    return parts.every((n) => hashes[n] === partSha256[n - 1]);
   }
 
   // ---- commands --------------------------------------------------------------------------------------------
