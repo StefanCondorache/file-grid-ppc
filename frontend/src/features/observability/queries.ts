@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { api, unwrap } from '@/lib/api/client';
 import { qk } from '@/lib/api/query-keys';
-import { CATEGORY_IDS, STORAGE_IDS, type CategoryId, type MatrixWindow, type MetricsCell, type StorageId } from '@/lib/monitoring/contract';
+import { CATEGORY_IDS, STORAGE_IDS, type CategoryId, type MatrixWindow, type MetricsCell, type SeriesWindow, type StorageId } from '@/lib/monitoring/contract';
 import { useAppStore } from '@/stores/app-store';
 
 /** Window aggregates are polled, not streamed (frontend-architecture §3): every 5 s while live and visible. */
@@ -122,6 +122,60 @@ export function useMetricsMatrix(window: MatrixWindow) {
     queryKey: qk.metrics.matrix(window),
     queryFn: () => unwrap(api.GET('/metrics/matrix', { params: { query: { window } } })),
     select: toMetricsMatrix,
+    staleTime: 0,
+    refetchInterval: live ? MATRIX_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
+  });
+  useRefetchOnResume(live, query.refetch);
+  return query;
+}
+
+/** The windows `GET /metrics/bulkhead` accepts (backend SERIES_WINDOWS), in picker order; the backend default is 15m. */
+export const SERIES_WINDOWS: readonly SeriesWindow[] = ['5m', '15m', '1h'];
+
+export interface BulkheadSeriesView {
+  category: CategoryId;
+  points: { t: string; p95Ms: number | null; opsPerS: number }[];
+}
+
+/** A validated bulkhead answer: p95 series per category plus this replica's compartments. */
+export interface BulkheadView {
+  series: BulkheadSeriesView[];
+  compartments: { category: CategoryId; active: number; queued: number }[];
+}
+
+/** Validates `GET /metrics/bulkhead` (backend monitoring.controller.ts): unknown categories and bad points are dropped. */
+export function toBulkhead(raw: unknown): BulkheadView {
+  if (!isObject(raw)) return { series: [], compartments: [] };
+  const series: BulkheadSeriesView[] = [];
+  for (const item of Array.isArray(raw.series) ? raw.series : []) {
+    if (!isObject(item)) continue;
+    const category = toCategory(item.category);
+    if (!category) continue;
+    const points = (Array.isArray(item.points) ? item.points : [])
+      .filter((p): p is Loose => isObject(p) && typeof p.t === 'string' && !Number.isNaN(Date.parse(p.t)))
+      .map((p) => ({ t: p.t as string, p95Ms: finite(p.p95Ms), opsPerS: Math.max(0, finite(p.opsPerS) ?? 0) }));
+    series.push({ category, points });
+  }
+  series.sort((a, b) => CATEGORY_IDS.indexOf(a.category) - CATEGORY_IDS.indexOf(b.category));
+  const compartments: BulkheadView['compartments'] = [];
+  for (const item of Array.isArray(raw.data) ? raw.data : []) {
+    if (!isObject(item)) continue;
+    const category = toCategory(item.category);
+    if (!category) continue;
+    compartments.push({ category, active: Math.max(0, finite(item.active) ?? 0), queued: Math.max(0, finite(item.queued) ?? 0) });
+  }
+  return { series, compartments };
+}
+
+/** p95 per category on one time axis plus the compartments (BA-44); polled every 5 s while live, like the matrix. */
+export function useBulkhead(window: SeriesWindow = '15m') {
+  const live = useLiveRefresh();
+  const query = useQuery({
+    queryKey: qk.metrics.bulkhead(window),
+    queryFn: () => unwrap(api.GET('/metrics/bulkhead', { params: { query: { window } } })),
+    select: toBulkhead,
     staleTime: 0,
     refetchInterval: live ? MATRIX_POLL_MS : false,
     refetchIntervalInBackground: false,

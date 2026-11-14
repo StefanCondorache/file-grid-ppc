@@ -7,6 +7,7 @@ import { roleLabel } from '@/features/auth/roles';
 import { can } from '@/lib/auth/capabilities';
 import { useT } from '@/lib/i18n';
 import type { MatrixWindow } from '@/lib/monitoring/contract';
+import { BulkheadChart } from './BulkheadChart';
 import { MetricsMatrix } from './MetricsMatrix';
 import { MATRIX_WINDOWS, toMatrixWindow } from './queries';
 import { WindowSelect } from './WindowSelect';
@@ -32,6 +33,7 @@ export function ObservabilityScreen() {
   };
 
   return (
+    <div className="flex flex-col gap-10">
     <section aria-labelledby="matrix-title" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex max-w-3xl flex-col gap-1">
@@ -44,5 +46,7 @@ export function ObservabilityScreen() {
       </div>
       <MetricsMatrix window={matrixWindow} />
     </section>
+    <BulkheadChart />
+    </div>
   );
 }

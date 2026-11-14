@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -62,16 +62,16 @@ describe('ObservabilityScreen', () => {
     const group = screen.getByRole('group', { name: 'Interval' });
     expect(screen.getByRole('radio', { name: '24 de ore' })).toBeChecked();
 
-    await userEvent.click(screen.getByRole('radio', { name: '1 oră' }));
+    await userEvent.click(within(group).getByRole('radio', { name: '1 oră' }));
     expect(nav.replace).toHaveBeenCalledWith('/observability?window=1h', { scroll: false });
-    expect(group).toContainElement(screen.getByRole('radio', { name: '5 minute' }));
+    expect(within(group).getByRole('radio', { name: '5 minute' })).toBeInTheDocument();
   });
 
   it('falls back to 5 minutes for a window the server does not offer', async () => {
     nav.search = 'window=forever';
     renderAs('admin');
     expect(await screen.findByRole('table', { name: /ultimele 5 minute$/ })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '5 minute' })).toBeChecked();
+    expect(within(screen.getByRole('group', { name: 'Interval' })).getByRole('radio', { name: '5 minute' })).toBeChecked();
   });
 
   it('explains the boundary to a role without Observabilitate instead of asking the server', async () => {

@@ -111,4 +111,20 @@ export const monitoring = {
     switching: (window: string) => `se încarcă ${window}…`,
     refreshFailed: 'Ultima actualizare nu a reușit; reîncercăm.',
   },
+  /** The bulkhead chart (FE-10, BA-44): p95 per category on one axis, plus the compartments. */
+  bulkhead: {
+    title: 'Izolare pe categorii (bulkhead)',
+    lead: 'Latența p95 a fiecărei categorii pe aceeași axă: o furtună pe o categorie nu le încetinește pe celelalte.',
+    chartTitle: (window: string) => `Latența p95 pe categorie, ${window}`,
+    yAxis: 'p95 (secunde)',
+    windowLabel: 'Interval grafic',
+    target: (s: string) => `țintă avarii ${s}`,
+    endLabel: (category: string, value: string) => `${category} ${value}`,
+    noData: 'fără date',
+    time: 'Ora',
+    compartments: 'Compartimente pe această replică',
+    compartment: (active: string, queued: string) => `${active} active · ${queued} în coadă`,
+    interpretation: (worst: string) => `Cea mai lentă categorie acum: ${worst}. Celelalte categorii își păstrează latența.`,
+    interpretationNone: 'Nicio operație în interval.',
+  },
 } as const;
