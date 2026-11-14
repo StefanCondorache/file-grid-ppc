@@ -102,3 +102,16 @@ export interface PersistedUpload {
   createdAt: number;
   updatedAt: number;
 }
+
+/** Injected time source; the wrappers read the globals at call time, so fake timers work in tests. */
+export interface Clock {
+  now(): number;
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+
+export const realClock: Clock = {
+  now: () => Date.now(),
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
