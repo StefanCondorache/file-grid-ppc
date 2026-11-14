@@ -294,6 +294,36 @@ describe('auth', () => {
     });
   });
 
+  describe('demo accounts (one per role, for the role dropdown on the login page)', () => {
+    it.each([
+      ['teren', 'Echipă de teren'],
+      ['dispecerat', 'Dispecerat'],
+      ['racordari', 'Angajat racordări'],
+      ['auditor', 'Auditor'],
+    ])('seeds %s with the demo password', async (role, displayName) => {
+      const response = await login(app, role, TEST_ADMIN_PASSWORD);
+
+      expect(response.status).toBe(200);
+      expect(response.body.user).toMatchObject({ username: role, role, displayName });
+    });
+
+    it('uses DEMO_USERS_PASSWORD when it is set', async () => {
+      await app.close();
+      app = await createTestApp({ env: { DEMO_USERS_PASSWORD: 'demo-only-password-9' } });
+
+      expect((await login(app, 'auditor', 'demo-only-password-9')).status).toBe(200);
+      expect((await login(app, 'auditor', TEST_ADMIN_PASSWORD)).status).toBe(401);
+    });
+
+    it('does not create them when demo mode is off', async () => {
+      await app.close();
+      await resetDatabase();
+      app = await createTestApp({ env: { FILEGRID_DEMO_MODE: 'false' } });
+
+      expect((await login(app, 'auditor', TEST_ADMIN_PASSWORD)).status).toBe(401);
+    });
+  });
+
   it('accepts only the configured meter API key', async () => {
     const server = app.getHttpServer();
     const valid = await request(server)

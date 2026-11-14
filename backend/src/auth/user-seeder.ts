@@ -44,6 +44,14 @@ async function ensureUser(db: Db, account: SeedAccount): Promise<void> {
   });
 }
 
+/** One demo account per role for the login page's role dropdown (ADR-0022); username = role id. */
+export const DEMO_ACCOUNTS: readonly { username: Role; displayName: string }[] = [
+  { username: 'teren', displayName: 'Echipă de teren' },
+  { username: 'dispecerat', displayName: 'Dispecerat' },
+  { username: 'racordari', displayName: 'Angajat racordări' },
+  { username: 'auditor', displayName: 'Auditor' },
+];
+
 export async function ensureSeedUsers(db: Db, config: AppConfig): Promise<void> {
   await ensureUser(db, {
     username: config.adminUsername,
@@ -51,10 +59,29 @@ export async function ensureSeedUsers(db: Db, config: AppConfig): Promise<void> 
     password: config.adminPassword,
     role: 'admin',
   });
+  if (!config.demoMode) {
+    // Demo mode off: the demo accounts must not be able to log in.
+    for (const account of DEMO_ACCOUNTS) {
+      await db
+        .deleteFrom('users')
+        .where('username', '=', account.username)
+        .where('role', '=', account.username)
+        .execute();
+    }
+    return;
+  }
+  for (const account of DEMO_ACCOUNTS) {
+    await ensureUser(db, {
+      username: account.username,
+      displayName: account.displayName,
+      password: config.demoUsersPassword,
+      role: account.username,
+    });
+  }
 }
 
 /**
- * Creates the admin account from the env (ADMIN_USERNAME/ADMIN_PASSWORD) and re-syncs their passwords.
+ * Creates the admin account (ADMIN_USERNAME/ADMIN_PASSWORD) and, in demo mode, one account per role and re-syncs their passwords.
  * The container runs migrations first, so the DB was just reachable; if it is not now, keep
  * serving (/readyz reports it) instead of crash-looping.
  */

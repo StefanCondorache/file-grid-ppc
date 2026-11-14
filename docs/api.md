@@ -49,6 +49,10 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   - `user` is the acting persona and `realUser` is the account.
   - `roles` lists the roles the account can act as: all five for an admin in demo mode, otherwise only its
     own.
+- **Demo accounts:** in demo mode one account exists per role for the login page's role dropdown
+  (ADR-0022). The username is the role id (`teren`, `dispecerat`, `racordari`, `auditor`). The password is
+  `DEMO_USERS_PASSWORD`, or `ADMIN_PASSWORD` when that is unset. With demo mode off these accounts are
+  removed.
 - **Roles:** `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. The capability matrix is the one in
   `docs/frontend/prd.md` FE-01, enforced in `backend/src/common/domain.ts`.
 - **Visibility:** a file the active role may not see answers 404.
@@ -275,6 +279,7 @@ The variables come from the k3s Secrets `filegrid-storage-credentials` and `file
 
 Optional:
 - `FILEGRID_DEMO_MODE` (default `true`)
+- `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)
 - `SESSION_TTL_MINUTES` (480) and `SESSION_IDLE_MINUTES` (30)
 - `COOKIE_SECURE` (default `true`)

@@ -36,6 +36,8 @@ const envSchema = z.object({
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(1).default(10),
   LOGIN_WINDOW_S: z.coerce.number().int().min(1).default(300),
   FILEGRID_DEMO_MODE: bool.default(true),
+  // Password of the per-role demo accounts (teren, dispecerat, racordari, auditor); default ADMIN_PASSWORD.
+  DEMO_USERS_PASSWORD: z.string().min(8, 'must be at least 8 characters').optional(),
   SIMULATOR_URL: z.string().url().default('http://filegrid-simulator.filegrid.svc:8080'),
   UPLOAD_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
@@ -60,6 +62,7 @@ export interface AppConfig {
   readonly loginMaxFailures: number;
   readonly loginWindowS: number;
   readonly demoMode: boolean;
+  readonly demoUsersPassword: string;
   readonly simulatorUrl: string;
   readonly uploadSessionTtlHours: number;
   readonly logLevel: LogLevel;
@@ -130,6 +133,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     loginMaxFailures: e.LOGIN_MAX_FAILURES,
     loginWindowS: e.LOGIN_WINDOW_S,
     demoMode: e.FILEGRID_DEMO_MODE,
+    demoUsersPassword: e.DEMO_USERS_PASSWORD ?? e.ADMIN_PASSWORD,
     simulatorUrl: e.SIMULATOR_URL,
     uploadSessionTtlHours: e.UPLOAD_SESSION_TTL_HOURS,
     logLevel: e.LOG_LEVEL,
