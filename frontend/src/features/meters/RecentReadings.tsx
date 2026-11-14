@@ -63,7 +63,7 @@ export function RecentReadings() {
   } else if (readings.isError) {
     body = <ErrorState error={readings.error} onRetry={() => void readings.refetch()} />;
   } else {
-    body = <div aria-hidden="true" className="h-40 animate-pulse rounded-panel bg-surface-2 motion-reduce:animate-none" />;
+    body = <div aria-hidden="true" className="h-40 skeleton rounded-panel bg-surface-2" />;
   }
 
   return (

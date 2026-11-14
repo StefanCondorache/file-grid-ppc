@@ -93,7 +93,7 @@ export function MetricsMatrix({ window: span }: { window: MatrixWindow }) {
     return (
       <div aria-busy="true" className="flex flex-col gap-2">
         <span className="sr-only">{catalog.common.loading}</span>
-        <div aria-hidden="true" className="h-[22rem] animate-pulse rounded-card border border-border bg-surface-2 motion-reduce:animate-none" />
+        <div aria-hidden="true" className="h-[22rem] skeleton rounded-card border border-border bg-surface-2" />
       </div>
     );
   }

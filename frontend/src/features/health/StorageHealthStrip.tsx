@@ -110,7 +110,7 @@ export function StorageHealthStrip() {
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>{chip}</Tooltip.Trigger>
                   <Tooltip.Portal>
-                    <Tooltip.Content sideOffset={6} className="z-50 rounded-control bg-sidebar px-2.5 py-1.5 text-xs font-semibold text-sidebar-foreground shadow-e2">
+                    <Tooltip.Content sideOffset={6} className="pop z-50 rounded-control bg-sidebar px-2.5 py-1.5 text-xs font-semibold text-sidebar-foreground shadow-e2">
                       {details.join(' · ')}
                     </Tooltip.Content>
                   </Tooltip.Portal>

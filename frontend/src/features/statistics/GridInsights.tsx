@@ -76,8 +76,8 @@ function Loading() {
     <div role="status">
       <span className="sr-only">{t.common.loading}</span>
       <div aria-hidden="true" className="grid gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-        <div className="aspect-[3/2] animate-pulse rounded-panel bg-surface-2 motion-reduce:animate-none" />
-        <div className="h-48 animate-pulse rounded-panel bg-surface-2 motion-reduce:animate-none" />
+        <div className="aspect-[3/2] skeleton rounded-panel bg-surface-2" />
+        <div className="h-48 skeleton rounded-panel bg-surface-2" />
       </div>
     </div>
   );

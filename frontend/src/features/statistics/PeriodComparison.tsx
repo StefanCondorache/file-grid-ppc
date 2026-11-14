@@ -91,7 +91,7 @@ function Loading() {
       <span className="sr-only">{t.common.loading}</span>
       <div aria-hidden="true" className="flex flex-col gap-3">
         {SKELETON.map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-panel bg-surface-2 motion-reduce:animate-none" />
+          <div key={i} className="h-9 skeleton rounded-panel bg-surface-2" />
         ))}
       </div>
     </div>

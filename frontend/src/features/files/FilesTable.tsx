@@ -154,7 +154,7 @@ function FileRow({ r, showCategory, showSeverity, paused }: RowProps) {
     <tr
       data-new={isNew || undefined}
       // The wash: when the minute is up the tint fades to the surface over --fg-dur-fast (0 ms under reduced motion).
-      className={cn('h-(--fg-row-h) border-t border-border align-middle transition-colors duration-(--fg-dur-fast) ease-(--fg-ease-smooth)', isNew && 'bg-info-tint')}
+      className={cn('h-(--fg-row-h) border-t border-border align-middle transition-colors duration-(--fg-dur-fast) ease-(--fg-ease-smooth)', isNew && 'row-in bg-info-tint')}
     >
       <td className={cn(cell, 'max-w-[17rem]')}>
         <Link href={`/files/${encodeURIComponent(r.id)}`} className="inline-flex max-w-full font-semibold text-ink hover:underline">
@@ -227,7 +227,7 @@ export function FilesTable({ rows, category, sort, onSort }: { rows: FileItem[];
   return (
     // A focusable scroll region keeps the page free of 2-D scrolling at 320 px (A11Y-23).
     // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-    <div role="region" aria-label={t.files.tableRegion} tabIndex={0} className="overflow-x-auto rounded-card border border-border bg-surface shadow-e1">
+    <div role="region" aria-label={t.files.tableRegion} tabIndex={0} className="table-scroll rounded-card border border-border bg-surface shadow-e1">
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">{t.files.caption(what, t.files.sortLabel[sort])}</caption>
         <thead className="bg-surface-2 text-[13px] text-ink-2">

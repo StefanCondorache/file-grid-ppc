@@ -105,7 +105,7 @@ export function BulkheadChart({ initialWindow = '15m', headingLevel = 2 }: { ini
     body = <ErrorState error={bulkhead.error} onRetry={() => void bulkhead.refetch()} />;
   } else {
     body = (
-      <div aria-hidden="true" className="h-[280px] animate-pulse rounded-panel bg-surface-2 motion-reduce:animate-none" />
+      <div aria-hidden="true" className="h-[280px] skeleton rounded-panel bg-surface-2" />
     );
   }
 

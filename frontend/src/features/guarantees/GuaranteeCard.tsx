@@ -26,7 +26,7 @@ const CARD_STATE: Record<GuaranteeState, string> = {
   violated: 'border-2 border-crit bg-crit-tint shadow-e2',
 };
 
-const EDGE: Record<Exclude<GuaranteeState, 'ok'>, string> = { at_risk: 'bg-(--fg-warn-border)', violated: 'bg-crit' };
+const EDGE: Record<Exclude<GuaranteeState, 'ok'>, string> = { at_risk: 'bg-(--fg-warn-border)', violated: 'attention bg-crit' };
 
 const clock = new Intl.DateTimeFormat('ro-RO', { timeZone: 'Europe/Bucharest', hour: '2-digit', minute: '2-digit' });
 
@@ -120,7 +120,7 @@ export function GuaranteeCard({ guarantee: g, headingLevel = 3 }: { guarantee: G
       aria-labelledby={titleId}
       data-state={g.state}
       data-category={g.category}
-      className={cn('relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-hero p-6 text-card-foreground', CARD_STATE[g.state])}
+      className={cn('relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-hero lift p-6 text-card-foreground', CARD_STATE[g.state])}
     >
       {g.state !== 'ok' && <span data-status-edge aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-[6px]', EDGE[g.state])} />}
       <div className="flex items-start justify-between gap-3">
