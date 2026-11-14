@@ -6,6 +6,7 @@ import spec from '../openapi.json';
 import { actingRoleHandlers, authHandlers } from './auth';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
+import { statisticsHandlers } from './statistics';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
@@ -16,7 +17,7 @@ export const groupHandlers: Record<Group, RequestHandler[]> = {
   audit: [],
   meters: [],
   monitoring: [],
-  statistics: [],
+  statistics: [...statisticsHandlers],
   demo: [...actingRoleHandlers],
   stream: createStreamHandlers(),
 };

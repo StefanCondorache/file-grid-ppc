@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { apiUrl } from '@/lib/api/base';
 import { pathGroup } from './groups';
-import { buildHandlers } from './handlers';
+import { buildHandlers, groupHandlers } from './handlers';
 
 describe('pathGroup', () => {
   it('maps every path root', () => {
@@ -22,7 +22,14 @@ describe('buildHandlers', () => {
   const marker = http.get(apiUrl('/statistics/periods'), () => HttpResponse.json({ data: [], marker: true }));
   const server = setupServer();
   beforeAll(async () => {
-    server.use(...(await buildHandlers('all', { statistics: [marker] })));
+    // Only the marker is hand-written in `statistics` here, so the group's other proposal paths must not fall back.
+    const written = groupHandlers.statistics;
+    groupHandlers.statistics = [];
+    try {
+      server.use(...(await buildHandlers('all', { statistics: [marker] })));
+    } finally {
+      groupHandlers.statistics = written;
+    }
     server.listen({ onUnhandledRequest: 'error' });
   });
   afterAll(() => server.close());
