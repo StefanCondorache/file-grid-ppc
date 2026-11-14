@@ -15,7 +15,7 @@ export function TopBar({ me, onLogout }: { me: Me; onLogout?: () => void }) {
   const t = useT();
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-border bg-surface px-8">
+    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 glass border-b px-8">
       <h1 className="text-[22px] font-bold tracking-tight">{titleFor(pathname)}</h1>
       <span className="flex-1" />
       <StorageHealthStrip />
