@@ -53,6 +53,9 @@ import {
  *   `HealthMonitor` polls every storage every `intervalMs` (5 s), sets `filegrid_storage_up`, opens
  *   the breaker after `tripAfter` (2) consecutive failed probes (and keeps it open while they keep
  *   failing); a passing probe moves an OPEN breaker to HALF_OPEN so the next call can close it.
+ *   A probe that times out while the adapter's health login is still running (`healthPending()`,
+ *   FTP: the first pure-ftpd login of a pod takes 4-6 s) is inconclusive: it changes neither the
+ *   gauge nor the failure count. Only a login that fails counts.
  */
 
 export type StorageLogger = Pick<Logger, 'warn' | 'error' | 'info'>;
@@ -590,6 +593,16 @@ export class ResilientStorage implements StorageAdapter {
         controller.signal,
       );
     } catch (error) {
+      if (timedOut && this.adapter.healthPending?.()) {
+        // A slow login is still running (first FTP login of a pod): no verdict yet. Leave the
+        // gauge, the last status and the failure count alone; the next probe will know.
+        return {
+          ok: false,
+          pending: true,
+          latencyMs: this.healthTimeoutMs,
+          detail: 'health login still in progress',
+        };
+      }
       status = timedOut
         ? {
             ok: false,
@@ -616,6 +629,7 @@ export class ResilientStorage implements StorageAdapter {
   /** Run one probe and feed the result to the breaker (used by `HealthMonitor`). */
   async checkHealth(tripAfter = 2): Promise<HealthStatus> {
     const status = await this.health();
+    if (status.pending) return status;
     if (status.ok) {
       this.healthFailures = 0;
       this.breaker.allowTrial();

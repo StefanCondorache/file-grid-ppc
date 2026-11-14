@@ -7,9 +7,13 @@ import { FtpSrv } from 'ftp-srv';
 import { ObjectNotFound, StorageUnavailable } from '../../src/storage/base';
 import { FtpSettings } from '../../src/storage/config';
 import { FtpStorage } from '../../src/storage/ftp';
+import { STORAGE_UP, resetStorageMetrics } from '../../src/storage/metrics';
+import { CircuitBreaker, HealthMonitor, ResilientStorage } from '../../src/storage/resilience';
 import { fakeSecret } from '../constants';
 
 const FTP_PASSWORD = fakeSecret();
+const SLOW_LOGIN_MS = 700;
+const PROBE_TIMEOUT_MS = 200;
 
 const sha256 = (data: Buffer): string => createHash('sha256').update(data).digest('hex');
 
@@ -37,9 +41,10 @@ function freePort(): Promise<number> {
 describe('FtpStorage against an FTP server', () => {
   let server: FtpSrv;
   let storage: FtpStorage;
+  let port: number;
 
   beforeAll(async () => {
-    const port = await freePort();
+    port = await freePort();
     const root = mkdtempSync(join(tmpdir(), 'fg-ftp-'));
     server = new FtpSrv({
       url: `ftp://127.0.0.1:${port}`,
@@ -59,7 +64,10 @@ describe('FtpStorage against an FTP server', () => {
       } as never,
     });
     server.on('login', ({ username, password }, resolve, reject) => {
-      if (username === 'filegrid' && password === FTP_PASSWORD) resolve({ root });
+      if (password !== FTP_PASSWORD) reject(new Error('bad login'));
+      else if (username === 'filegrid') resolve({ root });
+      // pure-ftpd's first login of a new pod takes seconds: longer than one health probe
+      else if (username === 'slow') setTimeout(() => resolve({ root }), SLOW_LOGIN_MS);
       else reject(new Error('bad login'));
     });
     await server.listen();
@@ -124,5 +132,54 @@ describe('FtpStorage against an FTP server', () => {
     );
     expect((await dead.health()).ok).toBe(false);
     await dead.close();
+  });
+
+  describe('health probes during a slow login', () => {
+    function monitored(user: string, password = FTP_PASSWORD) {
+      const adapter = new FtpStorage(
+        new FtpSettings({ host: '127.0.0.1', port, user, password, maxConnections: 1 }),
+      );
+      const resilient = new ResilientStorage(adapter, {
+        breaker: new CircuitBreaker('ftp', { failureThreshold: 5, resetTimeoutMs: 60_000 }),
+        healthTimeoutMs: PROBE_TIMEOUT_MS,
+      });
+      return { resilient, monitor: new HealthMonitor([resilient], { tripAfter: 2 }) };
+    }
+    const up = async (): Promise<number | undefined> =>
+      (await STORAGE_UP.get()).values.find((v) => v.labels.storage === 'ftp')?.value;
+
+    beforeEach(() => resetStorageMetrics());
+
+    it('does not count probes that find the health login still running', async () => {
+      const { resilient, monitor } = monitored('slow');
+      try {
+        await monitor.checkOnce();
+        await monitor.checkOnce(); // both time out while the login is still in progress
+
+        expect(resilient.breaker.stateName).toBe('closed');
+        expect(await up()).not.toBe(0);
+
+        await new Promise((resolve) => setTimeout(resolve, SLOW_LOGIN_MS));
+        const done = await monitor.checkOnce();
+
+        expect(done.ftp?.ok).toBe(true);
+        expect(await up()).toBe(1);
+      } finally {
+        await resilient.close();
+      }
+    });
+
+    it('still counts a login that fails', async () => {
+      const { resilient, monitor } = monitored('filegrid', fakeSecret());
+      try {
+        await monitor.checkOnce();
+        await monitor.checkOnce();
+
+        expect(resilient.breaker.stateName).toBe('open');
+        expect(await up()).toBe(0);
+      } finally {
+        await resilient.close();
+      }
+    });
   });
 });

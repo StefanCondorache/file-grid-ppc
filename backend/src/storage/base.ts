@@ -61,6 +61,8 @@ export interface HealthStatus {
   readonly ok: boolean;
   readonly latencyMs: number;
   readonly detail: string;
+  /** Inconclusive: the probe ran out of time while a slow login was still in progress. */
+  readonly pending?: boolean;
 }
 
 export interface StorageCallOptions {
@@ -77,6 +79,11 @@ export interface StorageAdapter {
   getStream(key: string, options?: StorageCallOptions): AsyncIterable<Buffer>;
   delete(key: string, options?: StorageCallOptions): Promise<void>;
   health(options?: StorageCallOptions): Promise<HealthStatus>;
+  /**
+   * Optional: true while the adapter's own health login (started by an earlier probe) is still
+   * running. A probe that times out then says nothing about the storage (FTP logins take seconds).
+   */
+  healthPending?(): boolean;
   close(): Promise<void>;
 }
 
