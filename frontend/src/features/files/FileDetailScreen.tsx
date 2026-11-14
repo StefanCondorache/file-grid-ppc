@@ -23,6 +23,7 @@ import { IntegrityBadge } from './IntegrityBadge';
 import { OriginTag } from './OriginTag';
 import { PiiField } from './PiiField';
 import { useFileDetail, type FileDetail } from './queries';
+import { RevealDialog } from './RevealDialog';
 import { SeverityLevel } from './SeverityLevel';
 import { StoragePolicyPanel } from './StoragePolicyPanel';
 
@@ -134,7 +135,12 @@ function MetadataPanel({ file }: { file: FileDetail }) {
           </div>
         ))}
       </dl>
-      {file.category === 'connection_documents' && <p className="text-[13px] text-ink-2">{m.personalNote}</p>}
+      {file.category === 'connection_documents' && (
+        <>
+          <p className="text-[13px] text-ink-2">{m.personalNote}</p>
+          <RevealDialog fileId={file.id} />
+        </>
+      )}
     </section>
   );
 }
