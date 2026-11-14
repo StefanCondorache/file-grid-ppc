@@ -23,7 +23,9 @@ spec:
         prometheus.io/path: /metrics
     spec:
       serviceAccountName: filegrid-backend
-      automountServiceAccountToken: false
+      # Token mounted (overrides the SA's false): the demo panel scales the storage StatefulSets through the
+      # Kubernetes API with the Role bound in deploy/k8s/demo-rbac.yaml (chaos stream).
+      automountServiceAccountToken: true
       # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
       enableServiceLinks: false
       securityContext:
@@ -46,6 +48,11 @@ spec:
             - {name: FILEGRID_S3_ENDPOINT, value: "http://s3.filegrid-storage.svc.cluster.local:8333"}
             - {name: FILEGRID_FTP_HOST, value: ftp.filegrid-storage.svc.cluster.local}
             - {name: FILEGRID_FTP_PORT, value: "21"}
+            # FTP budget: each process opens up to 2 data-operation connections + 1 health connection, so
+            # 3 HPA replicas + 1 rolling-update surge = 4 x 3 = 12 control connections, below pure-ftpd's
+            # FTP_MAX_CLIENTS (deploy/k8s/storage/ftp.yaml; the image default 5 is too low, raised at merge), and
+            # 4 x 2 concurrent transfers fit the passive port range.
+            - {name: FILEGRID_FTP_MAX_CONNECTIONS, value: "2"}
           # /readyz must stay 200 when a single storage is down (circuit breaker handles it), otherwise
           # one dead storage would pull every backend out of the Service.
           readinessProbe:

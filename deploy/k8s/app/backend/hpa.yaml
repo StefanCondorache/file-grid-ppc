@@ -11,6 +11,7 @@ spec:
     kind: Deployment
     name: filegrid-backend
   minReplicas: 1
+  # FTP budget: 3 replicas (+1 surge) x (FILEGRID_FTP_MAX_CONNECTIONS=2 + 1 health) = 12 <= FTP_MAX_CLIENTS (ftp.yaml)
   maxReplicas: 3
   metrics:
     - type: Resource

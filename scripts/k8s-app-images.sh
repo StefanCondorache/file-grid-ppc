@@ -5,14 +5,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TAG=${APP_TAG:-$(git rev-parse --short HEAD)}
+# fixed tag "local" outside a git checkout (tarball) or when git refuses the repo (dubious ownership)
+TAG=${APP_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo local)}
 built=0
 for c in backend frontend simulator; do
   if [ ! -f "$c/Dockerfile" ]; then
     echo "skip filegrid-$c: no $c/Dockerfile"
     continue
   fi
-  command -v docker >/dev/null || { echo "docker is required to build $c/Dockerfile" >&2; exit 1; }
+  command -v docker >/dev/null || {
+    echo "docker is required to build $c/Dockerfile (prerequisite of make up / make app-images, not installed by" >&2
+    echo "host-bootstrap.sh: install Docker Engine for Ubuntu from docs.docker.com/engine/install/ubuntu, then rerun)" >&2
+    exit 1
+  }
   img="filegrid-$c:$TAG"
   echo "build $img"
   docker build -q -t "$img" "$c" >/dev/null

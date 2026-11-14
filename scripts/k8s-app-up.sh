@@ -15,7 +15,8 @@ APP_DIR=deploy/k8s/app
 CERT=ppc-filegrid-tls
 DOMAIN=${DOMAIN:-ppc.filegrid.cc.cd}
 METER_RATE=${METER_RATE:-10}
-TAG=${APP_TAG:-$(git rev-parse --short HEAD)}
+# fixed tag "local" outside a git checkout (tarball) or when git refuses the repo (dubious ownership)
+TAG=${APP_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo local)}
 DOWN=0
 [ "${1:-}" = "--down" ] && DOWN=1
 
@@ -30,7 +31,12 @@ tag_of() {
   esac
 }
 
-images=$(k3s ctr -n k8s.io images ls -q 2>/dev/null || true)
+# Fail closed: an empty list from a failed probe would class every component as absent and tear down the live app.
+images=
+if [ "$DOWN" -eq 0 ]; then
+  images=$(k3s ctr -n k8s.io images ls -q) || { echo "cannot list k3s images (k3s ctr failed); nothing changed" >&2; exit 1; }
+  [ -n "$images" ] || { echo "k3s image list is empty (containerd not ready?); refusing to remove the app" >&2; exit 1; }
+fi
 present=()
 absent=()
 for c in backend frontend simulator; do
@@ -70,7 +76,7 @@ if ! is_present frontend; then
 fi
 
 for c in "${absent[@]}"; do
-  kubectl -n "$NS" delete deploy,svc,hpa,ingress,configmap \
+  kubectl -n "$NS" delete deploy,svc,hpa,ingress,configmap,networkpolicy \
     -l "app.kubernetes.io/part-of=filegrid-app,app.kubernetes.io/component=$c" --ignore-not-found
 done
 if [ "$DOWN" -eq 1 ]; then
