@@ -1,0 +1,41 @@
+# React build served by non-root nginx (nginx-unprivileged, uid 101) on 8080.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filegrid-frontend
+  namespace: filegrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: filegrid-frontend}
+  template:
+    metadata:
+      labels: {app: filegrid-frontend}
+    spec:
+      automountServiceAccountToken: false
+      # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: frontend
+          image: filegrid-frontend
+          imagePullPolicy: Never
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

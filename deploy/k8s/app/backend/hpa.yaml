@@ -1,0 +1,19 @@
+# Horizontal scaling without code changes: 1..3 backend replicas on CPU (needs metrics-server, bundled with k3s).
+# Max 3 because of the 4 GB VPS (3 x 384Mi limit).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: filegrid-backend
+  namespace: filegrid
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: filegrid-backend
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

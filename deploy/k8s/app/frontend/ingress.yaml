@@ -1,0 +1,25 @@
+# "/" -> frontend. Replaces the placeholder Ingress (scripts/k8s-app-up.sh deletes the placeholder once this is
+# Ready, and restores it when the frontend goes away). Same host, same secret and issuer as placeholder.yaml,
+# so cert-manager adopts the already issued certificate instead of ordering a new one.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: filegrid-frontend
+  namespace: filegrid
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ppc.filegrid.cc.cd]
+      secretName: ppc-filegrid-tls
+  rules:
+    - host: ppc.filegrid.cc.cd
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: filegrid-frontend
+                port: {number: 8080}

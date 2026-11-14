@@ -1,0 +1,11 @@
+# Control endpoint (rate / storm) and /metrics, reachable by the backend and Prometheus inside the cluster only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: filegrid-simulator
+  namespace: filegrid
+spec:
+  type: ClusterIP
+  selector: {app: filegrid-simulator}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
