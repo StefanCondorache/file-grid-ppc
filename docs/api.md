@@ -182,9 +182,9 @@ session.
 
 | Method & path | Notes |
 |---|---|
-| `GET /statistics/periods` | `{ data: Period[] }`. A period is a run of storm batches (`peak`) or of regular simulator batches (`normal`) over the last 7 days: `{ id, label, kind, origin, start, end }` |
+| `GET /statistics/periods` | `{ data: Period[] }`, newest first. A period is a run of storm batches (`peak`) or of regular simulator batches (`normal`) over the last 7 days: `{ id, label, kind, origin, start, end }`. `id` is the start in epoch milliseconds, so it stays the same while a running period grows; a running storm has `end: null` |
 | `GET /statistics/storage-fit` | `{ items: [{ category, storages: [{ storage, samples, p50Ms, p95Ms, throughputBps, errorRate }], recommendedStorage, interpretation }] }`, measured from the operations log over 7 days |
-| `GET /statistics/period-comparison?a=&b=` | `{ periodA, periodB, rows: [{ category, metric, a, b, deltaPct }], interpretation }`, where `metric` is one of `p95Ms`, `opsPerS`, `errorRate` or `volume` |
+| `GET /statistics/period-comparison?a=&b=` | `{ periodA, periodB, rows: [{ category, metric, a, b, deltaPct }], interpretation }`, where `metric` is one of `p95Ms`, `opsPerS`, `errorRate` or `volume`. `a` and `b` are period ids; either may be the newest, still-running period (measured up to now). An older `start-end` id is still accepted. `404 NOT_FOUND` for an unknown period |
 | `GET /statistics/grid-insights` | `{ faultsByZone, consumptionByHourZone, anomalies, interpretation }` over the last 24 h. Anomalies are readings of zero or above 5x the zone average |
 
 All of these need `view_statistics`.

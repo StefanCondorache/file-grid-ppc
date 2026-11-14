@@ -11,6 +11,10 @@ const DAY_MS = 86_400_000;
 const PERIOD_GAP_S = 120;
 
 export interface Period {
+  /**
+   * The start in epoch milliseconds: stable while a running period grows (its `end` moves with
+   * every batch, so an id built from it would stop matching between two requests).
+   */
   readonly id: string;
   readonly label: string;
   readonly kind: 'normal' | 'peak';
@@ -39,6 +43,9 @@ interface PeriodMetric {
 
 const round = (value: number | null, digits = 1): number | null =>
   value === null || Number.isNaN(value) ? null : Math.round(value * 10 ** digits) / 10 ** digits;
+
+/** A period id: the start in ms; an older `start-end` id still names the period by its start. */
+const periodKey = (id: string): string => id.split('-')[0] ?? id;
 
 const dateLabel = (date: Date): string =>
   date.toLocaleString('ro-RO', {
@@ -83,7 +90,7 @@ export class StatisticsService {
     return rows.rows.map((row) => {
       const peak = row.origin === 'storm';
       return {
-        id: `${row.start.getTime()}-${row.end.getTime()}`,
+        id: String(row.start.getTime()),
         label: `${peak ? 'Furtună' : 'Zi normală'} ${dateLabel(row.start)}`,
         kind: peak ? 'peak' : 'normal',
         origin: row.origin as Period['origin'],
@@ -147,8 +154,8 @@ export class StatisticsService {
 
   async compare(periodA: string, periodB: string) {
     const periods = await this.periods();
-    const a = periods.find((p) => p.id === periodA);
-    const b = periods.find((p) => p.id === periodB);
+    const a = periods.find((p) => p.id === periodKey(periodA));
+    const b = periods.find((p) => p.id === periodKey(periodB));
     if (!a || !b) throw new AppError(404, 'NOT_FOUND', 'Perioada nu există.');
     const [ra, rb] = await Promise.all([this.periodMetrics(a), this.periodMetrics(b)]);
     const rows = CATEGORIES.flatMap((category) =>
