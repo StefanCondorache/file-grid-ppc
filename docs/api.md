@@ -244,6 +244,9 @@ node.
 
 ## Metrics (confirmation for P1: the names match the README)
 
+Every outcome of the counters below (failures included) is exported at 0 from the start, per category,
+zone or storage, so `rate()` and `increase()` see the first failure.
+
 - **Uploads:** `filegrid_uploads_total{category,outcome}` and
   `filegrid_upload_duration_seconds{category,outcome}`. The outcome is one of `success`, `mismatch` or
   `error`. The duration runs from complete to durable.
@@ -251,7 +254,7 @@ node.
   - `filegrid_meter_readings_stored_total{zone}` counts first stores only.
   - `filegrid_meter_readings_duplicates_total{zone}` counts deduplicated retries.
   - `filegrid_meter_readings_duplicate_stored_total` is always 0.
-  - `filegrid_meter_batches_total{outcome}`.
+  - `filegrid_meter_batches_total{outcome}` (`success`, `rejected` or `error`).
   - `filegrid_meter_readings_lost` (gauge, no labels): the readings lost, with the same definition as the
     `lost` metric of `GET /guarantees` (sent − acked − queued, as the simulator reports it). The guarantee
     evaluator sets it on the leader replica every `GUARANTEE_EVAL_INTERVAL_S`; the other replicas show 0. It
@@ -260,7 +263,8 @@ node.
 - **Storages:** the P1 metrics unchanged: `filegrid_storage_operation_seconds`,
   `filegrid_storage_bytes_total`, `filegrid_storage_errors_total`, `filegrid_storage_up` and
   `filegrid_storage_circuit_state`.
-- **Downloads and integrity:** `filegrid_downloads_total{category,outcome}`,
+- **Downloads and integrity:** `filegrid_downloads_total{category,outcome}` (outcome `success`, `corrupt`,
+  `aborted` or `error`),
   `filegrid_integrity_failures_total{category,storage}`.
 - **Bulkhead:** `filegrid_bulkhead_in_flight{category}`, `filegrid_bulkhead_queued{category}` and
   `filegrid_bulkhead_rejected_total{category}`.

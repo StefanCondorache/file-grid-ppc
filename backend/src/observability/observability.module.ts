@@ -12,7 +12,7 @@ import { collectDefaultMetrics, register } from 'prom-client';
 import { z } from 'zod';
 import { Authenticated } from '../auth/auth.decorators';
 import { AppError } from '../common/app-error';
-import { CATEGORIES, ZONES } from '../common/domain';
+import { CATEGORIES, STORAGES, ZONES } from '../common/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { DB, type Db } from '../database/database';
 import { initAppMetrics } from './app-metrics';
@@ -28,7 +28,7 @@ export class MetricsController implements OnModuleInit {
       collectDefaultMetrics({ prefix: 'filegrid_backend_' });
       defaultMetricsStarted = true;
     }
-    initAppMetrics(CATEGORIES, ZONES);
+    initAppMetrics(CATEGORIES, ZONES, STORAGES);
   }
 
   @Get('metrics')

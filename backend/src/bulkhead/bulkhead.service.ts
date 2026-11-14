@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Counter, Gauge, register } from 'prom-client';
 import { categoryBusy } from '../common/app-error';
-import type { Category } from '../common/domain';
+import { CATEGORIES, type Category } from '../common/domain';
 
 function metric<T>(name: string, create: () => T): T {
   return (register.getSingleMetric(name) as T | undefined) ?? create();
@@ -62,6 +62,15 @@ const busy = categoryBusy;
 @Injectable()
 export class BulkheadService {
   private readonly compartments = new Map<Category, Compartment>();
+
+  constructor() {
+    // Exported at 0 from the start, so rate()/increase() see the first rejection.
+    for (const category of CATEGORIES) {
+      REJECTED.labels(category).inc(0);
+      IN_FLIGHT.labels(category).set(0);
+      QUEUED.labels(category).set(0);
+    }
+  }
 
   async run<T>(category: Category, limit: number, fn: () => Promise<T>): Promise<T> {
     await this.acquire(category, Math.max(1, limit));
