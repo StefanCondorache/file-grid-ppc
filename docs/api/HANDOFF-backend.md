@@ -4,6 +4,8 @@
 Why each choice was made: [docs/adr/](../adr/README.md). Everything here is a **proposal**: change anything that
 hurts you, but tell me before you implement it differently so I can update the mocks.*
 
+> **Update 2026-11-14:** after reviewing the NestJS skeleton and P1's README, several items changed; see [backend-sync-2026-11-14.md](backend-sync-2026-11-14.md) (adopted: `/api` without `v1`, your error envelope, `X-Content-SHA256`; open: auth cookie vs bearer, 5 roles vs 2, category names, swagger).
+
 **How we work:** I build every screen against browser mocks of this contract and switch to your API one endpoint
 group at a time (`auth, policies, uploads, files, audit, meters, monitoring, statistics, demo, stream`). Nothing on
 my side waits for you. The sooner `GET /api/docs-json` (`@nestjs/swagger`) is live, even partial, the sooner I can

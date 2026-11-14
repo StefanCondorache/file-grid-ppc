@@ -1,0 +1,263 @@
+/*
+ * FileGrid PPC design tokens (Prompt 3, 2026-11-14). DRAFT until the user picks.
+ * Light theme first; dark "dispecerat" theme via [data-theme="dispecerat"].
+ * Plain CSS custom properties (usable as-is by the HTML mockups) + a Tailwind v4 `@theme inline`
+ * block that maps them to utilities (bg-surface, text-ink-2, rounded-card, shadow-e2, …).
+ * Browsers ignore the `@theme` at-rule, so this one file serves both.
+ * Every text/UI pair below was measured (WCAG 2.x ratio in comments); see direction.md §4.
+ * Rule: components and charts reference these variables only; no raw hex anywhere else.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- brand (reteleelectrice.ro + PPC group). Decorative unless noted. ---- */
+  --fg-brand-orange: #FF4B00;        /* wordmark chunks, active-nav bar, large display only (3.36 on white) */
+  --fg-brand-orange-tint: #FAEBE6;   /* light-orange from their CSS; selected-row wash */
+  --fg-brand-cyan: #00A0DC;          /* data accents, illustration, never text (2.97 on white) */
+  --fg-brand-dark: #232936;          /* dark-blue chrome */
+  --fg-brand-dark-75: rgba(35, 41, 54, .75);
+  --fg-brand-dark-50: rgba(35, 41, 54, .5);   /* disabled / decorative only (3.0) */
+  --fg-brand-ppc-blue: #163FE8;      /* group accent: links, selection, focus inner ring (7.22 white-on) */
+
+  /* ---- surfaces ---- */
+  --fg-page: #F5F5F5;                /* dirty-white page plane */
+  --fg-surface: #FFFFFF;             /* cards, tables */
+  --fg-surface-2: #FAFAFA;           /* off-white: inset panels, table header, chart plot */
+  --fg-surface-sunken: #EDEEEF;      /* PPC light grey: dropzone idle, skeletons */
+  --fg-chrome: #232936;              /* sidebar + demo bar */
+  --fg-chrome-2: #2E3546;            /* chrome hover / active row */
+  --fg-on-chrome: #FFFFFF;           /* 14.56 */
+  --fg-on-chrome-2: #B9C0CC;         /* 7.96 */
+  --fg-scrim: rgba(35, 41, 54, .55);
+
+  /* ---- ink ---- */
+  --fg-ink: #232936;                 /* 14.56 on white */
+  --fg-ink-2: #555C5F;               /* 6.81 on white, 6.25 on #F5F5F5 */
+  --fg-ink-3: #6B7280;               /* 4.83 on white, 4.63 on #FAFAFA: captions, axis labels */
+  --fg-ink-disabled: rgba(35, 41, 54, .5);
+  --fg-link: #163FE8;                /* 7.22 */
+
+  /* ---- lines ---- */
+  --fg-line: #E1E1E1;                /* hairline, decorative */
+  --fg-line-strong: #D3D5D6;         /* table rules, decorative */
+  --fg-line-input: #5A5F68;          /* control boundaries 6.42 (1.4.11) */
+
+  /* ---- action (primary = orange family, ONLY for actions) ---- */
+  --fg-action: #D04000;              /* white text 4.76; reads as brand orange, passes AA */
+  --fg-action-hover: #B23600;
+  --fg-action-press: #9A2F00;
+  --fg-on-action: #FFFFFF;
+  --fg-action-quiet: #FAEBE6;        /* tinted secondary button bg; text uses --fg-action (4.3 large only → use ink) */
+
+  /* ---- focus: two-tone ring, works on light, dark and chrome ---- */
+  --fg-focus-outer: #232936;
+  --fg-focus-inner: #FFFFFF;
+
+  /* ---- semantic status: NEVER orange; always chip shape + icon + label ---- */
+  --fg-ok: #0B7A3E;            --fg-on-ok: #FFFFFF;       /* 5.43 */
+  --fg-ok-tint: #E6F4EC;       --fg-ok-ink: #075C2E;      /* 7.18 */
+  --fg-warn: #FFDA00;          --fg-on-warn: #232936;     /* 10.60; border below */
+  --fg-warn-border: #7A5C00;
+  --fg-warn-tint: #FFF6CC;     --fg-warn-ink: #5C4400;    /* 8.46 */
+  --fg-crit: #B3123F;          --fg-on-crit: #FFFFFF;     /* 6.83; crimson, hue ≈345° vs action ≈18° */
+  --fg-crit-tint: #FBE7EC;     --fg-crit-ink: #8E0E32;    /* 7.85 */
+  --fg-info: #00729E;          --fg-on-info: #FFFFFF;     /* 5.38 */
+  --fg-info-tint: #E3F4FB;     --fg-info-ink: #005B80;    /* 6.62 */
+  --fg-neutral: #555C5F;       --fg-on-neutral: #FFFFFF;  /* 6.81 */
+  --fg-neutral-tint: #EDEEEF;  --fg-neutral-ink: #3B4044;
+
+  /* ---- data categories (validated, see direction.md §6) ---- */
+  --fg-cat-meter: #0072A3;      /* citiri contoare: cyan */
+  --fg-cat-fault: #C0307E;      /* avarii: magenta */
+  --fg-cat-connection: #5B3FD0; /* racordări: violet */
+  --fg-cat-drone: #8A6A00;      /* video dronă: ochre */
+  /* sequential ramp (one hue, cyan → deep) for choropleth/heat */
+  --fg-seq-1: #D6EEF8; --fg-seq-2: #9FD6EE; --fg-seq-3: #4FB1DC; --fg-seq-4: #0B86BC; --fg-seq-5: #005A82;
+  /* chunk-grid states */
+  --fg-chunk-done: #0072A3;
+  --fg-chunk-flight: #00A0DC;
+  --fg-chunk-pending: #E1E1E1;
+  --fg-chunk-failed: #B3123F;
+  /* chart chrome */
+  --fg-grid: #E9EAEB;
+  --fg-axis: #C9CCCE;
+
+  /* ---- typography ---- */
+  --fg-font-sans: "Figtree", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --fg-font-mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;   /* hashes, trace IDs */
+  --fg-text-xs: 0.8125rem;   /* 13 – meta, never below on a projector */
+  --fg-text-sm: 0.875rem;    /* 14 – dense tables (dispecerat) */
+  --fg-text-base: 1rem;      /* 16 – body */
+  --fg-text-md: 1.125rem;    /* 18 – lead, card titles */
+  --fg-text-lg: 1.375rem;    /* 22 – section titles */
+  --fg-text-xl: 1.75rem;     /* 28 – page titles */
+  --fg-text-2xl: 2.25rem;    /* 36 – KPI numbers */
+  --fg-text-3xl: 3rem;       /* 48 – hero KPI on the guarantees board */
+  --fg-leading-tight: 1.15; --fg-leading-snug: 1.3; --fg-leading-body: 1.5;
+  --fg-weight-regular: 400; --fg-weight-semibold: 600; --fg-weight-bold: 700;
+  --fg-tracking-tight: -0.01em; --fg-tracking-caps: 0.06em;
+
+  /* ---- spacing (4 px base) ---- */
+  --fg-space-1: 4px;  --fg-space-2: 8px;  --fg-space-3: 12px; --fg-space-4: 16px;
+  --fg-space-5: 20px; --fg-space-6: 24px; --fg-space-8: 32px; --fg-space-10: 40px;
+  --fg-space-12: 48px; --fg-space-16: 64px;
+
+  /* ---- layout ---- */
+  --fg-sidebar-w: 248px;
+  --fg-topbar-h: 64px;
+  --fg-content-max: 1440px;
+  --fg-gutter: 24px;
+  --fg-row-h: 48px;           /* comfortable table row */
+  --fg-row-h-dense: 40px;     /* dispecerat / control room */
+  --fg-target-min: 32px;      /* A11Y-8 (≥ 24 required) */
+
+  /* ---- radii (reteleelectrice: 40 pill, 24, 20, 12, 8) ---- */
+  --fg-radius-pill: 999px;    /* buttons, segmented controls, filter chips */
+  --fg-radius-hero: 24px;     /* guarantee cards, login card */
+  --fg-radius-card: 20px;     /* top-level cards */
+  --fg-radius-panel: 12px;    /* inner panels, tables, dropzone */
+  --fg-radius-control: 8px;   /* inputs, selects */
+  --fg-radius-chip: 6px;      /* status chips: deliberately NOT pill, so status never looks like a button */
+  --fg-radius-chunk: 2px;
+
+  /* ---- elevation ---- */
+  --fg-shadow-e1: 0 1px 2px rgba(35, 41, 54, .06), 0 1px 1px rgba(35, 41, 54, .04);
+  --fg-shadow-e2: 0 4px 14px rgba(35, 41, 54, .08), 0 1px 2px rgba(35, 41, 54, .06);
+  --fg-shadow-e3: 0 18px 44px rgba(35, 41, 54, .20), 0 2px 6px rgba(35, 41, 54, .08);
+
+  /* ---- motion (motion-foundations tokens, CSS-only; no motion/react dependency) ---- */
+  --fg-dur-instant: 80ms;   /* focus, tooltip */
+  --fg-dur-fast: 180ms;     /* button, chip toggle, row insert */
+  --fg-dur-normal: 350ms;   /* dialog, panel, alert banner enter */
+  --fg-dur-slow: 600ms;     /* only: status change pulse on a guarantee card (once) */
+  --fg-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --fg-ease-sharp: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- dark "dispecerat" theme: control-room screens, projector-friendly dark ---- */
+[data-theme="dispecerat"] {
+  color-scheme: dark;
+  --fg-page: #0F131A;
+  --fg-surface: #171C26;
+  --fg-surface-2: #1F2532;
+  --fg-surface-sunken: #12161E;
+  --fg-chrome: #0B0E14;
+  --fg-chrome-2: #1A2030;
+  --fg-on-chrome: #EEF1F5;
+  --fg-on-chrome-2: #AEB6C4;
+  --fg-scrim: rgba(0, 0, 0, .6);
+
+  --fg-ink: #EEF1F5;          /* 15.06 on #171C26 */
+  --fg-ink-2: #AEB6C4;        /* 8.36 */
+  --fg-ink-3: #8A93A3;        /* 5.51 */
+  --fg-ink-disabled: rgba(238, 241, 245, .4);
+  --fg-link: #6E8BFF;         /* 5.53 */
+
+  --fg-line: #262D3B;
+  --fg-line-strong: #2C3445;
+  --fg-line-input: #8A93A3;   /* 5.19+ */
+
+  --fg-action: #FF5A1F;       /* dark text on it 6.15: brighter orange, closer to brand */
+  --fg-action-hover: #FF7440;
+  --fg-action-press: #E04A12;
+  --fg-on-action: #0D0F14;
+  --fg-action-quiet: #2A1F1A;
+
+  --fg-focus-outer: #FFFFFF;
+  --fg-focus-inner: #0B0E14;
+
+  --fg-ok: #3DD68C;           --fg-on-ok: #0D0F14;     /* 10.22; 9.10 as mark on surface */
+  --fg-ok-tint: #10291E;      --fg-ok-ink: #7EE8B4;
+  --fg-warn: #F2C200;         --fg-on-warn: #0D0F14;   /* 11.40 */
+  --fg-warn-border: #F2C200;
+  --fg-warn-tint: #2B2508;    --fg-warn-ink: #F5D54D;
+  --fg-crit: #FF6B8B;         --fg-on-crit: #0D0F14;   /* 7.05; pink-crimson, never orange */
+  --fg-crit-tint: #2E1219;    --fg-crit-ink: #FF9DB2;
+  --fg-info: #4FC3F7;         --fg-on-info: #0D0F14;
+  --fg-info-tint: #0E2430;    --fg-info-ink: #8AD8FA;
+  --fg-neutral: #8A93A3;      --fg-on-neutral: #0D0F14;
+  --fg-neutral-tint: #1F2532; --fg-neutral-ink: #C7CDD8;
+
+  --fg-cat-meter: #1A93C0;
+  --fg-cat-fault: #DB4C8C;
+  --fg-cat-connection: #9A5DE0;
+  --fg-cat-drone: #AE8A12;
+  --fg-seq-1: #12303D; --fg-seq-2: #135673; --fg-seq-3: #1A7FA8; --fg-seq-4: #36A9D8; --fg-seq-5: #8AD8FA;
+  --fg-chunk-done: #1A93C0;
+  --fg-chunk-flight: #4FC3F7;
+  --fg-chunk-pending: #2C3445;
+  --fg-chunk-failed: #FF6B8B;
+  --fg-grid: #232A38;
+  --fg-axis: #3A4356;
+
+  --fg-shadow-e1: 0 0 0 1px #262D3B;
+  --fg-shadow-e2: 0 0 0 1px #2C3445, 0 6px 18px rgba(0, 0, 0, .35);
+  --fg-shadow-e3: 0 0 0 1px #2C3445, 0 20px 48px rgba(0, 0, 0, .55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --fg-dur-fast: 0ms; --fg-dur-normal: 120ms; --fg-dur-slow: 0ms; }
+}
+
+/* ---- Tailwind v4 mapping (shadcn/ui-compatible names where they exist) ---- */
+@theme inline {
+  --color-background: var(--fg-page);
+  --color-foreground: var(--fg-ink);
+  --color-card: var(--fg-surface);
+  --color-card-foreground: var(--fg-ink);
+  --color-popover: var(--fg-surface);
+  --color-popover-foreground: var(--fg-ink);
+  --color-primary: var(--fg-action);
+  --color-primary-foreground: var(--fg-on-action);
+  --color-secondary: var(--fg-surface-sunken);
+  --color-secondary-foreground: var(--fg-ink);
+  --color-muted: var(--fg-surface-2);
+  --color-muted-foreground: var(--fg-ink-2);
+  --color-accent: var(--fg-brand-orange-tint);
+  --color-accent-foreground: var(--fg-ink);
+  --color-destructive: var(--fg-crit);
+  --color-destructive-foreground: var(--fg-on-crit);
+  --color-border: var(--fg-line);
+  --color-input: var(--fg-line-input);
+  --color-ring: var(--fg-focus-outer);
+  --color-sidebar: var(--fg-chrome);
+  --color-sidebar-foreground: var(--fg-on-chrome);
+
+  --color-surface: var(--fg-surface);
+  --color-surface-2: var(--fg-surface-2);
+  --color-sunken: var(--fg-surface-sunken);
+  --color-chrome: var(--fg-chrome);
+  --color-ink: var(--fg-ink);
+  --color-ink-2: var(--fg-ink-2);
+  --color-ink-3: var(--fg-ink-3);
+  --color-link: var(--fg-link);
+  --color-brand-orange: var(--fg-brand-orange);
+  --color-brand-cyan: var(--fg-brand-cyan);
+  --color-ppc-blue: var(--fg-brand-ppc-blue);
+  --color-ok: var(--fg-ok);           --color-ok-tint: var(--fg-ok-tint);       --color-ok-ink: var(--fg-ok-ink);
+  --color-warn: var(--fg-warn);       --color-warn-tint: var(--fg-warn-tint);   --color-warn-ink: var(--fg-warn-ink);
+  --color-crit: var(--fg-crit);       --color-crit-tint: var(--fg-crit-tint);   --color-crit-ink: var(--fg-crit-ink);
+  --color-info: var(--fg-info);       --color-info-tint: var(--fg-info-tint);   --color-info-ink: var(--fg-info-ink);
+  --color-cat-meter: var(--fg-cat-meter);
+  --color-cat-fault: var(--fg-cat-fault);
+  --color-cat-connection: var(--fg-cat-connection);
+  --color-cat-drone: var(--fg-cat-drone);
+
+  --font-sans: var(--fg-font-sans);
+  --font-mono: var(--fg-font-mono);
+
+  --radius-pill: var(--fg-radius-pill);
+  --radius-hero: var(--fg-radius-hero);
+  --radius-card: var(--fg-radius-card);
+  --radius-panel: var(--fg-radius-panel);
+  --radius-control: var(--fg-radius-control);
+  --radius-chip: var(--fg-radius-chip);
+
+  --shadow-e1: var(--fg-shadow-e1);
+  --shadow-e2: var(--fg-shadow-e2);
+  --shadow-e3: var(--fg-shadow-e3);
+
+  --ease-smooth: var(--fg-ease-smooth);
+  --ease-sharp: var(--fg-ease-sharp);
+}

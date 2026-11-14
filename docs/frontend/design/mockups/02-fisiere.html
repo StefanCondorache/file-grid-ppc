@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fișiere · FileGrid</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mockup.css">
+<style>
+  .name { display: flex; flex-direction: column; line-height: 1.25; }
+  .name b { font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fg-ok-ink); }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fg-ok); }
+  .pager { display: flex; gap: 6px; align-items: center; }
+  .pager span { min-width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; }
+  .pager span.on { background: var(--fg-ink); color: var(--fg-surface); }
+</style>
+</head>
+<body data-page="fisiere" data-title="Fișiere" data-role="Dispecerat" data-acting="1">
+<main id="content" class="content">
+  <div class="row between wrap">
+    <div class="stack" style="gap:4px"><h2 class="section-title">Avarii · ultimele 24 h</h2><p class="muted">Înregistrările noi apar automat în capul listei.</p></div>
+    <div class="row"><span class="live">Actualizat live</span><button class="btn sm quiet" data-i="pause">Oprește actualizările</button><span class="note">Beat 3 · rândul nou apare fără refresh</span></div>
+  </div>
+
+  <div class="card stack" style="padding:16px 20px">
+    <div class="row wrap" style="gap:8px">
+      <span class="filter" aria-pressed="false">Toate</span>
+      <span class="filter" aria-pressed="true"><span class="catdot c-fault"></span>Avarii</span>
+      <span class="filter" aria-pressed="false"><span class="catdot c-drone"></span>Video dronă</span>
+      <span class="filter" aria-pressed="false"><span class="catdot c-conn"></span>Racordări</span>
+      <span class="filter" aria-pressed="false"><span class="catdot c-meter"></span>Citiri contoare</span>
+      <span style="width:12px"></span>
+      <span class="filter">Zonă: toate <span data-i="down" data-iclass="sm"></span></span>
+      <span class="filter">Ultimele 24 h <span data-i="down" data-iclass="sm"></span></span>
+      <span class="filter">Mai multe filtre <span data-i="down" data-iclass="sm"></span></span>
+    </div>
+    <div class="row wrap between">
+      <span class="input" style="width:420px;justify-content:flex-start;gap:10px;color:var(--fg-ink-3)" data-i="search">Caută după nume, stație, nr. cerere…</span>
+      <div class="row"><span class="switch off" aria-hidden="true"></span><span style="font-size:14px;font-weight:600">Ascunde datele generate</span><button class="btn sm quiet">Resetează filtrele</button></div>
+    </div>
+  </div>
+
+  <table class="table">
+    <caption class="sr-only">Avarii, cele mai noi primele</caption>
+    <thead><tr><th>Nume</th><th>Zonă</th><th>Gravitate</th><th class="num">Mărime</th><th>Încărcat</th><th>Storage</th><th>Integritate</th><th>Origine</th></tr></thead>
+    <tbody>
+      <tr class="new"><td><div class="name"><b>Avarie_PT_Medgidia_0412.pdf</b><span class="meta">PT Medgidia 4 <span class="chip info" style="height:22px;font-size:13px;padding:0 8px;margin-left:6px">Nou · acum 4 s</span></span></div></td><td>Dobrogea</td><td><span class="sev"><span><i></i><i></i><i></i></span>Critică</span></td><td class="num">5,1 MB</td><td>15:41:07</td><td><span class="tag">S3</span></td><td><span class="chip ok" data-i="check">Verificat</span></td><td><span class="tag">manual</span></td></tr>
+      <tr><td><div class="name"><b>Avarie_LEA20kV_Caransebes.pdf</b><span class="meta">Stația Caransebeș</span></div></td><td>Banat</td><td><span class="sev"><span><i></i><i></i><i class="off"></i></span>Medie</span></td><td class="num">2,4 MB</td><td>15:38:52</td><td><span class="tag">FTP</span> <span class="meta">fallback</span></td><td><span class="chip ok" data-i="check">Verificat</span></td><td><span class="tag">furtună</span></td></tr>
+      <tr><td><div class="name"><b>Avarie_PA_Constanta_Sud.pdf</b><span class="meta">PA Constanța Sud</span></div></td><td>Dobrogea</td><td><span class="sev"><span><i></i><i class="off"></i><i class="off"></i></span>Mică</span></td><td class="num">1,8 MB</td><td>15:36:10</td><td><span class="tag">S3</span></td><td><span class="chip crit" data-i="stop">Fișier corupt detectat</span></td><td><span class="tag">manual</span></td></tr>
+      <tr><td><div class="name"><b>Avarie_Statie_Slobozia_110kV.pdf</b><span class="meta">Stația Slobozia</span></div></td><td>Muntenia</td><td><span class="sev"><span><i></i><i></i><i class="off"></i></span>Medie</span></td><td class="num">7,9 MB</td><td>15:31:44</td><td><span class="tag">S3</span></td><td><span class="chip ok-outline chip" data-i="shield">Verificat de server</span></td><td><span class="tag">furtună</span></td></tr>
+      <tr><td><div class="name"><b>Avarie_PT_Lugoj_7.pdf</b><span class="meta">PT Lugoj 7</span></div></td><td>Banat</td><td><span class="sev"><span><i></i><i class="off"></i><i class="off"></i></span>Mică</span></td><td class="num">3,3 MB</td><td>15:22:05</td><td><span class="tag">S3</span></td><td><span class="chip ok" data-i="check">Verificat</span></td><td><span class="tag">seed</span></td></tr>
+      <tr><td><div class="name"><b>Avarie_LEA_Tulcea_Isaccea.pdf</b><span class="meta">LEA 20 kV Tulcea – Isaccea</span></div></td><td>Dobrogea</td><td><span class="sev"><span><i></i><i></i><i></i></span>Critică</span></td><td class="num">9,6 MB</td><td>15:18:39</td><td><span class="tag">S3</span></td><td><span class="chip ok" data-i="check">Verificat</span></td><td><span class="tag">manual</span></td></tr>
+    </tbody>
+  </table>
+  <div class="row between"><span class="meta">Afișate 1–6 din 128 · sortat după dată, cele mai noi primele</span><div class="pager"><span class="on">1</span><span>2</span><span>3</span><span>…</span><span>22</span></div></div>
+
+  <section class="card stack" aria-labelledby="rac-h">
+    <div class="row between"><h2 id="rac-h">Racordări (vedere Angajat racordări)</h2><span class="note">Beat 4 · date personale mascate implicit</span></div>
+    <table class="table">
+      <thead><tr><th>Document</th><th>Solicitant</th><th>CNP</th><th>Storage</th><th>Protecție</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>Cerere racordare nr. RC-2026-0412</b><br><span class="meta">act de identitate · 0,8 MB</span></td><td aria-label="Solicitant mascat">I*** P***</td><td class="mono" aria-label="CNP mascat">1********123</td><td><span class="tag">DB</span></td><td><span class="chip ok-outline" data-i="lock">Criptat în repaus · AES-256-GCM</span></td><td><button class="btn sm secondary" data-i="eye" disabled style="opacity:.55" title="Doar rolul Auditor poate vedea datele">Arată datele</button></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">Doar rolul Auditor poate dezvălui datele, cu motiv; fiecare dezvăluire apare în jurnalul de audit.</p>
+  </section>
+</main>
+<script src="shell.js"></script>
+<script>if (location.search.includes('clean')) document.body.classList.add('no-notes');</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # ADR-0010: Generated OpenAPI types, `openapi-fetch` client, one error shape, hand-written form schemas
 
 **Date**: 2026-11-14
-**Status**: proposed (error shape needs NestJS agreement: BA-00a)
+**Status**: proposed (error shape needs NestJS agreement: BA-00a) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; drafted by ecc:architect (FA-10, FA-11, FA-12, FA-25); error fields merged from ecc:code-architect and ecc:security-reviewer
 
 ## Context

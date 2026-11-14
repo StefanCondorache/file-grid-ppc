@@ -1,7 +1,7 @@
 # ADR-0003: Custom chunk upload API instead of tus
 
 **Date**: 2026-11-14
-**Status**: proposed (needs NestJS agreement: OQ-2)
+**Status**: proposed (needs NestJS agreement: OQ-2) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; drafted by ecc:code-architect (UE-1, UE-4, UE-15, UE-16), merged with ecc:architect (FA-19)
 
 ## Context

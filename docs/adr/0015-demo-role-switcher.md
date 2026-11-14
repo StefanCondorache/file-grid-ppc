@@ -1,7 +1,7 @@
 # ADR-0015: Server-side, audited, time-boxed demo role switcher
 
 **Date**: 2026-11-14
-**Status**: proposed (needs NestJS agreement: BA-04, BA-63; switcher shape open, see Risks)
+**Status**: proposed, amended by ADR-0022 (login by role dropdown)
 **Deciders**: frontend dev; ecc:security-reviewer (TM-15), ecc:architect (FA-21, FA-25), ecc:a11y-architect (A11Y-22)
 
 ## Context

@@ -310,6 +310,9 @@ Applies to FE-09/FE-10: bulkhead latency lines, S1/S2 comparisons, S3 map, meter
 
 ## Contrast failures
 
+*Decision 2026-11-14: the primary action uses `#D04000` (white text 4.76:1) instead of `#C13700`; see ADR-0018 and
+[tokens.css](../design/tokens.css).*
+
 | Token / pair | Ratio | Required | Verdict | Fix |
 |---|---|---|---|---|
 | white text on orange `#FF4B00` (buttons) | 3.36 | 4.5 | FAIL (large text only) | `--action` `#C13700`, 5.50 |

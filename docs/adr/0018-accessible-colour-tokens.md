@@ -1,7 +1,7 @@
 # ADR-0018: Functional colour tokens separate from the PPC brand palette
 
 **Date**: 2026-11-14
-**Status**: proposed (design change: needs the presenter's OK)
+**Status**: accepted (2026-11-14, action orange `#D04000` chosen by the user)
 **Deciders**: frontend dev; drafted by ecc:a11y-architect (A11Y-2..A11Y-7)
 
 ## Context
@@ -12,8 +12,8 @@ The Rețele Electrice palette fails WCAG 2.2 AA in key places (hand-computed, ±
 
 ## Decision
 
-Brand colours stay decorative. Functional tokens: `--action #C13700` (white text 5.50:1) for primary buttons and
-orange text; `--info-text #00729E` (5.38:1); `--border-input #5A5F68` (6.42:1); a two-tone focus ring (3 px dark +
+Brand colours stay decorative. Functional tokens: `--action #D04000` (white text 4.76:1; `#C13700` at 5.50:1 was
+the a11y plan's first proposal) for primary buttons; in the dark theme `#FF5A1F` with dark text (6.15:1); `--info-text #00729E` (5.38:1); `--border-input #5A5F68` (6.42:1); a two-tone focus ring (3 px dark +
 white halo); status chips with icon + text: ok `#00776A` (5.46:1), warn `#FFDA00` fill with dark text and border,
 bad `#B3123F` (6.83:1), neutral `#555C5F`. A Vitest test recomputes every token pair in CI. Light theme only.
 

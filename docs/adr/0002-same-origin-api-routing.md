@@ -1,7 +1,7 @@
 # ADR-0002: Same-origin `/api/v1` through Traefik path routing
 
 **Date**: 2026-11-14
-**Status**: proposed (needs backend + deploy agreement: OQ-5)
+**Status**: proposed (needs backend + deploy agreement: OQ-5) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; drafted by ecc:architect (FA-18) and ecc:security-reviewer (TM-14); NestJS team to confirm
 
 ## Context

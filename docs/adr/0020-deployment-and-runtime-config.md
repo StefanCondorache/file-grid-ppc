@@ -1,7 +1,7 @@
 # ADR-0020: Standalone Node container with runtime config and no secrets
 
 **Date**: 2026-11-14
-**Status**: proposed (k8s manifest and one-command start need team agreement: F5)
+**Status**: proposed (k8s manifest and one-command start need team agreement: F5) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; ecc:architect (FA-4, FA-22) and ecc:security-reviewer (TM-11, TM-12); resolves differing env-variable lists
 
 ## Context

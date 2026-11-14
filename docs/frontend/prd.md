@@ -11,7 +11,7 @@ Decisions taken in the brainstorm (2026-11-14), binding for this PRD:
 | D1 | The PRD is driven by a 7-minute live jury demo; screens are derived from the script (§6). |
 | D2 | Failure injection is **hybrid**: storm (10× per category) and "corrupt a file" are in-app (demo control room); stopping a storage is done by a teammate from a terminal (`kubectl scale`); network degradation is real browser throttling/offline (Chrome DevTools) on a real upload. |
 | D3 | The demo runs on the **live VPS** (`https://ppc.filegrid.cc.cd`) from the venue network, with a **recorded backup video**. |
-| D4 | **Five real roles** with backend-enforced permissions: `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. The presenter logs in once as `admin` and uses a **demo-only role switcher**. |
+| D4 | **Five real roles** with backend-enforced permissions: `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. *(Updated 2026-11-14, ADR-0022)* **Login is a role dropdown** (one demo account per role) plus password, for ease of use and presentation. In demo mode the same dropdown in the header switches persona without logging out, so running uploads continue. |
 | D5 | The numbers shown in the UI (latency, throughput, errors, traces, statistics) come from a **NestJS operation log** persisted in Postgres, not from Prometheus. Grafana/Loki, if the team adds them, are an optional deep link; the demo must not depend on them. |
 | D6 | **The demo is the hackathon final, ~22 hours from 2026-11-14 afternoon.** The 7-minute length is a target for pacing, not a hard limit. Scope is cut to what one frontend developer can ship in that window (§12). |
 | D7 | **Mock-first, independent of the backend.** The frontend is built entirely against a mock API that follows the OpenAPI proposal (FE-18) and switches to the real NestJS API per endpoint as each one lands. No frontend milestone waits on the backend. |
@@ -98,7 +98,7 @@ UI names are the Romanian labels; the route structure is decided in Prompt 2.
 
 | # | Screen | Used in beats | Roles |
 |---|---|---|---|
-| SC-01 | **Autentificare**: login, session-expired state | 1 | all |
+| SC-01 | **Autentificare**: role dropdown + password, session-expired state | 1 | all |
 | SC-02 | **Garanții de business** (home): 4 guarantee cards, active alerts, storage health strip, meter counters | 1, 5 | all (read) |
 | SC-03 | **Încărcare**: category + metadata form, drop zone, queue; plus a global **upload tray** visible on every screen | 2, 3, 4, 7 | teren, dispecerat, racordari, admin |
 | SC-04 | **Fișiere**: search, filters, list per category incl. meter readings, live-updating fault list | 3, 4 | per role/category |
@@ -120,13 +120,16 @@ Priority: **P0** = in the script or the F-gate; **P1** = makes it a winner; **P2
 - **Story:** As any staff member I log in and only see what my role allows, so personal data and controls stay
   with the right people. As the presenter I switch persona in one click so the demo doesn't stall on logins.
 - **Acceptance criteria:**
-  - Login with username + password; Romanian error messages; no indication of which field was wrong.
+  - Login: pick the role from a dropdown (Echipă de teren, Dispecerat, Angajat racordări, Auditor, Administrator; one
+    demo account per role) and enter the password; Romanian error messages; no indication of which field was wrong.
+    The dropdown replaces typing a username (ADR-0022); authentication stays (N8).
   - Session expiry is visible: warning 2 min before, then a redirect to login that returns to the same page; an
     upload in progress resumes after re-login.
   - Navigation, actions and data are filtered by role (matrix below). The UI hiding is convenience only; every
     rule is enforced by the backend.
-  - Role switcher appears only when the backend reports demo mode on and the real user is `admin`; every switch
-    is written to the audit trail; the header always shows the active role ("Rol activ: Auditor").
+  - In demo mode the header shows the same role dropdown: switching persona does not log out; every switch is
+    written to the audit trail; the header always shows the active role ("Rol activ: Auditor"). With demo mode
+    off, changing role means logging out and choosing another role at login.
   - Logout clears all client-side session state; upload queue metadata survives (no file bytes or PII stored).
   - *(Builder call, review)* An upload is authorised **once, when it starts**, for the real user and the role
     active at that moment; its later parts are accepted because they belong to that upload, not re-checked
