@@ -23,12 +23,13 @@ wins. Contract: [openapi.frontend-proposal.yaml](../api/openapi.frontend-proposa
 | [0012](0012-csp-nonce-and-security-headers.md) | Nonce CSP in a CSP-only middleware; one owner per header | proposed | 2026-11-14 |
 | [0013](0013-pii-handling.md) | Server-side PII masking, audited time-boxed reveal | proposed (backend) | 2026-11-14 |
 | [0014](0014-downloads-and-integrity.md) | Downloads only via the API; sized client re-verification | proposed (backend) | 2026-11-14 |
-| [0015](0015-demo-role-switcher.md) | Server-side, audited, time-boxed demo role switcher | proposed (backend) | 2026-11-14 |
+| [0015](0015-demo-role-switcher.md) | Server-side, audited, time-boxed demo role switcher | amended by 0022 | 2026-11-14 |
 | [0016](0016-charts-and-map.md) | Recharts (lazy) + own SVG, every chart with a table | proposed | 2026-11-14 |
 | [0017](0017-i18n-and-diacritics.md) | Typed message catalogue + cedilla lint | proposed | 2026-11-14 |
-| [0018](0018-accessible-colour-tokens.md) | Functional colour tokens separate from the brand palette | proposed (design) | 2026-11-14 |
+| [0018](0018-accessible-colour-tokens.md) | Functional colour tokens separate from the brand palette (`#D04000`) | accepted | 2026-11-14 |
 | [0019](0019-a11y-primitives-and-announcer.md) | Radix primitives, one announcer, live-updates pause | proposed | 2026-11-14 |
 | [0020](0020-deployment-and-runtime-config.md) | Standalone container, runtime config, no secrets | proposed (deploy) | 2026-11-14 |
 | [0021](0021-testing-strategy.md) | Testing sized for a 22-hour build | proposed | 2026-11-14 |
+| [0022](0022-role-dropdown-login.md) | Log in by choosing a role from a dropdown | accepted | 2026-11-14 |
 
 Template for new records: [template.md](template.md).

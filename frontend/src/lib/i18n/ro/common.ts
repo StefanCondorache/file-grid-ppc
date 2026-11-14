@@ -1,0 +1,21 @@
+export const common = {
+  appName: 'FileGrid',
+  footer: 'Prototip FileGrid · Hackathon PPC',
+  notOfficial: 'Nu este un produs oficial PPC sau Rețele Electrice România',
+  mockMarker: 'Date simulate',
+  skipToContent: 'Sari la conținut',
+  retry: 'Reîncearcă',
+  copy: 'Copiază',
+  copied: 'Copiat',
+  loading: 'Se încarcă…',
+  viewAsTable: 'Vezi ca tabel',
+  interpretation: 'Ce înseamnă',
+  unusualChars: 'caractere neobișnuite',
+  copyTraceId: 'Copiază ID urmărire',
+  errorCode: 'Cod',
+  forbiddenTitle: 'Nu ai acces la această pagină',
+  forbiddenBody: (role: string) =>
+    `Rolul activ (${role}) nu are acces aici. Alege alt rol sau întoarce-te la Garanții de business.`,
+  backHome: 'Înapoi la Garanții',
+  emptyTitle: 'Nimic de afișat încă',
+} as const;

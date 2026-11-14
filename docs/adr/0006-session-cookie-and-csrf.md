@@ -1,7 +1,7 @@
 # ADR-0006: httpOnly `__Host-` session cookie (SameSite=Strict) and header-based CSRF defence
 
 **Date**: 2026-11-14
-**Status**: proposed (needs NestJS agreement: OQ-8)
+**Status**: proposed (needs NestJS agreement: OQ-8) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; resolves a conflict between ecc:architect (FA-20, Strict, `X-Requested-With: filegrid`) and ecc:security-reviewer (TM-1/TM-4, Lax, `X-Requested-With: fetch` or `X-FG-CSRF`)
 
 ## Context

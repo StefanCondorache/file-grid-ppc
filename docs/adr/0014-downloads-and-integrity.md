@@ -1,7 +1,7 @@
 # ADR-0014: Downloads only through the API; client re-verification sized by browser and file size
 
 **Date**: 2026-11-14
-**Status**: proposed (needs NestJS agreement: BA-18)
+**Status**: proposed (needs NestJS agreement: BA-18) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; merged from ecc:security-reviewer (TM-6, TM-13), ecc:code-architect (UE-18) and ecc:architect (FA-2); resolves the stored-hash header name (`X-Content-SHA256` vs `X-File-SHA256`)
 
 ## Context

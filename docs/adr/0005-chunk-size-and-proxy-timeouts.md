@@ -1,7 +1,7 @@
 # ADR-0005: Chunk size 5–32 MiB, adaptive parallelism, raised Traefik read timeout
 
 **Date**: 2026-11-14
-**Status**: proposed (needs deploy agreement on the Traefik config)
+**Status**: proposed (needs deploy agreement on the Traefik config) — revisit: backend differs, see [backend sync](../api/backend-sync-2026-11-14.md)
 **Deciders**: frontend dev; resolves a conflict between ecc:architect (FA-19, cap 32 MB) and ecc:code-architect (UE-6, cap 50 MiB)
 
 ## Context

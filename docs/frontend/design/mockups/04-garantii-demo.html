@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Garanții de business · FileGrid</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mockup.css">
+<style>
+  .counters { display: flex; flex-direction: column; gap: 4px; }
+  .counters > div { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--fg-line); padding: 4px 0; }
+  .counters .n { font-size: 24px; font-weight: 700; order: 2; }
+  .counters .lbl { font-size: 15px; color: var(--fg-ink-2); order: 1; }
+  .counters .zero { font-size: 30px; }
+  .zero { color: var(--fg-ok-ink); }
+  .gcard h2 { font-size: 17px; white-space: nowrap; }
+  .gcard .chip { flex: none; }
+  .ctl { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--fg-line); }
+  .ctl:last-child { border-bottom: 0; }
+  .ctl h3 { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .seg { display: inline-flex; border: 1.5px solid var(--fg-line-input); border-radius: var(--fg-radius-pill); padding: 3px; gap: 2px; }
+  .seg span { height: 32px; padding: 0 14px; border-radius: var(--fg-radius-pill); display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; }
+  .seg span.on { background: var(--fg-ink); color: var(--fg-surface); }
+  .running { display: flex; align-items: center; gap: 10px; background: var(--fg-warn-tint); color: var(--fg-warn-ink); border-radius: 10px; padding: 10px 12px; font-weight: 600; }
+  .running .t { margin-left: auto; font-size: 20px; font-weight: 700; color: var(--fg-ink); }
+</style>
+</head>
+<body data-page="garantii" data-title="Garanții de business" data-theme="dispecerat" data-s3="down" data-banner="warn" data-banner-text="&lt;b&gt;Avarii:&lt;/b&gt; timpul până la dispecerat este 3,4 s (țintă ≤ 2 s) în timpul furtunii 10×. &lt;b&gt;S3 este oprit&lt;/b&gt;; avariile se scriu pe rezerva FTP. Celelalte categorii funcționează normal.">
+<main id="content" class="content">
+  <div class="row between wrap">
+    <div class="stack" style="gap:4px"><h2 class="section-title">Cele 4 garanții, acum</h2><p class="muted">Calculate de server din jurnalul operațiilor, la fiecare 2 s.</p></div>
+    <span class="note">Beat 1 (toate verzi) → Beat 5 (furtună + S3 oprit), temă „dispecerat”</span>
+  </div>
+
+  <div class="grid g-4">
+    <section class="card hero gcard stack" aria-labelledby="g1">
+      <div class="row between"><h2 id="g1" class="row"><span class="catdot c-meter"></span>Citiri contoare</h2><span class="chip ok" data-i="check">OK</span></div>
+      <p class="gcard sentence">Nicio citire pierdută sau dublată.</p>
+      <div class="counters">
+        <div><div class="n">1 284 532</div><div class="lbl">primite</div></div><div><div class="n">1 280 621</div><div class="lbl">unice</div></div>
+        <div><div class="n">3 911</div><div class="lbl">duplicate respinse</div></div><div><div class="n zero">0</div><div class="lbl">pierdute (trebuie 0)</div></div>
+      </div>
+      <span class="meta">320 citiri/s · simulator „Zi de vârf”</span>
+    </section>
+    <section class="card hero gcard warn stack" aria-labelledby="g2">
+      <div class="row between"><h2 id="g2" class="row"><span class="catdot c-fault"></span>Avarii</h2><span class="chip warn" data-i="warn">În pericol</span></div>
+      <p class="gcard sentence"><b>Avariile ajung la dispecerat în 3,4 s</b>, peste ținta de 2 s.</p>
+      <div class="kpi"><span class="n xl">3,4</span><span class="u">s p95</span></div>
+      <div class="bar" aria-hidden="true"><span style="width:100%;background:var(--fg-warn)"></span></div>
+      <span class="meta">țintă ≤ 2 s · furtună 10× activă · scrise pe FTP (rezervă)</span>
+    </section>
+    <section class="card hero gcard stack" aria-labelledby="g3">
+      <div class="row between"><h2 id="g3" class="row"><span class="catdot c-conn"></span>Racordări</h2><span class="chip ok" data-i="check">OK</span></div>
+      <p class="gcard sentence">Datele personale sunt criptate și fiecare acces este auditat.</p>
+      <div class="kpi"><span class="n xl">100</span><span class="u">% criptate</span></div>
+      <span class="meta">2 dezvăluiri azi, ambele cu motiv · ultima verificare 15:30</span>
+    </section>
+    <section class="card hero gcard stack" aria-labelledby="g4">
+      <div class="row between"><h2 id="g4" class="row"><span class="catdot c-drone"></span>Video dronă</h2><span class="chip ok" data-i="check">OK</span></div>
+      <p class="gcard sentence">Transferurile mari se termină și pe rețea instabilă.</p>
+      <div class="kpi"><span class="n xl">12</span><span class="u">/ 12 finalizate</span></div>
+      <span class="meta">4 reluate automat · 0 eșuate · 1 în curs</span>
+    </section>
+  </div>
+
+  <div class="grid g-main-side">
+    <section class="card stack-lg" aria-labelledby="bh">
+      <div class="row between wrap"><div class="stack" style="gap:2px"><h2 id="bh">Izolare pe categorii: timp de răspuns p95, ultimele 15 minute</h2><span class="meta">Furtuna pe avarii nu încetinește celelalte categorii.</span></div><span class="note">N1 · bulkhead</span></div>
+      <svg class="chart" viewBox="0 0 770 270" role="img" aria-labelledby="bh-t bh-d" style="width:100%;height:auto">
+        <title id="bh-t">Timp de răspuns p95 pe categorii</title>
+        <desc id="bh-d">Avariile cresc de la 0,8 s la 3,4 s după pornirea furtunii la 15:33; contoarele, racordările și dronele rămân sub 1 s.</desc>
+        <g class="grid"><line x1="50" x2="640" y1="30" y2="30"/><line x1="50" x2="640" y1="80" y2="80"/><line x1="50" x2="640" y1="130" y2="130"/><line x1="50" x2="640" y1="180" y2="180"/></g>
+        <line class="axis" x1="50" x2="640" y1="230" y2="230"/>
+        <text x="40" y="34" text-anchor="end">4 s</text><text x="40" y="84" text-anchor="end">3 s</text><text x="40" y="134" text-anchor="end">2 s</text><text x="40" y="184" text-anchor="end">1 s</text><text x="40" y="234" text-anchor="end">0</text>
+        <text x="50" y="256">15:27</text><text x="345" y="256" text-anchor="middle">15:34</text><text x="640" y="256" text-anchor="end">15:42</text>
+        <line x1="50" x2="640" y1="130" y2="130" stroke="var(--fg-warn)" stroke-width="2" stroke-dasharray="6 6"/>
+        <text x="56" y="122" style="fill:var(--fg-warn-ink);font-weight:700">țintă avarii 2 s</text>
+        <line x1="330" x2="330" y1="30" y2="230" stroke="var(--fg-axis)" stroke-dasharray="2 4"/>
+        <text x="334" y="44" style="font-weight:600;fill:var(--fg-ink)">furtună 10× pornită</text>
+        <polyline fill="none" stroke="var(--fg-cat-meter)" stroke-width="2.5" points="50,205 110,207 170,204 230,206 290,205 330,204 370,206 430,203 490,205 550,204 640,205"/>
+        <polyline fill="none" stroke="var(--fg-cat-connection)" stroke-width="2.5" stroke-dasharray="10 5" points="50,196 110,198 170,195 230,197 290,196 330,195 370,197 430,194 490,197 550,196 640,195"/>
+        <polyline fill="none" stroke="var(--fg-cat-drone)" stroke-width="2.5" stroke-dasharray="3 4" points="50,186 110,184 170,187 230,185 290,186 330,183 370,185 430,186 490,184 550,186 640,185"/>
+        <polyline fill="none" stroke="var(--fg-cat-fault)" stroke-width="3" points="50,190 110,191 170,189 230,190 290,191 330,188 370,160 430,120 490,85 550,62 640,60"/>
+        <circle cx="640" cy="60" r="5" fill="var(--fg-cat-fault)" stroke="var(--fg-surface)" stroke-width="2"/>
+        <text class="lbl" x="650" y="65">Avarii 3,4 s</text>
+        <text class="lbl" x="650" y="172">Dronă 0,9 s</text>
+        <text class="lbl" x="650" y="196">Racordări 0,7 s</text>
+        <text class="lbl" x="650" y="220">Contoare 0,5 s</text>
+      </svg>
+      <div class="interp"><b>Ce înseamnă</b>Vârful de 10× pe avarii ridică doar timpul avariilor. Contoarele, racordările și dronele rămân sub 1 s: categoriile sunt izolate una de alta.</div>
+      <details class="tablealt"><summary>Vezi ca tabel</summary></details>
+    </section>
+
+    <aside class="card stack" aria-labelledby="cr" style="padding:20px 24px">
+      <div class="row between"><h2 id="cr" class="row" data-i="bolt">Cameră de control demo</h2><span class="chip info">Mod demo</span></div>
+      <p class="meta">Fiecare acțiune cere confirmare și apare în jurnalul de audit.</p>
+      <div class="ctl">
+        <h3>Furtună 10×</h3>
+        <div class="running" role="status">Avarii · 10× <span class="t">01:12</span></div>
+        <div class="row wrap"><button class="btn danger sm" data-i="x">Oprește furtuna</button><span class="seg" aria-label="Categorie"><span class="on">Avarii</span><span>Contoare</span><span>Dronă</span></span></div>
+      </div>
+      <div class="ctl">
+        <h3>Storage</h3>
+        <div class="row between"><span class="row"><span class="chip crit" data-i="stop">S3 oprit</span><span class="meta">de 0:48</span></span><button class="btn primary sm" data-i="play">Pornește S3</button></div>
+        <div class="row between"><span class="row"><span class="chip ok" data-i="check">FTP</span><span class="chip ok" data-i="check">Postgres</span></span><button class="btn danger sm">Oprește…</button></div>
+      </div>
+      <div class="ctl">
+        <h3>Simulator contoare</h3>
+        <div class="row between"><span class="seg"><span>Zi normală</span><span class="on">Zi de vârf</span></span><span class="kpi"><span class="n" style="font-size:22px">320</span><span class="u" style="font-size:14px">citiri/s</span></span></div>
+      </div>
+      <div class="ctl">
+        <h3>Corupe un fișier</h3>
+        <div class="row"><span class="select" style="flex:1;height:36px">Avarie_PA_Constanta_Sud.pdf <span data-i="down" data-iclass="sm"></span></span><button class="btn danger sm">Corupe…</button></div>
+      </div>
+      <div class="ctl">
+        <h3>Rețea lentă</h3>
+        <p class="meta">Din Chrome DevTools → Network → Offline / Slow 3G, pe încărcarea video în curs.</p>
+        <a class="btn sm secondary" href="#">Deschide Grafana</a>
+      </div>
+    </aside>
+  </div>
+</main>
+<script>document.body.dataset.bannerText = document.body.dataset.bannerText.replace(/&lt;/g,'<').replace(/&gt;/g,'>');</script>
+<script src="shell.js"></script>
+<script>if (location.search.includes('clean')) document.body.classList.add('no-notes');</script>
+</body>
+</html>

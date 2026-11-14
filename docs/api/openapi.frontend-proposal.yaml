@@ -766,6 +766,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DemoStatus' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /demo/storages/{storage}:
+    parameters:
+      - name: storage
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/StorageLabel' }
+    post:
+      tags: [demo]
+      operationId: demo_setStorage
+      summary: Stop or start one storage (demo mode, admin, audited); 404 when the backend cannot control storages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StorageControlRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DemoStatus' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /demo/corruptions:
     post:
       tags: [demo]
@@ -1673,9 +1696,10 @@ components:
         periodId: { type: string }
     DemoStatus:
       type: object
-      required: [demoMode, storms, simulator]
+      required: [demoMode, storms, simulator, storageControl]
       properties:
         demoMode: { type: boolean }
+        storageControl: { type: boolean, description: 'true when the API can stop/start storages itself (POST /demo/storages/{storage}); otherwise the UI shows terminal commands' }
         storms: { type: array, items: { $ref: '#/components/schemas/Storm' } }
         simulator: { $ref: '#/components/schemas/SimulatorStatus' }
     StormRequest:
@@ -1685,6 +1709,11 @@ components:
         category: { $ref: '#/components/schemas/Category' }
         factor: { type: number, minimum: 2, maximum: 20, default: 10 }
         durationS: { type: integer, minimum: 10, maximum: 600, default: 120 }
+    StorageControlRequest:
+      type: object
+      required: [up]
+      properties:
+        up: { type: boolean }
     CorruptionRequest:
       type: object
       required: [fileId]
