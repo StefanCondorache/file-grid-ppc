@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FileGrid · machete</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mockup.css">
+<style>.idx{max-width:960px;margin:48px auto;padding:0 24px;display:flex;flex-direction:column;gap:20px}.idx a.card{display:flex;gap:20px;align-items:center;text-decoration:none;color:var(--fg-ink)}.idx .n{font-size:36px;font-weight:700;color:var(--fg-brand-orange);width:56px}</style>
+</head>
+<body>
+<div class="idx">
+  <div class="row"><svg width="40" height="40" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="2" fill="#232936"/><rect x="11" y="1" width="8" height="8" rx="2" fill="#00A0DC"/><rect x="21" y="1" width="8" height="8" rx="2" fill="#232936"/><rect x="1" y="11" width="8" height="8" rx="2" fill="#00A0DC"/><rect x="11" y="11" width="8" height="8" rx="2" fill="#232936"/><rect x="21" y="11" width="8" height="8" rx="2" fill="#00A0DC"/><rect x="1" y="21" width="8" height="8" rx="2" fill="#232936"/><rect x="11" y="21" width="8" height="8" rx="2" fill="#FF4B00"/><rect x="21" y="21" width="8" height="8" rx="2" fill="#FF4B00"/></svg><h1 style="font-size:28px">FileGrid · machete pentru demo</h1></div>
+  <p class="lead">Cinci ecrane critice pentru demo, pe tokenii din <a href="../tokens.css">tokens.css</a>. Direcția: <a href="../direction.md">direction.md</a>. Chenarele albastre punctate sunt note pentru recenzie, nu fac parte din interfață (<a href="#" onclick="document.querySelectorAll('iframe').forEach(f=>f.contentDocument&&f.contentDocument.body.classList.toggle('no-notes'));return false">ascunde notele</a> în fiecare pagină cu <code>?clean</code>).</p>
+  <a class="card" href="00-login.html"><span class="n">0</span><span><b>Autentificare</b><br><span class="muted">Beat 1: rolul se alege dintr-o listă (un cont demo pe rol) + parolă (ADR-0022).</span></span></a>
+  <a class="card" href="01-upload.html"><span class="n">1</span><span><b>Încărcare</b><br><span class="muted">Beat 2–3: video dronă pe rețea instabilă, grila de bucăți, reluare automată; avarie disponibilă pentru dispecerat.</span></span></a>
+  <a class="card" href="02-fisiere.html"><span class="n">2</span><span><b>Fișiere</b><br><span class="muted">Beat 3–4: listă live, filtre, integritate, date personale mascate, fallback.</span></span></a>
+  <a class="card" href="03-detaliu.html"><span class="n">3</span><span><b>Detaliu fișier (trasare)</b><br><span class="muted">Beat 6–7: amprente client = server, waterfall-ul trasării, lanțul de custodie, varianta „Fișier corupt detectat”.</span></span></a>
+  <a class="card" href="04-garantii-demo.html"><span class="n">4</span><span><b>Garanții de business + Cameră de control</b> (temă „dispecerat”)<br><span class="muted">Beat 1 și 5: cele 4 garanții, furtună 10× pe avarii, S3 oprit, izolarea pe categorii.</span></span></a>
+  <a class="card" href="05-statistici.html"><span class="n">5</span><span><b>Statistici</b><br><span class="muted">Beat 8: S1 storage potrivit, S2 zi normală vs vârf, S3 ce spun datele despre rețea, fiecare cu interpretare.</span></span></a>
+  <p class="meta">Prototip FileGrid · Hackathon PPC. Nu este un produs oficial PPC sau Rețele Electrice România.</p>
+</div>
+</body>
+</html>

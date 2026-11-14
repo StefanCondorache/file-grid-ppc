@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/* ---- Tailwind v4 mapping (shadcn/ui-compatible names where they exist) ---- */
+@theme inline {
+  --color-background: var(--fg-page);
+  --color-foreground: var(--fg-ink);
+  --color-card: var(--fg-surface);
+  --color-card-foreground: var(--fg-ink);
+  --color-popover: var(--fg-surface);
+  --color-popover-foreground: var(--fg-ink);
+  --color-primary: var(--fg-action);
+  --color-primary-foreground: var(--fg-on-action);
+  --color-secondary: var(--fg-surface-sunken);
+  --color-secondary-foreground: var(--fg-ink);
+  --color-muted: var(--fg-surface-2);
+  --color-muted-foreground: var(--fg-ink-2);
+  --color-accent: var(--fg-brand-orange-tint);
+  --color-accent-foreground: var(--fg-ink);
+  --color-destructive: var(--fg-crit);
+  --color-destructive-foreground: var(--fg-on-crit);
+  --color-border: var(--fg-line);
+  --color-input: var(--fg-line-input);
+  --color-ring: var(--fg-focus-outer);
+  --color-sidebar: var(--fg-chrome);
+  --color-sidebar-foreground: var(--fg-on-chrome);
+
+  --color-surface: var(--fg-surface);
+  --color-surface-2: var(--fg-surface-2);
+  --color-sunken: var(--fg-surface-sunken);
+  --color-chrome: var(--fg-chrome);
+  --color-ink: var(--fg-ink);
+  --color-ink-2: var(--fg-ink-2);
+  --color-ink-3: var(--fg-ink-3);
+  --color-link: var(--fg-link);
+  --color-brand-orange: var(--fg-brand-orange);
+  --color-brand-cyan: var(--fg-brand-cyan);
+  --color-ppc-blue: var(--fg-brand-ppc-blue);
+  --color-ok: var(--fg-ok);           --color-ok-tint: var(--fg-ok-tint);       --color-ok-ink: var(--fg-ok-ink);
+  --color-warn: var(--fg-warn);       --color-warn-tint: var(--fg-warn-tint);   --color-warn-ink: var(--fg-warn-ink);
+  --color-crit: var(--fg-crit);       --color-crit-tint: var(--fg-crit-tint);   --color-crit-ink: var(--fg-crit-ink);
+  --color-info: var(--fg-info);       --color-info-tint: var(--fg-info-tint);   --color-info-ink: var(--fg-info-ink);
+  --color-cat-meter: var(--fg-cat-meter);
+  --color-cat-fault: var(--fg-cat-fault);
+  --color-cat-connection: var(--fg-cat-connection);
+  --color-cat-drone: var(--fg-cat-drone);
+
+  --font-sans: var(--fg-font-sans);
+  --font-mono: var(--fg-font-mono);
+
+  --radius-pill: var(--fg-radius-pill);
+  --radius-hero: var(--fg-radius-hero);
+  --radius-card: var(--fg-radius-card);
+  --radius-panel: var(--fg-radius-panel);
+  --radius-control: var(--fg-radius-control);
+  --radius-chip: var(--fg-radius-chip);
+
+  --shadow-e1: var(--fg-shadow-e1);
+  --shadow-e2: var(--fg-shadow-e2);
+  --shadow-e3: var(--fg-shadow-e3);
+
+  --ease-smooth: var(--fg-ease-smooth);
+  --ease-sharp: var(--fg-ease-sharp);
+}
+
+:root {
+  --fg-font-sans: var(--font-figtree), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+html {
+  background: var(--fg-page);
+}
+
+body {
+  margin: 0;
+  background: var(--fg-page);
+  color: var(--fg-ink);
+  font-family: var(--fg-font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 3px solid var(--fg-focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--fg-focus-inner);
+}

@@ -149,6 +149,38 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
    - Slow the network down.
    - Link to Grafana.
 
+### Stare P3 (14.11.2026)
+
+Frontendul e **Next.js 16 (App Router) + TypeScript**, nu React + Vite. Codul e pe branch-ul `frontend`, în `frontend/`. Documentația e în `docs/frontend/` (PRD, arhitectură, design, machete), `docs/adr/` (ADR 0001–0022) și `docs/api/` (propunerea OpenAPI, handoff, sincronizare cu backend-ul). Planul complet, cu 78 de task-uri, e în `docs/superpowers/plans/2026-11-14-filegrid-frontend.md`.
+
+| Etapă | Stare |
+|---|---|
+| PRD, arhitectură, model de amenințări, accesibilitate | ✅ `docs/frontend/` + ADR 0001–0022 |
+| Contract API (propunere) + handoff pentru backend | ✅ `docs/api/openapi.frontend-proposal.yaml`, `HANDOFF-backend.md` |
+| Design: tokeni PPC, temă „dispecerat”, font Figtree, machete pentru 6 ecrane | ✅ `docs/frontend/design/` |
+| 5 · Fundație: Next.js, tokeni, i18n, client API tipat, mock-uri MSW din OpenAPI, CSP, imagine Docker (port 8080, uid 101, ~45 MiB) | ✅ |
+| 6a · Login cu listă de roluri + parolă, shell, navigare pe roluri, comutator de rol demo, expirarea sesiunii, flux live (SSE + polling) | ✅ 95 de teste unitare + 6 e2e (Edge, axe WCAG 2.2 AA) |
+
+Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `0` (NestJS). `NEXT_PUBLIC_API_MOCK_GROUPS=…` pune doar unele grupuri pe mock. Un build de producție cu mock-uri e refuzat dacă nu e setat explicit `FILEGRID_ALLOW_MOCKS=1`. Pe mock-uri, parola pentru toate cele 5 conturi demo e `demo-2026`.
+
+**Rămas de făcut (P3):**
+- [ ] 5.15 · Primul deploy pe VPS. **P1:** ridicați limita de memorie a frontend-ului de la 128Mi la 256Mi în `deploy/k8s/app/frontend/`. Imaginea ascultă pe 8080, ca uid 101.
+- [ ] 6b · Upload reluabil (bucăți, hash SHA-256 în worker, reluare după reload/offline, grilă de bucăți)
+- [ ] 6c · Fișiere, detaliu, integritate (hash client = server, „Fișier corupt detectat”), trasare, date personale mascate
+- [ ] 6d · Politici (editare live, diff, versiuni, conflict)
+- [ ] 6e · Garanții de business, banda de sănătate storage, alerte, matrice categorie × storage, grafic de izolare
+- [ ] 6f · Statistici S1/S2/S3 cu interpretare
+- [ ] 6g · Cameră de control demo (furtună, oprire S3, corupere fișier, simulator) + contoare live
+- [ ] 6h · Jurnal de audit, test de integrare între etape, pas final de accesibilitate, repetiții, video de rezervă
+
+**Am nevoie de la P2 (detalii în `docs/api/backend-sync-2026-11-14.md`):**
+- [ ] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`.
+- [ ] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`.
+- [ ] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri).
+- [ ] `@nestjs/swagger` cu `/api/docs-json`, ca să generăm tipurile din API-ul real.
+- [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor.
+- [ ] Confirmare: `GET /auth/me` nu prelungește sesiunea (doar `POST /auth/refresh` și activitatea reală).
+
 ## Milestones
 
 1. **M1:** adapters, upload/download API, and the UI shell on mocks.
