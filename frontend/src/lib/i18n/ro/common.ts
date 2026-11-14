@@ -1,8 +1,7 @@
 export const common = {
   appName: 'FileGrid',
-  footer: 'Prototip FileGrid · Hackathon PPC',
-  notOfficial: 'Nu este un produs oficial PPC sau Rețele Electrice România',
-  mockMarker: 'Date simulate',
+  footer: '© 2026 FileGrid',
+  footerTagline: 'Fișiere de teren · Rețea',
   skipToContent: 'Sari la conținut',
   retry: 'Reîncearcă',
   copy: 'Copiază',

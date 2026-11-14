@@ -1,8 +1,7 @@
 'use client';
 
-import { Info, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { MockMarker } from '@/components/MockMarker';
 import { Button } from '@/components/ui/button';
 import { StorageHealthStrip } from '@/features/health/StorageHealthStrip';
 import type { Me } from '@/lib/api/types';
@@ -22,13 +21,6 @@ export function TopBar({ me, onLogout }: { me: Me; onLogout?: () => void }) {
       <StorageHealthStrip />
       <LiveStatusPill />
       <LivePauseSwitch />
-      {me.demoMode && (
-        <span className="hidden h-[30px] items-center gap-1.5 rounded-chip border-[1.5px] border-info px-2.5 text-xs font-bold tracking-wide text-info-ink uppercase md:inline-flex">
-          <Info aria-hidden="true" className="size-4" />
-          {t.shell.envDemo}
-        </span>
-      )}
-      <MockMarker />
       <RoleSlot me={me} />
       <span className="sr-only">{t.shell.user(me.realUser.displayName)}</span>
       {onLogout && (

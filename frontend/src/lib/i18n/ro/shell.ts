@@ -1,5 +1,5 @@
 export const shell = {
-  groups: { monitoring: 'Monitorizare', files: 'Fișiere', admin: 'Administrare', demo: 'Demo' },
+  groups: { monitoring: 'Monitorizare', files: 'Fișiere', admin: 'Administrare', demo: 'Operațiuni' },
   nav: {
     guarantees: 'Garanții de business',
     meters: 'Contoare live',
@@ -12,7 +12,6 @@ export const shell = {
     demo: 'Cameră de control',
   },
   mainNav: 'Navigare principală',
-  envDemo: 'Demo · VPS',
   tagline: 'Fișiere de teren · Rețea',
   user: (name: string) => `Utilizator: ${name}`,
 } as const;

@@ -8,6 +8,5 @@ test('healthz and the login page are reachable and accessible', async ({ page, r
 
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Intră în cont' })).toBeVisible();
-  await expect(page.getByText('Date simulate')).toBeVisible();
   await expectNoAxeViolations(page);
 });
