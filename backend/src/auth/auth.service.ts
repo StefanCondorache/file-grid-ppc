@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
@@ -38,8 +38,14 @@ export interface IssuedSession {
   readonly maxAgeS: number;
 }
 
+/** What the login page needs before it shows the form (GET /auth/login-options); no secrets. */
+export interface LoginOptions {
+  readonly passwordless: boolean;
+}
+
 @Injectable()
-export class AuthService {
+export class AuthService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(AuthService.name);
   // Verified against when the username is unknown, so both failures take the same time.
   private readonly timingEqualiser = hashPassword('filegrid-timing-equaliser');
 
@@ -51,14 +57,47 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  async login(username: string, password: string, clientIp: string): Promise<IssuedSession> {
+  onApplicationBootstrap(): void {
+    if (this.config.passwordlessLogin) {
+      this.logger.warn(
+        'passwordless login is on (FILEGRID_PASSWORDLESS_LOGIN, demo mode): accounts log in without a password',
+      );
+    } else if (this.config.passwordlessLoginRequested) {
+      this.logger.warn(
+        'FILEGRID_PASSWORDLESS_LOGIN is ignored because FILEGRID_DEMO_MODE is false: passwords are required',
+      );
+    }
+  }
+
+  loginOptions(): LoginOptions {
+    return { passwordless: this.config.passwordlessLogin };
+  }
+
+  /**
+   * Checks the credentials and issues a session. With passwordless login on (demo mode only) the
+   * password is not checked: an existing username is enough.
+   */
+  async login(
+    username: string,
+    password: string | undefined,
+    clientIp: string,
+  ): Promise<IssuedSession> {
     const limiterKey = `${clientIp}|${username.toLowerCase()}`;
     this.limiter.check(limiterKey);
 
-    const user = await this.authenticate(username, password);
+    const passwordless = this.config.passwordlessLogin;
+    const audited = passwordless ? { demo: true, details: 'passwordless' } : {};
+    const user = passwordless
+      ? await this.findUser(username)
+      : await this.authenticate(username, password ?? '');
     if (!user) {
       this.limiter.recordFailure(limiterKey);
-      await this.audit.record(this.db, { actor: username, action: 'login', outcome: 'failure' });
+      await this.audit.record(this.db, {
+        actor: username,
+        action: 'login',
+        outcome: 'failure',
+        ...audited,
+      });
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Utilizator sau parolă greșită.');
     }
 
@@ -73,7 +112,12 @@ export class AuthService {
       exp: issuedAt + this.config.sessionTtlMinutes * 60,
       idle: issuedAt + this.config.sessionIdleMinutes * 60,
     });
-    await this.audit.record(this.db, { actor: user.username, action: 'login', outcome: 'success' });
+    await this.audit.record(this.db, {
+      actor: user.username,
+      action: 'login',
+      outcome: 'success',
+      ...audited,
+    });
     return session;
   }
 
@@ -240,12 +284,16 @@ export class AuthService {
     };
   }
 
-  private async authenticate(username: string, password: string) {
-    const user = await this.db
+  private findUser(username: string) {
+    return this.db
       .selectFrom('users')
       .select(['id', 'username', 'display_name', 'password_hash', 'role'])
       .where('username', '=', username)
       .executeTakeFirst();
+  }
+
+  private async authenticate(username: string, password: string) {
+    const user = await this.findUser(username);
     const valid = await verifyPassword(
       user?.password_hash ?? (await this.timingEqualiser),
       password,

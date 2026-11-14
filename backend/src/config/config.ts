@@ -36,6 +36,8 @@ const envSchema = z.object({
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(1).default(10),
   LOGIN_WINDOW_S: z.coerce.number().int().min(1).default(300),
   FILEGRID_DEMO_MODE: bool.default(true),
+  // Temporary demo switch: log in by picking a role, without a password. Ignored unless demo mode is on.
+  FILEGRID_PASSWORDLESS_LOGIN: bool.default(false),
   // Password of the per-role demo accounts (teren, dispecerat, racordari, auditor); default ADMIN_PASSWORD.
   DEMO_USERS_PASSWORD: z.string().min(8, 'must be at least 8 characters').optional(),
   SIMULATOR_URL: z.string().url().default('http://filegrid-simulator.filegrid.svc:8080'),
@@ -62,6 +64,13 @@ export interface AppConfig {
   readonly loginMaxFailures: number;
   readonly loginWindowS: number;
   readonly demoMode: boolean;
+  /**
+   * Login without a password (POST /auth/login checks only that the account exists): true only when
+   * FILEGRID_PASSWORDLESS_LOGIN and FILEGRID_DEMO_MODE are both on.
+   */
+  readonly passwordlessLogin: boolean;
+  /** FILEGRID_PASSWORDLESS_LOGIN as set, even when demo mode is off and it has no effect. */
+  readonly passwordlessLoginRequested: boolean;
   readonly demoUsersPassword: string;
   readonly simulatorUrl: string;
   readonly uploadSessionTtlHours: number;
@@ -133,6 +142,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     loginMaxFailures: e.LOGIN_MAX_FAILURES,
     loginWindowS: e.LOGIN_WINDOW_S,
     demoMode: e.FILEGRID_DEMO_MODE,
+    passwordlessLogin: e.FILEGRID_PASSWORDLESS_LOGIN && e.FILEGRID_DEMO_MODE,
+    passwordlessLoginRequested: e.FILEGRID_PASSWORDLESS_LOGIN,
     demoUsersPassword: e.DEMO_USERS_PASSWORD ?? e.ADMIN_PASSWORD,
     simulatorUrl: e.SIMULATOR_URL,
     uploadSessionTtlHours: e.UPLOAD_SESSION_TTL_HOURS,

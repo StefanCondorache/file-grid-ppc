@@ -67,6 +67,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig(env)).toThrow(/ADMIN_PASSWORD/);
   });
 
+  it('turns passwordless login on only together with demo mode', () => {
+    const effective = (env: NodeJS.ProcessEnv) => {
+      const config = loadConfig({ ...BASE, ...env });
+      return [config.passwordlessLogin, config.passwordlessLoginRequested];
+    };
+
+    expect(effective({})).toEqual([false, false]);
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'true' })).toEqual([true, true]);
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'true', FILEGRID_DEMO_MODE: 'false' })).toEqual(
+      [false, true],
+    );
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'false' })).toEqual([false, false]);
+    expect(() => loadConfig({ ...BASE, FILEGRID_PASSWORDLESS_LOGIN: 'maybe' })).toThrow(
+      /FILEGRID_PASSWORDLESS_LOGIN/,
+    );
+  });
+
   it('parses boolean switches', () => {
     const config = loadConfig({ ...BASE, FILEGRID_DEMO_MODE: 'false', COOKIE_SECURE: '0' });
 
