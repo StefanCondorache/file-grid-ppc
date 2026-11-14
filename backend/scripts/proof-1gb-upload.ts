@@ -13,12 +13,21 @@
  * (when passwordless login is off; never printed). PROOF_MEMORY_CMD prints one line per pod with
  * the pod name first and a `<n>Mi` value (as kubectl top does). The file is a drone video named
  * test-p2-proof-1gb-*.bin; it stays stored (the API has no delete).
+ *
+ * The parts go over HTTP/1.1 keep-alive (node:http/https), not fetch: Node 26's fetch speaks HTTP/2
+ * to Traefik, and there some part answers were lost (stream reset ENHANCE_YOUR_CALM) although the
+ * backend had stored the part (TASKS.md, "1 GB proof results").
  */
 import { execFile } from 'node:child_process';
 import { createCipheriv, createHash } from 'node:crypto';
+import * as http from 'node:http';
+import * as https from 'node:https';
 
 const BASE = (process.env.FILEGRID_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '');
 const API = `${BASE}/api/v1`;
+const IS_HTTPS = new URL(BASE).protocol === 'https:';
+const sendRequest: typeof http.request = IS_HTTPS ? https.request : http.request;
+const PART_TIMEOUT_MS = 120_000;
 const CSRF = { 'X-Requested-With': 'filegrid' };
 const MiB = 1024 * 1024;
 const SIZE = Math.round(Number(process.env.PROOF_SIZE_MIB ?? 1126) * MiB);
@@ -149,25 +158,62 @@ async function call(
   };
 }
 
-/** PUT one part with its SHA-256; a 5xx (storage hiccup, busy category) is retried with backoff. */
-async function putPart(cookie: string, uploadId: string, n: number, bytes: Buffer): Promise<void> {
-  for (let attempt = 1; ; attempt += 1) {
-    const response = await fetch(`${API}/uploads/${uploadId}/parts/${n}`, {
-      method: 'PUT',
-      headers: {
-        ...CSRF,
-        Cookie: cookie,
-        'Content-Type': 'application/octet-stream',
-        'X-Part-SHA256': sha256Of(bytes),
+/** Parts sent again after a 5xx or a network error; shown in the report. */
+let partRetries = 0;
+
+/** HTTP/1.1 keep-alive connections for the parts, one per worker. */
+const partAgent = new (IS_HTTPS ? https.Agent : http.Agent)({
+  keepAlive: true,
+  maxSockets: PARALLEL,
+});
+
+/** One PUT of a part over HTTP/1.1; resolves with the status once the answer is read. */
+function sendPart(path: string, headers: Record<string, string>, bytes: Buffer): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = sendRequest(
+      `${API}${path}`,
+      {
+        method: 'PUT',
+        agent: partAgent,
+        headers: { ...headers, 'Content-Length': String(bytes.length) },
       },
-      // A view on the same memory (no copy); cipher output is never a SharedArrayBuffer.
-      body: new Uint8Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.length),
-    });
-    await response.arrayBuffer();
-    if (response.ok) return;
-    if (attempt >= PART_ATTEMPTS || response.status < 500) {
-      throw new ApiError(`part ${n}: HTTP ${response.status}`);
+      (response) => {
+        response.resume(); // the small JSON answer is not needed
+        response.on('end', () => resolve(response.statusCode ?? 0));
+        response.on('error', reject);
+      },
+    );
+    request.setTimeout(PART_TIMEOUT_MS, () => request.destroy(new Error('part timeout')));
+    request.on('error', reject);
+    request.end(bytes);
+  });
+}
+
+/**
+ * PUT one part with its SHA-256. A 5xx or a network error is retried with backoff, as the
+ * browser's upload engine does; a 4xx is final.
+ */
+async function putPart(cookie: string, uploadId: string, n: number, bytes: Buffer): Promise<void> {
+  const headers = {
+    ...CSRF,
+    Cookie: cookie,
+    'Content-Type': 'application/octet-stream',
+    'X-Part-SHA256': sha256Of(bytes),
+  };
+  for (let attempt = 1; ; attempt += 1) {
+    let problem: string;
+    try {
+      const status = await sendPart(`/uploads/${uploadId}/parts/${n}`, headers, bytes);
+      if (status >= 200 && status < 300) return;
+      problem = `HTTP ${status}`;
+      if (status < 500) throw new ApiError(problem);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      problem = describe(error);
     }
+    if (attempt >= PART_ATTEMPTS) throw new ApiError(`${problem}, after ${attempt} attempts`);
+    partRetries += 1;
+    say(`  part ${n}: ${problem}; retry ${attempt}/${PART_ATTEMPTS - 1}`);
     await sleep(attempt * 2000);
   }
 }
@@ -183,12 +229,17 @@ async function uploadParts(
   const waiting = new Map<number, Buffer>();
   let next = 1;
   let hashed = 1;
+  let failed = false;
   const worker = async (): Promise<void> => {
-    while (next <= partCount) {
+    while (!failed && next <= partCount) {
       const n = next;
       next += 1;
       const bytes = partBytes(n, Math.min(chunkSize, SIZE - (n - 1) * chunkSize));
-      await putPart(cookie, uploadId, n, bytes);
+      await putPart(cookie, uploadId, n, bytes).catch((error: unknown) => {
+        failed = true; // the other workers stop before their next part
+        throw new ApiError(`part ${n}/${partCount}: ${describe(error)}`);
+      });
+      if (n % Math.max(1, Math.round(partCount / 10)) === 0) say(`  part ${n}/${partCount} sent`);
       // The whole-file hash takes the parts in order: at most PARALLEL parts wait for it.
       waiting.set(n, bytes);
       for (let part = waiting.get(hashed); part; part = waiting.get(hashed)) {
@@ -278,7 +329,11 @@ async function main(): Promise<void> {
 
     memory.phase = 'upload';
     const started = performance.now();
-    const { uploadId, chunkSize, partCount } = await createUpload(cookie, fileName);
+    const { uploadId, chunkSize, partCount } = await createUpload(cookie, fileName).catch(
+      (error: unknown) => {
+        throw new ApiError(`create: ${describe(error)}`);
+      },
+    );
     const sha256 = await uploadParts(cookie, uploadId, chunkSize, partCount);
     const uploadS = seconds(started);
     await memory.sample(); // every phase gets at least one sample, however short
@@ -286,14 +341,20 @@ async function main(): Promise<void> {
 
     memory.phase = 'complete';
     const completing = performance.now();
-    const { fileId, storage } = await complete(cookie, uploadId, sha256, partCount);
+    const { fileId, storage } = await complete(cookie, uploadId, sha256, partCount).catch(
+      (error: unknown) => {
+        throw new ApiError(`complete: ${describe(error)}`);
+      },
+    );
     const completeS = seconds(completing);
     await memory.sample();
     say(`  complete: verified and stored on ${storage} in ${completeS} s`);
 
     memory.phase = 'download';
     const downloading = performance.now();
-    const back = await download(cookie, fileId);
+    const back = await download(cookie, fileId).catch((error: unknown) => {
+      throw new ApiError(`download: ${describe(error)}`);
+    });
     const downloadS = seconds(downloading);
     await memory.sample();
     const match = back.sha256 === sha256 && back.bytes === SIZE && back.header === sha256;
@@ -301,24 +362,32 @@ async function main(): Promise<void> {
     say(`SHA-256 ${match ? 'match' : 'MISMATCH'}: ${sha256}${match ? '' : ` vs ${back.sha256}`}`);
     say('');
     say(
-      '| Size | Parts | Upload s | Complete s | Download s | Stored on | SHA-256 after download |',
+      '| Size | Parts | Part retries | Upload s | Complete s | Download s | Stored on | SHA-256 after download |',
     );
-    say('|---|---|---|---|---|---|---|');
+    say('|---|---|---|---|---|---|---|---|');
     const size = `${(SIZE / MiB).toFixed(0)} MiB`;
     const parts = `${partCount} x ${chunkSize / MiB} MiB`;
     const verdict = match ? 'match' : 'MISMATCH';
-    say(
-      `| ${size} | ${parts} | ${uploadS} | ${completeS} | ${downloadS} | ${storage} | ${verdict} |`,
-    );
+    const timings = `${uploadS} | ${completeS} | ${downloadS}`;
+    say(`| ${size} | ${parts} | ${partRetries} | ${timings} | ${storage} | ${verdict} |`);
     say('');
     memory.report().forEach(say);
     if (!match) process.exitCode = 1;
   } finally {
     memory.stop();
+    partAgent.destroy(); // idle keep-alive sockets would keep the process alive
   }
 }
 
+/** The message and its cause chain ("fetch failed" alone says nothing). */
+function describe(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause === undefined ? '' : ` (${describe(error.cause)})`;
+  const code = (error as { code?: unknown }).code;
+  return `${error.message}${typeof code === 'string' ? ` ${code}` : ''}${cause}`;
+}
+
 main().catch((error: unknown) => {
-  process.stderr.write(`proof failed: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`proof failed: ${describe(error)}\n`);
   process.exitCode = 1;
 });

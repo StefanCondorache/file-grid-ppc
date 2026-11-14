@@ -143,25 +143,40 @@ Each task is a branch on `origin` (`StefanCondorache/file-grid-ppc`), cut from `
 | 4 · Full trace | `p2/trace-spans` | Root `api` span (method, path without query, upload id and part number), `encryption` span (AES-256-GCM, key id, size, time in the cipher), `audit` span; every uploaded part is an `upload.part` operation with its own `traceId` (also when refused); only allow-listed span attributes are stored; `GET /traces/{id}` answers the same 404 as an unknown id to a role that may not see the category. A connection document reads `api → policy → encryption → storage.put → audit → confirm`. | 268/268 |
 | 6 · API docs | `p2/api-docs` | `GET /api/v1/docs-json` (public), the OpenAPI document of the real API: the proposal corrected to what the backend answers. A test fails when a Nest route is missing from it (or it has one Nest lacks), when a real answer or live SSE event does not match its schema, or when a `$ref` dangles. `docs/api.md` now describes the `/stream` events and payloads, `/metrics/matrix`, the bulkhead series, `Range` and the session rule for background GETs. Also fixed there: policy versions answer the `GET /policies` shape (the seeded v1 was a raw DB row), and `/demo/status` no longer shows the storage probe detail (it named the S3 bucket). | 269/269 |
 | 5 · Demo data | `p2/demo-seed` | `npm run seed:demo` (in `backend/`, `FILEGRID_URL=https://<host>`): 60 fault records (Dobrogea 27, Muntenia 21, Banat 12; the substation names carry the county, e.g. `Stația 110 kV Medgidia (CT)`), 20 connection documents (PDF, invented applicants and CNPs, encrypted by policy, uploaded by `racordari`), 4 short drone videos (ffmpeg test pattern; skipped without ffmpeg), each uploaded by its demo account. Idempotent (`seed-…`, `RC-SEED-…`). `GET /statistics/grid-insights` then shows three zones with different fault counts. Not run on the VPS: the guide runs it together after the final deploy. | 262/262 |
-| 3 · 1 GB proof | `p2/proof-1gb` | `backend/scripts/proof-1gb-upload.ts`: 1.1 GiB through the resumable API, streamed download, SHA-256 comparison, memory of every backend pod per phase (`PROOF_MEMORY_CMD`, `kubectl top`), markdown tables for the results below. Tested locally at 40 MiB. This branch also holds this TASKS.md section. | 263/263 |
+| 3 · 1 GB proof | `p2/proof-1gb` | `backend/scripts/proof-1gb-upload.ts`: 1.1 GiB through the resumable API, streamed download, SHA-256 comparison, memory of every backend pod per phase (`PROOF_MEMORY_CMD`), markdown tables. **Run on the VPS: passed** (results below). Tested locally at 40 MiB. This branch also holds this TASKS.md section. | 263/263 |
 
 **For the frontend (Mihail):** `API_SPEC=https://<host>/api/v1/docs-json npm run gen:api` generates the types from the real API. Measured on the current `feat/handoff` frontend (`tsc --noEmit`, compared with its own 73 existing errors), the switch adds 27 type errors: 26 in `src/mocks/` and test files (category ids `fault_records`, storage ids `s3`, `storageControl` gone from `DemoStatus`) and 1 in a screen, `src/features/audit/AuditTable.tsx:34` (an audit actor's role can be `null`, e.g. a system actor). `fallbackAvailable` (used by "Restaurează din rezervă") is not sent by the backend nor described anywhere: it needs a decision (P2 adds it, or the screen drops it).
 
-**1 GB proof results (VPS, NestJS backend).** Pending: the run needs the team's go-ahead (1.1 GiB through the domain; the test file then stays on the FTP storage, the API has no delete). Command, run on the VPS from the repo checkout (it needs Node 26 there; not checked yet, since nothing was run on the VPS for these tasks):
+**1 GB proof results (VPS, NestJS backend `1040608`, 14.11.2026 20:49). ✅ Requirement met.** 1,126 MiB went through the public domain (Traefik → backend → FTP, the `drone_videos` policy), came back with the same SHA-256, and no backend pod grew by more than 29 MiB (the budget is +64 MiB). The memory was sampled every 2 s, before and during each phase, on all 3 backend pods (the HPA was at 3): the RSS of the node process (`VmRSS` of PID 1 through `kubectl exec`, instant) and `kubectl top` (cgroup working set, averaged over 15-60 s). Run on the VPS host (Node 26.13 is installed there) from a copy of the script in `/tmp`, removed afterwards:
 
 ```
-FILEGRID_URL=https://ppc.filegrid.cc.cd \
-PROOF_MEMORY_CMD='kubectl -n filegrid top pod -l app=filegrid-backend --no-headers' \
+FILEGRID_URL=https://ppc.filegrid.cc.cd PROOF_SAMPLE_S=2 PROOF_MEMORY_CMD='sh memory.sh' \
 node backend/scripts/proof-1gb-upload.ts
+# memory.sh: for each pod of `kubectl -n filegrid get pods -l app=filegrid-backend`:
+#   kubectl exec <pod> -- grep VmRSS /proc/1/status  -> "<pod>-rss <n>Mi"
+#   then `kubectl top pod -l app=filegrid-backend`    -> "<pod>-top <n>Mi"
 ```
 
-| Size | Parts | Upload s | Complete s | Download s | Stored on | SHA-256 after download |
-|---|---|---|---|---|---|---|
-| _pending_ | | | | | | |
+| Size | Parts | Part retries | Upload s | Complete s | Download s | Stored on | SHA-256 after download |
+|---|---|---|---|---|---|---|---|
+| 1126 MiB | 71 x 16 MiB | 0 | 15.9 | 22.4 | 14.5 | ftp | match |
+| 100 MiB (trial) | 7 x 16 MiB | 0 | 3.5 | 2.9 | 1.2 | ftp | match |
 
-| Backend pod | Baseline MiB | Upload peak | Complete peak | Download peak | Growth MiB | Under +64 MiB |
+| Backend pod (1126 MiB run) | Baseline MiB | Upload peak | Complete peak | Download peak | Growth MiB | Under +64 MiB |
 |---|---|---|---|---|---|---|
-| _pending_ | | | | | | |
+| fdvhm, node RSS | 210 | 218 | 219 | 219 | 9 | yes |
+| gzvhz, node RSS | 209 | 222 | 230 | 238 | 29 | yes |
+| p942j, node RSS | 222 | 238 | 238 | 236 | 16 | yes |
+| fdvhm, kubectl top | 160 | 160 | 165 | 165 | 5 | yes |
+| gzvhz, kubectl top | 155 | 155 | 183 | 183 | 28 | yes |
+| p942j, kubectl top | 209 | 209 | 224 | 224 | 15 | yes |
+
+"Complete" is the server re-reading the 71 staged parts, hashing them and writing the final object: 1.1 GiB in 22 s with at most 29 MiB more memory, so memory does not follow the file size. The test data stays on the FTP storage (no delete in the API): the proof file (1,126 MiB) and two 100 MiB trial files (`test-p2-proof-1gb-*.bin`). The staged parts of three failed trial runs were removed by aborting their uploads (`DELETE /uploads/{id}`).
+
+**Found while running the proof (to follow up):**
+- **HTTP/2 between Node's `fetch` and Traefik:** with Node 26's `fetch` (HTTP/2), some part answers never reached the client (stream reset `NGHTTP2_ENHANCE_YOUR_CALM`), although the backend had stored the part (`200` in its log). curl over HTTP/2 and HTTP/1.1 never lost one, so the script now sends the parts over HTTP/1.1 keep-alive (0 retries since). Not checked: whether browsers hit it with the upload screen's 4 parallel parts (to see in the manual browser test).
+- **P2, backend:** a part sent again with the same `X-Part-SHA256` is answered `alreadyReceived` before its body is read. Over HTTP/2 the server then closes the stream while the client is still sending 16 MiB, so the client sees an error and retries again (seen 4 times in a row). Fix: drain the body before answering.
+- **P2, backend:** abandoned uploads (never completed nor aborted) keep their staged parts forever. A session is marked `expired` only when it is touched, and its parts are not dropped. Fix: a periodic sweep that expires old open sessions and drops their staging.
 
 **Deferred minors (from the review of these branches):** a download whose audit insert fails is no longer recorded in the operations log (the audit now runs first so the trace shows it; both writes go to the same database); an encrypted write that fails shows its `storage.put` error but no `encryption` span; the response-conformance test accepts extra fields, so a newly leaked field would pass it (the `/demo/status` detail has its own test).
 
