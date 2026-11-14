@@ -1,3 +1,4 @@
+import { audit } from './audit';
 import { auth } from './auth';
 import { common } from './common';
 import { errors } from './errors';
@@ -7,4 +8,4 @@ import { shell } from './shell';
 import { upload } from './upload';
 
 // One namespaced key per feature; never spread (spreads silently overwrite colliding keys).
-export const ro = { common, errors, auth, session, shell, live, upload } as const;
+export const ro = { common, errors, auth, session, shell, live, upload, audit } as const;
