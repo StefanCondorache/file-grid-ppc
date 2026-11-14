@@ -15,6 +15,7 @@ export type Origin = S['Origin'];
 export type IntegrityState = S['IntegrityState'];
 export type GuaranteeState = S['GuaranteeState'];
 export type Me = S['Me'];
+export type LoginOptions = S['LoginOptions'];
 export type UserRef = S['UserRef'];
 export type Policy = S['Policy'];
 export type PolicyUpdateRequest = S['PolicyUpdateRequest'];

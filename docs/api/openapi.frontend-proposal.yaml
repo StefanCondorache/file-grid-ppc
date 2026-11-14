@@ -64,6 +64,22 @@ paths:
               schema: { $ref: '#/components/schemas/Me' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/login-options:
+    get:
+      tags: [auth]
+      operationId: auth_loginOptions
+      summary: Whether the login form asks for a password (public, cacheable for 5 s)
+      description: |
+        `passwordless` is true only when the backend runs with `FILEGRID_PASSWORDLESS_LOGIN=true` and demo mode
+        on (temporary, for the demo). The login page then shows only the role dropdown and sends `{username}`.
+      security: []
+      responses:
+        '200':
+          description: OK
+          headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginOptions' }
   /auth/logout:
     post:
       tags: [auth]
@@ -1044,10 +1060,16 @@ components:
     # ------------------------------------------------------------ auth
     LoginRequest:
       type: object
-      required: [username, password]
+      required: [username]
+      description: '`password` is required unless `GET /auth/login-options` answers `passwordless: true`.'
       properties:
         username: { type: string, maxLength: 100 }
         password: { type: string, format: password, maxLength: 200 }
+    LoginOptions:
+      type: object
+      required: [passwordless]
+      properties:
+        passwordless: { type: boolean }
     Me:
       type: object
       required: [user, realUser, activeRole, roles, capabilities, demoMode, expiresAt, idleExpiresAt, serverTime]

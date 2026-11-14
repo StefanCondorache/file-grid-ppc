@@ -99,6 +99,34 @@
         }
       }
     },
+    "/auth/login-options": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth_loginOptions",
+        "summary": "Whether the login form asks for a password (public, cacheable for 5 s)",
+        "description": "`passwordless` is true only when the backend runs with `FILEGRID_PASSWORDLESS_LOGIN=true` and demo mode\non (temporary, for the demo). The login page then shows only the role dropdown and sends `{username}`.\n",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/logout": {
       "post": {
         "tags": [
@@ -2355,9 +2383,9 @@
       "LoginRequest": {
         "type": "object",
         "required": [
-          "username",
-          "password"
+          "username"
         ],
+        "description": "`password` is required unless `GET /auth/login-options` answers `passwordless: true`.",
         "properties": {
           "username": {
             "type": "string",
@@ -2367,6 +2395,17 @@
             "type": "string",
             "format": "password",
             "maxLength": 200
+          }
+        }
+      },
+      "LoginOptions": {
+        "type": "object",
+        "required": [
+          "passwordless"
+        ],
+        "properties": {
+          "passwordless": {
+            "type": "boolean"
           }
         }
       },

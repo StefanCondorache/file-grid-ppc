@@ -10,13 +10,18 @@ const fail = (status: number, code: string, message: string) => HttpResponse.jso
 const unauthenticated = () => fail(401, 'UNAUTHENTICATED', 'Sesiunea a expirat.');
 const ACTING_ROLES: Role[] = ['teren', 'dispecerat', 'racordari', 'auditor'];
 
+/** Like the backend: passwordless login exists only together with demo mode (both are mock knobs). */
+const passwordless = () => (mockSettings().passwordless ?? false) && (mockSettings().demoMode ?? true);
+
 export const authHandlers = [
+  http.get(apiUrl('/auth/login-options'), () => HttpResponse.json({ passwordless: passwordless() })),
   http.post(apiUrl('/auth/login'), async ({ request }) => {
     const body = (await request.json()) as { username?: string; password?: string };
+    const free = passwordless();
     const user = SEED_USERS.find((u) => u.username === body.username);
-    if (!user || body.password !== SEED_PASSWORD) return fail(401, 'INVALID_CREDENTIALS', 'Rol sau parolă greșită.');
+    if (!user || (!free && body.password !== SEED_PASSWORD)) return fail(401, 'INVALID_CREDENTIALS', 'Rol sau parolă greșită.');
     const s = startSession(user);
-    db.audit.append({ actor: user, actingAs: null, demo: false, action: 'login', traceId: trace() });
+    db.audit.append({ actor: user, actingAs: null, demo: free, action: 'login', ...(free ? { details: 'passwordless' } : {}), traceId: trace() });
     return HttpResponse.json(toMe(s));
   }),
   http.get(apiUrl('/auth/me'), () => {

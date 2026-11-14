@@ -5,6 +5,7 @@ type Filters = Record<string, string | number | boolean | undefined>;
 /** Every query key of the app, defined once (slices never edit this file). */
 export const qk = {
   me: ['auth', 'me'] as const,
+  loginOptions: ['auth', 'login-options'] as const,
   files: {
     all: ['files'] as const,
     list: (f: Filters) => ['files', 'list', f] as const,
