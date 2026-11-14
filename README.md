@@ -112,6 +112,63 @@ ftp.set_pasv(True)
 
 FTP pasiv în k3s: răspunsul PASV conține IP-ul podului `ftp-0`, accesibil direct din cluster; NetworkPolicy permite porturile 21 și 21000-21009 doar clienților de mai sus.
 
+## Contracte pentru P2/P3
+
+Acestea sunt contractele pe care s-a construit partea P1 (infra, storage, securitate). Dacă schimbați ceva, anunțați echipa.
+
+**Identificatori comuni**
+- Categorii: `meter_readings`, `fault_records`, `connection_documents`, `drone_videos` (aceleași în politici, metrici, dashboard-uri și UI).
+- Storage-uri: `s3`, `ftp`, `db` (valorile câmpurilor primary/fallback din politici).
+
+**Storage (`backend/app/storage/`, async, pentru FastAPI)**
+```python
+from app.storage.registry import StorageRegistry
+from app.storage.base import verify_stream, StorageUnavailable, ObjectNotFound, IntegrityError
+from app.storage.metrics import use_category
+
+registry = StorageRegistry.from_env()          # în lifespan: await registry.start() (pornește health monitor-ul)
+store = registry.get("s3")                      # ResilientStorage: circuit breaker + timeouts + metrici
+with use_category("fault_records"):
+    size, sha256 = await store.put_stream("fault_records/2026/abc.bin", chunks)   # chunks: async iterator de bytes
+    async for b in verify_stream(store.get_stream(key), sha256): ...             # IntegrityError la nepotrivire
+```
+- Un storage căzut aruncă imediat `StorageUnavailable` (circuitul e deschis); celelalte categorii nu sunt afectate. Tratați-l ca 503 sau treceți pe storage-ul fallback din politică.
+- Upload-urile reluabile trebuie să fie stateless: bucățile (chunk-urile) se pun în storage partajat (de ex. `staging/{upload_id}/{n}`), niciodată pe discul podului.
+- Adaptorul DB folosește schema `blobstore`. Tabelele voastre și migrațiile (Alembic) stau în altă schemă.
+- Dependențele sunt în `backend/app/storage/requirements.txt`; includeți-le în pachetul backend-ului. Testele de integrare rulează cu `backend/app/storage/tests/run-in-cluster.sh` (job k8s cu limită de 256Mi).
+
+**Criptare pentru documentele de racordare (`backend/app/crypto/`)**
+- `encrypt_stream(chunks, kek)` și `decrypt_stream(chunks, keyring)` sunt streaming AES-256-GCM, cu o cheie per fișier împachetată cu KEK-ul din `FILEGRID_KEK` / `FILEGRID_KEK_ID` (Secret `filegrid-app-secrets`).
+- Politica are `encryption: true/false`. În metadate păstrați două hash-uri: al fișierului original (cel verificat la download) și al octeților stocați (`put_stream` îl întoarce pe acesta).
+
+**Backend (P2)**
+- Imaginea `backend/Dockerfile` ascultă pe portul 8000 și rulează ca uid 10001.
+- Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. API-ul e servit sub `/api` (Ingress-ul nu taie prefixul) și expune `/metrics`.
+- Env: Secret-urile `filegrid-storage-credentials` și `filegrid-app-secrets` (`JWT_SECRET`, `METER_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FILEGRID_KEK*`) plus `FILEGRID_PG_HOST`, `FILEGRID_S3_ENDPOINT`, `FILEGRID_FTP_HOST` (setate în `deploy/k8s/app/`).
+- Metrici așteptate de dashboard și alerte:
+  - `filegrid_uploads_total{category,outcome}` și `filegrid_upload_duration_seconds{category,outcome}`; outcome `success`/`ok`/`duplicate` contează ca succes;
+  - `filegrid_meter_readings_stored_total`, `filegrid_meter_readings_duplicates_total` (retry-uri deduplicate) și `filegrid_meter_readings_duplicate_stored_total` (trebuie să rămână 0).
+- Loguri JSON pe stdout cu `trace_id`, `category`, `storage`, `operation`, `file_id`. `trace_id` vine din header-ul `X-Trace-Id` (îl generați dacă lipsește) și se întoarce în răspuns.
+- Panoul demo: ServiceAccount-ul `filegrid-backend` poate scala StatefulSet-urile `postgres`/`s3`/`ftp` (0↔1) în `filegrid-storage` (`deploy/k8s/demo-rbac.yaml`), de exemplu cu clientul Python `kubernetes`.
+
+**Simulator (P2)**
+- Imaginea `simulator/Dockerfile` ascultă pe portul 8080 (`/metrics` și un endpoint de control pentru rata 10x) și rulează ca uid 10001.
+- Env: `BACKEND_URL`, `METER_API_KEY`, `METER_RATE`.
+- Metrici: `filegrid_sim_readings_sent_total` (citiri unice) și `filegrid_sim_readings_acked_total`.
+
+**Frontend (P3)**
+- Imaginea `frontend/Dockerfile` e nginx non-root (uid 101) pe portul 8080 și servește build-ul React.
+- Rute pe domeniu: `/` → frontend, `/api` → backend, `/grafana` → Grafana (dashboard-ul `/grafana/d/filegrid-overview`).
+
+**Pornire și demo (P1)**
+- `sudo make up`: k3s, HTTPS, storage-urile, observabilitatea, apoi aplicația. Construiește și importă imaginile pentru fiecare folder care are un `Dockerfile`; fără imagine de frontend rămâne placeholder-ul.
+- `make grafana-password`: parola de admin Grafana.
+- Alertele se văd în Grafana/Alertmanager. Pentru notificări Discord/Telegram se editează Secret-ul `monitoring/alertmanager-config` (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
+- Chaos:
+  - `make chaos-storage-stop S=s3` / `make chaos-storage-start S=s3`;
+  - `sudo make chaos-netem-on NS=filegrid POD=<pod> DELAY=300ms LOSS=5%` (doar în rețeaua podului, nu pe interfețele VPS-ului) / `chaos-netem-off`;
+  - `make storage-isolation-check`.
+
 ## HTTPS și Cloudflare
 
 - cert-manager obține certificatul Let's Encrypt (HTTP-01 prin Traefik); Traefik redirecționează permanent HTTP la HTTPS.
