@@ -6,7 +6,7 @@ Platformă care rutează fișierele încărcate către FTP, S3 sau baza de date,
 
 ## Quickstart
 
-Cerințe: Docker cu Compose, `make`, `openssl`.
+Cerințe: Docker Engine cu pluginul Compose v2 (testat cu compose v5.7.1; comportamentul `--wait` cu servicii one-shot variază pe versiunile v2 mai vechi), `make`, `openssl`; porturile 5432, 9000, 8888, 21 și 21000-21009 libere pe `127.0.0.1`.
 
 ```bash
 make infra-up     # generează infra/.env (o singură dată) și pornește PostgreSQL, S3 (SeaweedFS), FTP
