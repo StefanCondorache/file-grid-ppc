@@ -1,12 +1,13 @@
 import type { StreamEvent, StreamEventType } from '@/lib/live/events';
 import type { Policy } from '@/lib/api/types';
 import {
-  CATEGORY_IDS, STORAGE_IDS, ZONES, type Alert, type BulkheadPoint, type CategoryId, type Comparator, type GuaranteeMetric,
-  type GuaranteeStatus, type MeterCounters, type SimulatorMode, type SimulatorStatus, type StorageHealth, type StorageId, type Zone,
+  CATEGORY_IDS, STORAGE_IDS, ZONES, type Alert, type BulkheadPoint, type BulkheadResponse, type CategoryId, type Comparator,
+  type GuaranteeMetric, type GuaranteeStatus, type MatrixWindow, type MeterCounters, type MetricsCell, type MetricsMatrix, type SeriesWindow,
+  type SimulatorMode, type SimulatorStatus, type StorageHealth, type StorageId, type Zone,
 } from '@/lib/monitoring/contract';
 import { db as sharedDb, type MockDb } from './db';
 import {
-  DRONE_TRANSFERS, DUPLICATE_RATIO, HISTORY_TICKS, JITTER, LOAD_LATENCY, NORMAL_RATE_PER_S, PROBE_MS, PROFILES,
+  DRONE_TRANSFERS, DUPLICATE_RATIO, FALLBACK_PENALTY, HISTORY_TICKS, JITTER, LOAD_LATENCY, MAX_CONCURRENCY, NORMAL_RATE_PER_S, PROBE_MS, PROFILES,
   SERIES_POINTS, SMOOTHING, STORM_FACTOR, THRESHOLDS, TICK_MS, ZONE_SHARE, seedAlerts, seedMonitoringState, type MonitoringState, type Storm,
 } from './seed/monitoring';
 
@@ -24,8 +25,8 @@ export type ScenarioOptions = {
   now?: () => number;
 };
 
-/** One category in one tick: where it wrote and how fast. */
-type Sample = { storage: StorageId | null; p95Ms: number | null; opsPerS: number };
+/** One category in one tick: where it wrote, how fast, and the attempts that failed on its down primary. */
+type Sample = { storage: StorageId | null; p95Ms: number | null; opsPerS: number; failed: { storage: StorageId; opsPerS: number } | null };
 type Tick = { t: number; samples: Record<CategoryId, Sample> };
 
 type AlertRow = Alert & Record<string, unknown>;
@@ -56,6 +57,21 @@ export function toStorageId(name: string): StorageId {
 const iso = (ms: number) => new Date(ms).toISOString();
 const TICK_S = TICK_MS / 1000;
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const MATRIX_WINDOW_S: Record<MatrixWindow, number> = { '5m': 300, '1h': 3600, '24h': 86_400 };
+
+/** Ops-weighted percentile of per-tick latencies. */
+function percentile(xs: { v: number; w: number }[], q: number): number | null {
+  if (xs.length === 0) return null;
+  const sorted = [...xs].sort((a, b) => a.v - b.v);
+  const total = sorted.reduce((n, x) => n + x.w, 0);
+  let acc = 0;
+  for (const x of sorted) {
+    acc += x.w;
+    if (acc >= q * total) return Math.round(x.v);
+  }
+  return Math.round(sorted.at(-1)!.v);
+}
 const OK: Verdict = { state: 'ok', causeCode: null, causeFacts: {} };
 
 function metric(key: string, value: number | string | null, extra: { unit?: string; threshold?: number; comparator?: Comparator } = {}): GuaranteeMetric {
@@ -86,10 +102,13 @@ export function createScenario(options: ScenarioOptions = {}) {
     d.find<MonitoringState>('monitoring', (r) => r.id === 'state') ?? d.insert<MonitoringState>('monitoring', seedMonitoringState());
   const save = (patch: Partial<MonitoringState>) => d.update<MonitoringState>('monitoring', (r) => r.id === 'state', patch);
 
-  /** The live policy's storages (the db is seeded with the proposal's ids and labels). */
+  const legacyOf = (c: CategoryId) => Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
+  const ofCategory = (c: CategoryId) => (row: Record<string, unknown>) => row.category === c || row.category === legacyOf(c);
+
+  /** The live policy (the db is seeded with the proposal's ids and labels, so 6d's edits show here). */
+  const policy = (c: CategoryId) => d.find<Policy & { maxConcurrency?: number }>('policies', ofCategory(c));
   const route = (c: CategoryId): { primary: StorageId; fallback: StorageId | null } => {
-    const legacy = Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
-    const p = d.find<Policy>('policies', (x) => (x.category as string) === c || x.category === legacy);
+    const p = policy(c);
     return { primary: p ? toStorageId(p.primaryStorage) : 'db', fallback: p?.fallbackStorage ? toStorageId(p.fallbackStorage) : null };
   };
   const up = (s: StorageId | null): s is StorageId => s !== null && d.storage.status(LABEL[s]) !== 'down';
@@ -106,12 +125,15 @@ export function createScenario(options: ScenarioOptions = {}) {
   const smoothed = Object.fromEntries(CATEGORY_IDS.map((c) => [c, PROFILES[c].p95Ms])) as Record<CategoryId, number>;
 
   const sample = (c: CategoryId, mult: number): Sample => {
+    const { primary } = route(c);
     const storage = target(c);
-    const opsPerS = Math.round(PROFILES[c].opsPerS * mult * 100) / 100;
-    if (storage === null || opsPerS === 0) return { storage, p95Ms: null, opsPerS: storage === null ? 0 : opsPerS };
-    const goal = PROFILES[c].p95Ms * (1 + (Math.max(mult, 1) - 1) * LOAD_LATENCY);
+    const opsPerS = round2(PROFILES[c].opsPerS * mult);
+    // Every write tries the primary first; while it is down those attempts fail fast, then go to the fallback.
+    const failed = !up(primary) && opsPerS > 0 ? { storage: primary, opsPerS } : null;
+    if (storage === null || opsPerS === 0) return { storage, p95Ms: null, opsPerS: storage === null ? 0 : opsPerS, failed };
+    const goal = PROFILES[c].p95Ms * (1 + (Math.max(mult, 1) - 1) * LOAD_LATENCY) * (storage === primary ? 1 : FALLBACK_PENALTY);
     smoothed[c] += (goal - smoothed[c]) * SMOOTHING;
-    return { storage, p95Ms: Math.round(smoothed[c] * (1 + (random() * 2 - 1) * JITTER)), opsPerS };
+    return { storage, p95Ms: Math.round(smoothed[c] * (1 + (random() * 2 - 1) * JITTER)), opsPerS, failed };
   };
 
   const samples = (mult: (c: CategoryId) => number) =>
@@ -123,9 +145,6 @@ export function createScenario(options: ScenarioOptions = {}) {
     return Array.from({ length: HISTORY_TICKS }, (_, i) => ({ t: t0 - (HISTORY_TICKS - i) * TICK_MS, samples: samples(() => 1) }));
   };
   let history: Tick[] = prefill();
-
-  const legacyOf = (c: CategoryId) => Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
-  const ofCategory = (c: CategoryId) => (row: Record<string, unknown>) => row.category === c || row.category === legacyOf(c);
 
   /** Meter readings stored in the last tick, per zone (the rate shown). */
   let lastStored: Record<Zone, number> = Object.fromEntries(ZONES.map((z) => [z, NORMAL_RATE_PER_S * ZONE_SHARE[z] * TICK_S])) as Record<Zone, number>;
@@ -367,6 +386,49 @@ export function createScenario(options: ScenarioOptions = {}) {
         category,
         points: recent.map((tk) => ({ t: iso(tk.t), p95Ms: tk.samples[category].p95Ms, opsPerS: tk.samples[category].opsPerS })),
       }));
+    },
+
+    /**
+     * Category × storage cells (GET /metrics/matrix) from the kept history: 5 minutes, so longer windows show the
+     * same samples. Latencies are of successful operations; failed attempts count in `requests` and `errorRate`.
+     */
+    matrix(window: MatrixWindow = '5m'): MetricsMatrix {
+      const since = now() - MATRIX_WINDOW_S[window] * 1000;
+      const ticks = history.filter((tk) => tk.t > since);
+      const spanS = Math.max(TICK_S, ticks.length * TICK_S);
+      const cells = CATEGORY_IDS.flatMap((category) => STORAGE_IDS.map((storage): MetricsCell => {
+        const all = ticks.map((tk) => tk.samples[category]);
+        const ok = all.filter((x) => x.storage === storage && x.p95Ms !== null).map((x) => ({ v: x.p95Ms!, w: x.opsPerS }));
+        const okN = ok.reduce((n, x) => n + x.w * TICK_S, 0);
+        const errN = all.reduce((n, x) => n + (x.failed?.storage === storage ? x.failed.opsPerS * TICK_S : 0), 0);
+        if (okN + errN === 0) {
+          return { category, storage, requests: 0, noTraffic: true, p50Ms: null, p95Ms: null, p99Ms: null, throughputBps: null, opsPerS: null, errorRate: null };
+        }
+        const p50Ms = percentile(ok.map((x) => ({ v: x.v * 0.55, w: x.w })), 0.5);
+        return {
+          category, storage, requests: Math.round(okN + errN), noTraffic: false,
+          p50Ms, p95Ms: percentile(ok, 0.95), p99Ms: percentile(ok.map((x) => ({ v: x.v * 1.3, w: x.w })), 0.99),
+          throughputBps: p50Ms ? Math.round(PROFILES[category].bytes / (p50Ms / 1000)) : null,
+          opsPerS: round2((okN + errN) / spanS),
+          errorRate: Math.round((errN / (okN + errN)) * 10_000) / 10_000,
+        };
+      }));
+      return { window, generatedAt: iso(now()), cells };
+    },
+
+    /**
+     * Bulkhead state (GET /metrics/bulkhead): the series is always the last minute at the tick step, whatever the
+     * window; compartments by Little's law (in flight = ops/s × latency), capped by the policy's `maxConcurrency`.
+     */
+    bulkhead(window: SeriesWindow = '15m'): BulkheadResponse {
+      const last = history.at(-1)!.samples;
+      const data = CATEGORY_IDS.map((category) => {
+        const x = last[category];
+        const inFlight = Math.ceil((x.opsPerS * (x.p95Ms ?? 0)) / 1000);
+        const max = policy(category)?.maxConcurrency ?? MAX_CONCURRENCY;
+        return { category, active: Math.min(inFlight, max), queued: Math.max(0, inFlight - max) };
+      });
+      return { window, stepS: TICK_S, series: api.series(), data };
     },
 
     /** A `factor`× load on one category for `durationS` (BA-61); a running storm on it is replaced. */

@@ -31,6 +31,10 @@ export const LOAD_LATENCY = 0.5;
 export const SMOOTHING = 0.5;
 /** ± share of jitter around the smoothed latency. */
 export const JITTER = 0.04;
+/** Writes that land on the fallback storage are slower. */
+export const FALLBACK_PENALTY = 1.25;
+/** Bulkhead compartment size when the policy has no `maxConcurrency` (the uploads mock uses the same default). */
+export const MAX_CONCURRENCY = 8;
 /** Health-probe latency per storage when it is up. */
 export const PROBE_MS: Record<StorageId, number> = { s3: 14, ftp: 38, db: 3 };
 

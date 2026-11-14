@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamEvent } from '@/lib/live/events';
-import { CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus, type MeterCounters, type StorageHealth } from '@/lib/monitoring/contract';
+import {
+  CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus, type MeterCounters, type MetricsMatrix, type StorageHealth, type StorageId,
+} from '@/lib/monitoring/contract';
 import { createDb } from './db';
 import { createScenario, type Scenario } from './scenario';
 
@@ -147,5 +149,39 @@ describe('monitoring scenario', () => {
     expect(after.received).toBe(after.unique + after.duplicatesRejected);
     expect(after.unique).toBe(after.byZone.reduce((n, z) => n + z.received, 0));
     expect(s.simulator()).toMatchObject({ mode: 'normal', ratePerS: 10, queueDepth: 0, sentUnique: after.unique, ackedUnique: after.unique });
+  });
+
+  it('matrix: 4 × 3 cells; while S3 is down fault writes land on the slower fallback and S3 records the failures', () => {
+    const s = make();
+    const cell = (m: MetricsMatrix, c: CategoryId, st: StorageId) => m.cells.find((x) => x.category === c && x.storage === st)!;
+    const before = s.matrix('5m');
+    expect(before).toMatchObject({ window: '5m' });
+    expect(before.cells).toHaveLength(12);
+    expect(cell(before, 'fault_records', 's3')).toMatchObject({ noTraffic: false, errorRate: 0 });
+    expect(cell(before, 'fault_records', 'db')).toMatchObject({ noTraffic: true, requests: 0, p95Ms: null, errorRate: null });
+    const { p50Ms, p95Ms, p99Ms } = cell(before, 'fault_records', 's3');
+    expect(p50Ms!).toBeLessThan(p95Ms!);
+    expect(p95Ms!).toBeLessThan(p99Ms!);
+
+    s.setStorage('S3', false);
+    for (let i = 0; i < 10; i++) s.tick();
+    const during = s.matrix('5m');
+    const fallback = cell(during, 'fault_records', 'ftp');
+    expect(fallback).toMatchObject({ noTraffic: false, errorRate: 0 });
+    expect(fallback.p95Ms!).toBeGreaterThan(cell(during, 'fault_records', 's3').p95Ms!);
+    expect(cell(during, 'fault_records', 's3').errorRate!).toBeGreaterThan(0);
+    expect(cell(during, 'meter_readings', 'db').errorRate).toBe(0);
+  });
+
+  it('bulkhead: a fault storm fills the fault compartment while the others keep room', () => {
+    const s = make();
+    s.startStorm('fault_records', 10, 60);
+    for (let i = 0; i < 5; i++) s.tick();
+    const b = s.bulkhead('15m');
+    expect(b).toMatchObject({ window: '15m', stepS: 2 });
+    expect(b.series.map((x) => [x.category, x.points.length])).toEqual(CATEGORY_IDS.map((c) => [c, 30]));
+    const compartment = (c: CategoryId) => b.data.find((x) => x.category === c)!;
+    expect(compartment('fault_records').queued).toBeGreaterThan(0);
+    for (const c of OTHERS) expect(compartment(c).queued).toBe(0);
   });
 });
