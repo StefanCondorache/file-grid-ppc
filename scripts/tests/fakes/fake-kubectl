@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Fake kubectl for scripts/tests. Every call is appended to $FAKE_STATE/calls.
+#  1. Canned answers first: $FAKE_STATE/canned.tsv lines "<ERE matched against the argv>\t<stdout file>\t<status>".
+#  2. Otherwise a tiny object store under $FAKE_STATE/obj/<kind>/<namespace>/<name>.json for namespaces,
+#     secrets and configmaps: get [-o json], create namespace|secret generic --from-env-file|configmap,
+#     patch --type merge (-p JSON | --patch-file F), delete.
+#  3. Anything else: no output, status 0.
+set -euo pipefail
+printf '%s\n' "$*" >> "$FAKE_STATE/calls"
+
+if [ -f "$FAKE_STATE/canned.tsv" ]; then
+  while IFS=$'\t' read -r re out rc; do
+    [ -n "$re" ] || continue
+    if [[ "$*" =~ $re ]]; then
+      [ -z "$out" ] || cat "$out"
+      exit "${rc:-0}"
+    fi
+  done < "$FAKE_STATE/canned.tsv"
+fi
+
+ns=default output="" patch="" patch_file="" from_env="" args=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    -n|--namespace) ns=$2; shift 2 ;;
+    -n=*|--namespace=*) ns=${1#*=}; shift ;;
+    -o) output=$2; shift 2 ;;
+    -o=*) output=${1#*=}; shift ;;
+    -p|--patch) patch=$2; shift 2 ;;
+    --patch-file) patch_file=$2; shift 2 ;;
+    --patch-file=*) patch_file=${1#*=}; shift ;;
+    --from-env-file=*) from_env=${1#*=}; shift ;;
+    --type|--type=*|--save-config|--ignore-not-found|--ignore-not-found=*) [[ $1 == --type ]] && shift; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+verb=${args[0]:-} kind=${args[1]:-} name=${args[2]:-}
+case $kind in namespace|namespaces|ns) kind=namespace; ns=_ ;; secrets) kind=secret ;; configmaps|cm) kind=configmap ;; esac
+file=$FAKE_STATE/obj/$kind/$ns/$name.json
+
+case $verb/$kind in
+  get/namespace|get/secret|get/configmap)
+    [ -f "$file" ] || { echo "Error from server (NotFound): $kind \"$name\" not found" >&2; exit 1; }
+    case $output in json) cat "$file" ;; "") echo "$name" ;; *) echo "fake kubectl: unsupported -o $output" >&2; exit 3 ;; esac ;;
+  create/namespace)
+    mkdir -p "$(dirname "$file")"; jq -n --arg n "$name" '{apiVersion:"v1",kind:"Namespace",metadata:{name:$n}}' > "$file" ;;
+  create/secret)
+    [ "$name" = generic ] && name=${args[3]} && file=$FAKE_STATE/obj/secret/$ns/$name.json
+    [ ! -f "$file" ] || { echo "Error from server (AlreadyExists)" >&2; exit 1; }
+    mkdir -p "$(dirname "$file")"
+    data='{}'
+    if [ -n "$from_env" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        data=$(jq --arg k "${line%%=*}" --arg v "$(printf '%s' "${line#*=}" | base64 -w0)" '.[$k] = $v' <<<"$data")
+      done < "$from_env"
+    fi
+    jq -n --arg n "$name" --arg ns "$ns" --argjson d "$data" \
+      '{apiVersion:"v1",kind:"Secret",type:"Opaque",metadata:{name:$n,namespace:$ns},data:$d}' > "$file" ;;
+  create/configmap)
+    [ ! -f "$file" ] || { echo "Error from server (AlreadyExists)" >&2; exit 1; }
+    mkdir -p "$(dirname "$file")"
+    jq -n --arg n "$name" --arg ns "$ns" '{apiVersion:"v1",kind:"ConfigMap",metadata:{name:$n,namespace:$ns},data:{}}' > "$file" ;;
+  patch/secret|patch/configmap)
+    [ -f "$file" ] || { echo "Error from server (NotFound)" >&2; exit 1; }
+    [ -z "$patch_file" ] || patch=$(cat "$patch_file")
+    jq --argjson p "$patch" '. * $p' "$file" > "$file.new" && mv "$file.new" "$file" ;;
+  delete/secret|delete/configmap)
+    rm -f "$file" ;;
+esac

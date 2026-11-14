@@ -43,6 +43,12 @@ spec:
             - secretRef: {name: filegrid-storage-credentials}
             - secretRef: {name: filegrid-app-secrets}
           env:
+            # Password of the per-role demo accounts, separate from ADMIN_PASSWORD (scripts/k8s-app-secrets.sh adds
+            # it). Already in envFrom; named here without `optional` so a Secret lacking the key blocks the pod
+            # instead of letting the backend fall back to ADMIN_PASSWORD.
+            - name: DEMO_USERS_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: filegrid-app-secrets, key: DEMO_USERS_PASSWORD}
             - {name: FILEGRID_PG_HOST, value: postgres.filegrid-storage.svc.cluster.local}
             - {name: FILEGRID_PG_PORT, value: "5432"}
             - {name: FILEGRID_S3_ENDPOINT, value: "http://s3.filegrid-storage.svc.cluster.local:8333"}

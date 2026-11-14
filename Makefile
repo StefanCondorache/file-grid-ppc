@@ -11,7 +11,7 @@ export DOMAIN ?= ppc.filegrid.cc.cd
 # helm si kubectl (link-ul k3s) citesc acelasi cluster: kubeconfig-ul k3s, nu un ~/.kube/config oarecare
 export KUBECONFIG ?= /etc/rancher/k3s/k3s.yaml
 
-.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check
+.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check scripts-test
 
 # O singura comanda pe VPS sau pe un Ubuntu curat, ca root. Idempotenta: a doua rulare nu schimba nimic.
 # host-bootstrap.sh instaleaza doar ce lipseste (curl/openssl/jq, k3s, helm) si asteapta clusterul;
@@ -109,5 +109,10 @@ k8s-storage-up: k8s-secrets
 # Test al verificarii (trebuie sa pice): ISOCHECK_FAULT=leak|nopod|notool|badtoken|s3down make storage-isolation-check
 storage-isolation-check:
 	./scripts/storage-isolation-check.sh
+
+# Teste pentru scripturile din scripts/ si tintele make (fara cluster, fara root: kubectl/helm/k3s/systemctl/docker
+# sunt inlocuite cu fake-uri din scripts/tests/fakes)
+scripts-test:
+	./scripts/tests/run.sh
 
 -include mk/*.mk
