@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamEvent } from '@/lib/live/events';
-import { CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus, type StorageHealth } from '@/lib/monitoring/contract';
+import { CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus, type MeterCounters, type StorageHealth } from '@/lib/monitoring/contract';
 import { createDb } from './db';
 import { createScenario, type Scenario } from './scenario';
 
@@ -105,5 +105,47 @@ describe('monitoring scenario', () => {
     expect(db.storage.status('S3')).toBe('ok');
     expect(s3()).toMatchObject({ status: 'ok', circuitState: 'closed' });
     expect(s3()!.latencyMs).toBeGreaterThan(0);
+  });
+
+  it('lost stays 0 always: through a meter storm, an outage of their storage and every simulator mode', () => {
+    const s = make();
+    const seen = record(s);
+    const ticks = (n: number) => { for (let i = 0; i < n; i++) s.tick(); };
+    const before = s.counters();
+    expect(before.lost).toBe(0);
+
+    s.startStorm('meter_readings', 10, 60);
+    ticks(3);
+    expect(s.counters().ratePerS).toBe(100);
+    expect(seen('simulator.status').at(-1)).toMatchObject({ mode: 'peak', ratePerS: 100 });
+
+    s.setStorage('DB', false); // meters have no fallback here: readings wait in the simulator queue
+    ticks(3);
+    const stalled = s.counters();
+    expect(s.simulator().queueDepth).toBeGreaterThan(0);
+    expect(stalled.lost).toBe(0);
+    s.setStorage('DB', true);
+    ticks(1);
+    expect(s.simulator().queueDepth).toBe(0);
+
+    s.setSimulator('stopped');
+    ticks(2);
+    expect(s.counters().ratePerS).toBe(0);
+    s.setSimulator('custom', 25);
+    ticks(2);
+    expect(s.counters().ratePerS).toBe(25);
+    s.setSimulator('normal');
+    ticks(2);
+
+    const all = seen('meters.counters') as MeterCounters[];
+    expect(all).toHaveLength(13);
+    expect(all.every((c) => c.lost === 0)).toBe(true);
+    expect(guarantee(s, 'meter_readings')).toMatchObject({ state: 'ok', metrics: expect.arrayContaining([expect.objectContaining({ key: 'lost', value: '0' })]) });
+
+    const after = s.counters();
+    expect(after.received).toBeGreaterThan(before.received);
+    expect(after.received).toBe(after.unique + after.duplicatesRejected);
+    expect(after.unique).toBe(after.byZone.reduce((n, z) => n + z.received, 0));
+    expect(s.simulator()).toMatchObject({ mode: 'normal', ratePerS: 10, queueDepth: 0, sentUnique: after.unique, ackedUnique: after.unique });
   });
 });

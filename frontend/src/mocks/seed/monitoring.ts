@@ -1,4 +1,4 @@
-import type { Alert, CategoryId, StorageId } from '@/lib/monitoring/contract';
+import type { Alert, CategoryId, SimulatorMode, StorageId, Zone } from '@/lib/monitoring/contract';
 
 /** Monitoring seed and the scenario's load model (Task 6e.1). Mock data only, never real measurements. */
 
@@ -12,7 +12,7 @@ export const HISTORY_TICKS = 150;
 export type CategoryProfile = {
   /** p95 in ms at normal load on the primary storage. */
   p95Ms: number;
-  /** Operations per second at normal load (meters: batches of the simulator). */
+  /** Operations per second at normal load (meters: simulator batches of 10 readings). */
   opsPerS: number;
   /** Average bytes per operation, for the throughput column. */
   bytes: number;
@@ -63,4 +63,41 @@ export function seedAlerts(now: number): Alert[] {
     acknowledgedAt: new Date(raisedAt + 3 * 60 * 1000).toISOString(),
     acknowledgedBy: { id: 'u-dispecerat', username: 'dispecerat', displayName: 'Elena Marin', role: 'dispecerat' },
   }];
+}
+
+/** Meter simulator: METER_RATE 10/s, STORM_FACTOR 10, DUPLICATE_RATIO 0.02 (docs/api.md "Backend environment"). */
+export const NORMAL_RATE_PER_S = 10;
+export const STORM_FACTOR = 10;
+export const DUPLICATE_RATIO = 0.02;
+export const ZONE_SHARE: Record<Zone, number> = { muntenia: 0.45, banat: 0.3, dobrogea: 0.25 };
+
+export type Storm = { category: CategoryId; factor: number; startedAt: number; endsAt: number };
+
+/** The scenario's persistent state (db collection `monitoring`, one row), so a reload keeps storms and counters. */
+export type MonitoringState = {
+  id: 'state';
+  storms: Storm[];
+  received: number;
+  duplicatesRejected: number;
+  /** Unique readings stored per zone; their sum is `unique`. */
+  byZone: Record<Zone, number>;
+  /** Fractions carried to the next tick so counts stay whole. */
+  carry: { sent: number; duplicates: number };
+  /** Readings the simulator holds while their storage is down: queued, never lost. */
+  queueDepth: number;
+  simulator: { mode: SimulatorMode; ratePerS: number; stormEndsAt: number | null };
+};
+
+/** 1 284 532 received = 1 258 841 unique + 25 691 duplicates rejected; 0 lost. */
+export function seedMonitoringState(): MonitoringState {
+  return {
+    id: 'state',
+    storms: [],
+    received: 1_284_532,
+    duplicatesRejected: 25_691,
+    byZone: { muntenia: 566_478, banat: 377_652, dobrogea: 314_711 },
+    carry: { sent: 0, duplicates: 0 },
+    queueDepth: 0,
+    simulator: { mode: 'normal', ratePerS: NORMAL_RATE_PER_S, stormEndsAt: null },
+  };
 }

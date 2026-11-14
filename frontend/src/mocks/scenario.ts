@@ -1,13 +1,16 @@
 import type { StreamEvent, StreamEventType } from '@/lib/live/events';
 import type { Policy } from '@/lib/api/types';
 import {
-  CATEGORY_IDS, STORAGE_IDS, type Alert, type BulkheadPoint, type CategoryId, type Comparator, type GuaranteeMetric, type GuaranteeStatus,
-  type StorageHealth, type StorageId,
+  CATEGORY_IDS, STORAGE_IDS, ZONES, type Alert, type BulkheadPoint, type CategoryId, type Comparator, type GuaranteeMetric,
+  type GuaranteeStatus, type MeterCounters, type SimulatorMode, type SimulatorStatus, type StorageHealth, type StorageId, type Zone,
 } from '@/lib/monitoring/contract';
 import { db as sharedDb, type MockDb } from './db';
 import {
-  DRONE_TRANSFERS, HISTORY_TICKS, JITTER, LOAD_LATENCY, PROBE_MS, PROFILES, SERIES_POINTS, SMOOTHING, THRESHOLDS, TICK_MS, seedAlerts,
+  DRONE_TRANSFERS, DUPLICATE_RATIO, HISTORY_TICKS, JITTER, LOAD_LATENCY, NORMAL_RATE_PER_S, PROBE_MS, PROFILES,
+  SERIES_POINTS, SMOOTHING, STORM_FACTOR, THRESHOLDS, TICK_MS, ZONE_SHARE, seedAlerts, seedMonitoringState, type MonitoringState, type Storm,
 } from './seed/monitoring';
+
+export type { Storm };
 
 type Listener = (e: StreamEvent) => void;
 
@@ -25,8 +28,6 @@ export type ScenarioOptions = {
 type Sample = { storage: StorageId | null; p95Ms: number | null; opsPerS: number };
 type Tick = { t: number; samples: Record<CategoryId, Sample> };
 
-export type Storm = { category: CategoryId; factor: number; startedAt: number; endsAt: number };
-type MonitoringState = { id: 'state'; storms: Storm[] };
 type AlertRow = Alert & Record<string, unknown>;
 type Verdict = Pick<GuaranteeStatus, 'state' | 'causeCode' | 'causeFacts'>;
 
@@ -53,6 +54,8 @@ export function toStorageId(name: string): StorageId {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
+const TICK_S = TICK_MS / 1000;
+const round1 = (n: number) => Math.round(n * 10) / 10;
 const OK: Verdict = { state: 'ok', causeCode: null, causeFacts: {} };
 
 function metric(key: string, value: number | string | null, extra: { unit?: string; threshold?: number; comparator?: Comparator } = {}): GuaranteeMetric {
@@ -71,7 +74,7 @@ export function createScenario(options: ScenarioOptions = {}) {
   const d = options.db ?? sharedDb;
   const random = options.random ?? Math.random;
   const now = options.now ?? (() => Date.now());
-  d.register<MonitoringState>('monitoring', () => [{ id: 'state', storms: [] }]);
+  d.register<MonitoringState>('monitoring', () => [seedMonitoringState()]);
   d.register<AlertRow>('alerts', () => seedAlerts(now()) as AlertRow[]);
 
   const listeners = new Set<Listener>();
@@ -80,26 +83,35 @@ export function createScenario(options: ScenarioOptions = {}) {
   let tickTimer: ReturnType<typeof setInterval> | null = null;
 
   const state = (): MonitoringState =>
-    d.find<MonitoringState>('monitoring', (r) => r.id === 'state') ?? d.insert<MonitoringState>('monitoring', { id: 'state', storms: [] });
+    d.find<MonitoringState>('monitoring', (r) => r.id === 'state') ?? d.insert<MonitoringState>('monitoring', seedMonitoringState());
   const save = (patch: Partial<MonitoringState>) => d.update<MonitoringState>('monitoring', (r) => r.id === 'state', patch);
 
-  /** The live policy's primary storage (the db is seeded with the proposal's ids and labels). */
-  const route = (c: CategoryId): StorageId => {
+  /** The live policy's storages (the db is seeded with the proposal's ids and labels). */
+  const route = (c: CategoryId): { primary: StorageId; fallback: StorageId | null } => {
     const legacy = Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
     const p = d.find<Policy>('policies', (x) => (x.category as string) === c || x.category === legacy);
-    return p ? toStorageId(p.primaryStorage) : 'db';
+    return { primary: p ? toStorageId(p.primaryStorage) : 'db', fallback: p?.fallbackStorage ? toStorageId(p.fallbackStorage) : null };
+  };
+  const up = (s: StorageId | null): s is StorageId => s !== null && d.storage.status(LABEL[s]) !== 'down';
+  /** Where the category writes now: its primary, else its fallback, else nowhere. */
+  const target = (c: CategoryId): StorageId | null => {
+    const { primary, fallback } = route(c);
+    return up(primary) ? primary : up(fallback) ? fallback : null;
   };
 
-  /** Load multiplier: the storm factor of the category, 1 otherwise. */
-  const load = (c: CategoryId): number => state().storms.find((s) => s.category === c)?.factor ?? 1;
+  /** Load multiplier: meters follow the simulator rate (a meter storm is its peak mode); others their storm factor. */
+  const load = (c: CategoryId): number =>
+    c === 'meter_readings' ? state().simulator.ratePerS / NORMAL_RATE_PER_S : state().storms.find((s) => s.category === c)?.factor ?? 1;
 
   const smoothed = Object.fromEntries(CATEGORY_IDS.map((c) => [c, PROFILES[c].p95Ms])) as Record<CategoryId, number>;
 
   const sample = (c: CategoryId, mult: number): Sample => {
+    const storage = target(c);
+    const opsPerS = Math.round(PROFILES[c].opsPerS * mult * 100) / 100;
+    if (storage === null || opsPerS === 0) return { storage, p95Ms: null, opsPerS: storage === null ? 0 : opsPerS };
     const goal = PROFILES[c].p95Ms * (1 + (Math.max(mult, 1) - 1) * LOAD_LATENCY);
     smoothed[c] += (goal - smoothed[c]) * SMOOTHING;
-    const p95Ms = Math.round(smoothed[c] * (1 + (random() * 2 - 1) * JITTER));
-    return { storage: route(c), p95Ms, opsPerS: Math.round(PROFILES[c].opsPerS * mult * 100) / 100 };
+    return { storage, p95Ms: Math.round(smoothed[c] * (1 + (random() * 2 - 1) * JITTER)), opsPerS };
   };
 
   const samples = (mult: (c: CategoryId) => number) =>
@@ -115,12 +127,75 @@ export function createScenario(options: ScenarioOptions = {}) {
   const legacyOf = (c: CategoryId) => Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
   const ofCategory = (c: CategoryId) => (row: Record<string, unknown>) => row.category === c || row.category === legacyOf(c);
 
+  /** Meter readings stored in the last tick, per zone (the rate shown). */
+  let lastStored: Record<Zone, number> = Object.fromEntries(ZONES.map((z) => [z, NORMAL_RATE_PER_S * ZONE_SHARE[z] * TICK_S])) as Record<Zone, number>;
+
+  /** The simulator sends; readings are stored when their storage is up, else they wait in its queue. lost = sent − acked − queued = 0. */
+  const advanceMeters = (storageUp: boolean) => {
+    const st = state();
+    const sentExact = st.carry.sent + st.simulator.ratePerS * TICK_S;
+    const sent = Math.floor(sentExact);
+    const accepted = storageUp ? sent + st.queueDepth : 0;
+    const dupExact = st.carry.duplicates + accepted * DUPLICATE_RATIO;
+    const duplicates = Math.floor(dupExact);
+    const split = { muntenia: Math.round(accepted * ZONE_SHARE.muntenia), banat: Math.round(accepted * ZONE_SHARE.banat), dobrogea: 0 };
+    split.dobrogea = accepted - split.muntenia - split.banat;
+    lastStored = split;
+    save({
+      received: st.received + accepted + duplicates,
+      duplicatesRejected: st.duplicatesRejected + duplicates,
+      byZone: Object.fromEntries(ZONES.map((z) => [z, st.byZone[z] + split[z]])) as Record<Zone, number>,
+      carry: { sent: sentExact - sent, duplicates: dupExact - duplicates },
+      queueDepth: storageUp ? 0 : st.queueDepth + sent,
+    });
+  };
+
+  const unique = (st: MonitoringState) => ZONES.reduce((n, z) => n + st.byZone[z], 0);
+
+  const simulator = (): SimulatorStatus => {
+    const st = state();
+    const storm = st.storms.find((s) => s.category === 'meter_readings');
+    return {
+      mode: st.simulator.mode,
+      ratePerS: st.simulator.ratePerS,
+      normalRatePerS: NORMAL_RATE_PER_S,
+      peakRatePerS: NORMAL_RATE_PER_S * (storm?.factor ?? STORM_FACTOR),
+      queueDepth: st.queueDepth,
+      stormEndsAt: st.simulator.stormEndsAt === null ? null : iso(st.simulator.stormEndsAt),
+      sentUnique: unique(st) + st.queueDepth,
+      ackedUnique: unique(st),
+    };
+  };
+
+  /** The backend's formula: lost = sent − acked − queued (readings wait in the queue, so it stays 0). */
+  const counters = (): MeterCounters => {
+    const st = state();
+    const sim = simulator();
+    return {
+      received: st.received,
+      unique: sim.ackedUnique,
+      duplicatesRejected: st.duplicatesRejected,
+      lost: Math.max(0, sim.sentUnique - sim.ackedUnique - sim.queueDepth),
+      ratePerS: round1(ZONES.reduce((n, z) => n + lastStored[z], 0) / TICK_S),
+      byZone: ZONES.map((zone) => ({ zone, received: st.byZone[zone], ratePerS: round1(lastStored[zone] / TICK_S) })),
+      at: iso(now()),
+    };
+  };
+
+  const setSim = (sim: MonitoringState['simulator']) => {
+    save({ simulator: sim });
+    api.emit('simulator.status', simulator());
+  };
+
   /** The four business guarantees (backend/src/guarantees), judged on the latest tick. */
   const judge = (): GuaranteeStatus[] => {
     const updatedAt = iso(now());
     const last = history.at(-1)!.samples;
 
-    const meter: Verdict = OK;
+    const meterCounters = counters();
+    const meter: Verdict = meterCounters.lost !== null && meterCounters.lost > THRESHOLDS.meterLostMax
+      ? { state: 'violated', causeCode: 'METER_READINGS_LOST', causeFacts: { lost: meterCounters.lost, max: THRESHOLDS.meterLostMax } }
+      : OK;
 
     const p95 = last.fault_records.p95Ms;
     const samples = Math.round(history.slice(-SERIES_POINTS).reduce((n, tk) => n + tk.samples.fault_records.opsPerS, 0) * (TICK_MS / 1000));
@@ -153,7 +228,14 @@ export function createScenario(options: ScenarioOptions = {}) {
         : { state: 'at_risk', causeCode: 'DRONE_SUCCESS_NEAR_TARGET', causeFacts: droneFacts };
 
     return [
-      { category: 'meter_readings', ...meter, metrics: [metric('lost', 0, { threshold: THRESHOLDS.meterLostMax, comparator: 'lte' })], updatedAt },
+      {
+        category: 'meter_readings', ...meter, updatedAt, metrics: [
+          metric('received', meterCounters.received),
+          metric('unique', meterCounters.unique),
+          metric('duplicatesRejected', meterCounters.duplicatesRejected),
+          metric('lost', meterCounters.lost, { threshold: THRESHOLDS.meterLostMax, comparator: 'lte' }),
+        ],
+      },
       { category: 'fault_records', ...fault, metrics: [metric('uploadToAvailableP95Ms', p95, { unit: 'ms', threshold: THRESHOLDS.faultTargetMs, comparator: 'lte' })], updatedAt },
       {
         category: 'connection_documents', ...connection, updatedAt, metrics: [
@@ -230,11 +312,27 @@ export function createScenario(options: ScenarioOptions = {}) {
     /** One step of the mock server. */
     tick(): void {
       history = [...history.slice(-(HISTORY_TICKS - 1)), { t: now(), samples: samples(load) }];
+      advanceMeters(target('meter_readings') !== null);
+      api.emit('meters.counters', counters());
       guarantees = judge();
       guarantees.forEach(transition);
       health = probe();
       api.emit('storage.health', { items: health });
       api.emit('guarantees.status', { items: guarantees });
+    },
+
+    /** Meter counters (GET /meters/counters); `lost` is always 0. */
+    counters,
+
+    /** Meter simulator (GET /meters/simulator). */
+    simulator,
+
+    /** Simulator mode (PUT /meters/simulator); leaving `peak` ends a meter storm. */
+    setSimulator(mode: SimulatorMode, ratePerS?: number): SimulatorStatus {
+      if (mode !== 'peak' && state().storms.some((s) => s.category === 'meter_readings')) api.stopStorm('meter_readings');
+      const rate = { normal: NORMAL_RATE_PER_S, peak: NORMAL_RATE_PER_S * STORM_FACTOR, custom: ratePerS ?? state().simulator.ratePerS, stopped: 0 }[mode];
+      setSim({ mode, ratePerS: rate, stormEndsAt: mode === 'peak' ? state().simulator.stormEndsAt : null });
+      return simulator();
     },
 
     /** Latest storage health (GET /storage-health). */
@@ -277,6 +375,7 @@ export function createScenario(options: ScenarioOptions = {}) {
       const t = now();
       const storm: Storm = { category: c, factor, startedAt: t, endsAt: t + durationS * 1000 };
       save({ storms: [...state().storms.filter((s) => s.category !== c), storm] });
+      if (c === 'meter_readings') setSim({ mode: 'peak', ratePerS: NORMAL_RATE_PER_S * factor, stormEndsAt: storm.endsAt });
       api.emit('demo.storm', { category: c, factor, state: 'started', endsAt: iso(storm.endsAt) });
       return storm;
     },
@@ -287,6 +386,7 @@ export function createScenario(options: ScenarioOptions = {}) {
       const storm = state().storms.find((s) => s.category === c);
       if (!storm) return false;
       save({ storms: state().storms.filter((s) => s.category !== c) });
+      if (c === 'meter_readings') setSim({ mode: 'normal', ratePerS: NORMAL_RATE_PER_S, stormEndsAt: null });
       api.emit('demo.storm', { category: c, factor: storm.factor, state: 'stopped', endsAt: null });
       return true;
     },
