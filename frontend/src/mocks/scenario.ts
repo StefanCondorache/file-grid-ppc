@@ -2,11 +2,11 @@ import type { StreamEvent, StreamEventType } from '@/lib/live/events';
 import type { Policy } from '@/lib/api/types';
 import {
   CATEGORY_IDS, STORAGE_IDS, type Alert, type BulkheadPoint, type CategoryId, type Comparator, type GuaranteeMetric, type GuaranteeStatus,
-  type StorageId,
+  type StorageHealth, type StorageId,
 } from '@/lib/monitoring/contract';
 import { db as sharedDb, type MockDb } from './db';
 import {
-  DRONE_TRANSFERS, HISTORY_TICKS, JITTER, LOAD_LATENCY, PROFILES, SERIES_POINTS, SMOOTHING, THRESHOLDS, TICK_MS, seedAlerts,
+  DRONE_TRANSFERS, HISTORY_TICKS, JITTER, LOAD_LATENCY, PROBE_MS, PROFILES, SERIES_POINTS, SMOOTHING, THRESHOLDS, TICK_MS, seedAlerts,
 } from './seed/monitoring';
 
 type Listener = (e: StreamEvent) => void;
@@ -30,6 +30,11 @@ type MonitoringState = { id: 'state'; storms: Storm[] };
 type AlertRow = Alert & Record<string, unknown>;
 type Verdict = Pick<GuaranteeStatus, 'state' | 'causeCode' | 'causeFacts'>;
 
+/** Accepted names: real ids, plus the proposal's ids and labels as aliases for rehearsal typing. */
+export type CategoryName = CategoryId | 'meter' | 'fault' | 'connection' | 'drone';
+export type StorageName = StorageId | 'S3' | 'FTP' | 'DB';
+
+const LABEL: Record<StorageId, 'S3' | 'FTP' | 'DB'> = { s3: 'S3', ftp: 'FTP', db: 'DB' };
 const LEGACY_CATEGORY: Record<string, CategoryId> = { meter: 'meter_readings', fault: 'fault_records', connection: 'connection_documents', drone: 'drone_videos' };
 
 /** Real category id; the proposal's ids (`fault`, …) are accepted as aliases for rehearsal typing. */
@@ -190,6 +195,17 @@ export function createScenario(options: ScenarioOptions = {}) {
 
   let guarantees = judge();
 
+  /** Health-monitor view of the storages; their up/down state is the shared db's (uploads read it too). */
+  const probe = (): StorageHealth[] => STORAGE_IDS.map((storage) => {
+    const status = d.storage.status(LABEL[storage]);
+    return {
+      storage, status, lastCheckAt: iso(now()),
+      latencyMs: status === 'down' ? null : Math.max(1, Math.round(PROBE_MS[storage] * (1 + (random() * 2 - 1) * 0.2))),
+      circuitState: status === 'down' ? 'open' : status === 'degraded' ? 'half_open' : 'closed',
+    };
+  });
+  let health = probe();
+
   const api = {
     emit(type: StreamEventType, data: unknown): StreamEvent {
       const e: StreamEvent = { type, id: nextId++, data };
@@ -216,7 +232,22 @@ export function createScenario(options: ScenarioOptions = {}) {
       history = [...history.slice(-(HISTORY_TICKS - 1)), { t: now(), samples: samples(load) }];
       guarantees = judge();
       guarantees.forEach(transition);
+      health = probe();
+      api.emit('storage.health', { items: health });
       api.emit('guarantees.status', { items: guarantees });
+    },
+
+    /** Latest storage health (GET /storage-health). */
+    storageHealth(): StorageHealth[] {
+      return health;
+    },
+
+    /** Stops or starts a storage (`S3`/`s3`, …): the shared db changes, so uploads fall back; health is pushed now. */
+    setStorage(name: StorageName, up: boolean): StorageHealth[] {
+      d.storage.set(LABEL[toStorageId(name)], up ? 'ok' : 'down');
+      health = probe();
+      api.emit('storage.health', { items: health });
+      return health;
     },
 
     /** Latest guarantee statuses (GET /guarantees). */
@@ -241,7 +272,7 @@ export function createScenario(options: ScenarioOptions = {}) {
     },
 
     /** A `factor`× load on one category for `durationS` (BA-61); a running storm on it is replaced. */
-    startStorm(category: CategoryId | string, factor = 10, durationS = 60): Storm {
+    startStorm(category: CategoryName, factor = 10, durationS = 60): Storm {
       const c = toCategoryId(category);
       const t = now();
       const storm: Storm = { category: c, factor, startedAt: t, endsAt: t + durationS * 1000 };
@@ -251,7 +282,7 @@ export function createScenario(options: ScenarioOptions = {}) {
     },
 
     /** Back to normal load; false when no storm was running on the category. */
-    stopStorm(category: CategoryId | string): boolean {
+    stopStorm(category: CategoryName): boolean {
       const c = toCategoryId(category);
       const storm = state().storms.find((s) => s.category === c);
       if (!storm) return false;

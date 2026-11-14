@@ -1,4 +1,4 @@
-import type { Alert, CategoryId } from '@/lib/monitoring/contract';
+import type { Alert, CategoryId, StorageId } from '@/lib/monitoring/contract';
 
 /** Monitoring seed and the scenario's load model (Task 6e.1). Mock data only, never real measurements. */
 
@@ -31,6 +31,8 @@ export const LOAD_LATENCY = 0.5;
 export const SMOOTHING = 0.5;
 /** ± share of jitter around the smoothed latency. */
 export const JITTER = 0.04;
+/** Health-probe latency per storage when it is up. */
+export const PROBE_MS: Record<StorageId, number> = { s3: 14, ftp: 38, db: 3 };
 
 /** Guarantee thresholds of the mock. Faults: "available to dispatch" target 2 s (PRD §3); above it the card is at risk. */
 export const THRESHOLDS = {

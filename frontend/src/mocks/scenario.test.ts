@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamEvent } from '@/lib/live/events';
-import { CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus } from '@/lib/monitoring/contract';
+import { CATEGORY_IDS, type Alert, type CategoryId, type GuaranteeStatus, type StorageHealth } from '@/lib/monitoring/contract';
 import { createDb } from './db';
 import { createScenario, type Scenario } from './scenario';
 
@@ -85,5 +85,25 @@ describe('monitoring scenario', () => {
     expect(seen('alert.updated').at(-1)).toMatchObject({ id: raised[0]!.id, state: 'resolved' });
     expect(s.alerts('active')).toEqual([]);
     expect(seen('alert.raised')).toHaveLength(1);
+  });
+
+  it('S3 down emits storage.health with S3 down and updates db.storage; S3 back turns it ok', () => {
+    const db = createDb(null);
+    const s = createScenario({ db, random: () => 0.5 });
+    const seen = record(s);
+    const s3 = () => (seen('storage.health').at(-1) as { items: StorageHealth[] }).items.find((h) => h.storage === 's3');
+
+    s.setStorage('S3', false);
+    expect(s3()).toMatchObject({ status: 'down', latencyMs: null, circuitState: 'open' });
+    expect((seen('storage.health').at(-1) as { items: StorageHealth[] }).items.filter((h) => h.storage !== 's3').map((h) => h.status)).toEqual(['ok', 'ok']);
+    expect(db.storage.status('S3')).toBe('down');
+    s.tick();
+    expect(s.storageHealth().find((h) => h.storage === 's3')!.status).toBe('down');
+    expect(s3()!.status).toBe('down');
+
+    s.setStorage('s3', true);
+    expect(db.storage.status('S3')).toBe('ok');
+    expect(s3()).toMatchObject({ status: 'ok', circuitState: 'closed' });
+    expect(s3()!.latencyMs).toBeGreaterThan(0);
   });
 });
