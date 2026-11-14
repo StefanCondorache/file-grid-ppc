@@ -7,8 +7,9 @@ temporary file is removed on a fresh connection (best effort). Parent directorie
 are created on demand (``MKD``, "already exists" ignored) and remembered per process.
 
 Read path: ``RETR`` on a passive data connection, read in blocks of at most 256 KiB. Closing the
-iterator early closes the data and control connections (an interrupted transfer leaves the FTP
-control channel in an unknown state, so that connection is never reused).
+iterator early closes the data connection; the control connection goes back to the pool only if a
+``NOOP`` proves it is still in sync (see ``_resync_after_abort``), otherwise it is closed. Any other
+error closes both.
 
 Connections: a small pool of logged-in control connections, bounded by
 ``FILEGRID_FTP_MAX_CONNECTIONS`` (default 4) to stay within pure-ftpd's session limits (``-c`` total,
@@ -52,6 +53,7 @@ log = logging.getLogger("filegrid.storage.ftp")
 
 READ_BLOCK = 256 * 1024
 IDLE_TTL_S = 120.0
+RESYNC_TIMEOUT_S = 2.0
 _MAX_KNOWN_DIRS = 4096
 
 
@@ -72,6 +74,36 @@ def _translate(exc: BaseException, key: str | None = None) -> BaseException:
     return exc
 
 
+class _Lease:
+    __slots__ = ("client", "reusable")
+
+    def __init__(self, client: aioftp.Client):
+        self.client = client
+        self.reusable = False
+
+
+async def _resync_after_abort(client: aioftp.Client) -> bool:
+    """After the data connection was closed mid-transfer: True if the control channel is provably in sync.
+
+    pure-ftpd may or may not send a final reply (226/426/451) for the aborted transfer. A NOOP is
+    answered with 200, a code no transfer reply uses, so: send NOOP and read replies until the 200,
+    skipping at most two stale transfer replies. Anything else (or no 200 within 2 s) => not in sync.
+    """
+    try:
+        async with asyncio.timeout(RESYNC_TIMEOUT_S):
+            for attempt in range(3):
+                try:
+                    await client.command("NOOP" if attempt == 0 else None, "200")
+                    return True
+                except aioftp.StatusCodeError:
+                    continue  # consumed a stale reply of the aborted transfer
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # noqa: BLE001 - any doubt means "do not reuse"
+        return False
+    return False
+
+
 class _Pool:
     def __init__(self, settings: FtpSettings):
         self._s = settings
@@ -90,7 +122,9 @@ class _Pool:
         return client
 
     @contextlib.asynccontextmanager
-    async def client(self) -> AsyncIterator[aioftp.Client]:
+    async def lease(self) -> AsyncIterator[_Lease]:
+        """A pooled connection. It goes back to the pool after a clean exit, or after an exception only
+        if the code set ``lease.reusable = True`` (it proved the control channel is still in sync)."""
         async with self._sem:
             client = None
             now = time.monotonic()
@@ -102,15 +136,20 @@ class _Pool:
                 candidate.close()
             if client is None:
                 client = await self.connect()
-            clean = False
+            lease = _Lease(client)
             try:
-                yield client
-                clean = True
+                yield lease
+                lease.reusable = True
             finally:
-                if clean:
+                if lease.reusable:
                     self._idle.append((time.monotonic(), client))
                 else:
                     client.close()
+
+    @contextlib.asynccontextmanager
+    async def client(self) -> AsyncIterator[aioftp.Client]:
+        async with self.lease() as lease:
+            yield lease.client
 
     def close(self) -> None:
         idle, self._idle = self._idle, []
@@ -194,23 +233,27 @@ class FtpStorage(StorageAdapter):
 
     async def _get(self, key: str) -> AsyncIterator[bytes]:
         try:
-            async with self._pool.client() as client:
+            async with self._pool.lease() as lease:
+                client = lease.client
                 try:
                     stream = await client.download_stream(key)
                 except aioftp.StatusCodeError as exc:
                     if "550" in _codes(exc):
                         raise ObjectNotFound(f"ftp: no object {key!r}") from None
                     raise
-                ok = False
                 try:
                     async for block in stream.iter_by_block(READ_BLOCK):
                         yield block
-                    ok = True
-                finally:
-                    if ok:
-                        await stream.finish()  # wait for 226: the server sent the whole file
-                    else:
-                        stream.close()
+                except GeneratorExit:
+                    # The consumer stopped early (cancelled download, partial read). Logging in again
+                    # costs seconds on pure-ftpd, so keep the connection if the channel is in sync.
+                    stream.close()
+                    lease.reusable = await _resync_after_abort(client)
+                    raise
+                except BaseException:
+                    stream.close()
+                    raise
+                await stream.finish()  # wait for 226: the server sent the whole file
         except (StorageError, GeneratorExit, asyncio.CancelledError):
             raise
         except Exception as exc:

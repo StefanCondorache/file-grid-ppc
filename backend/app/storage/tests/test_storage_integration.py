@@ -46,6 +46,24 @@ def k(name: str) -> str:
     return f"itest/{RUN}/{name}"
 
 
+@pytest.fixture(scope="module", autouse=True)
+def remove_ftp_directories():  # noqa: ANN201
+    """Objects are deleted by each test; FTP directories are not (the adapter never removes them)."""
+    yield
+    if os.environ.get("FILEGRID_INTEGRATION") != "1":
+        return
+
+    async def remove() -> None:
+        s = FtpSettings.from_env()
+        async with aioftp.Client.context(s.host, s.port, s.user, s.password) as client:
+            if await client.exists(f"itest/{RUN}"):
+                await client.remove(f"itest/{RUN}")
+            with contextlib.suppress(aioftp.StatusCodeError):
+                await client.remove_directory("itest")  # only succeeds when no other run is using it
+
+    asyncio.run(remove())
+
+
 @pytest_asyncio.fixture(params=NAMES)
 async def adapter(request):  # noqa: ANN001, ANN201
     a = build_adapter(request.param)
