@@ -217,6 +217,11 @@ export class UploadsService {
       .where('part_number', '=', part)
       .executeTakeFirst();
     if (previous && declaredSha256 !== undefined && previous.sha256 === declaredSha256) {
+      // Read (and drop) the body before answering: an answer while the client is still sending
+      // makes the proxy cut the stream, so a retry over HTTP/2 would fail again (TASKS.md, 1 GB proof).
+      for await (const _chunk of limited(body, expected)) {
+        // discarded: the stored part is already this one
+      }
       return {
         storage: previous.storage,
         view: {
