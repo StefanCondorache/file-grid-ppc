@@ -1,0 +1,24 @@
+# Secrets — never commit (spec: "Nicio parolă sau cheie nu se află în repository")
+.env
+*.env
+!*.env.example
+*.pem
+*.key
+id_*
+
+# Superpowers / agent scratch
+.superpowers/
+
+# Build outputs
+target/
+build/
+dist/
+node_modules/
+.angular/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
