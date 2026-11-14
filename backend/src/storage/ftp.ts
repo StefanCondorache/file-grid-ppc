@@ -15,7 +15,7 @@ import {
   validateKey,
 } from './base';
 import type { FtpSettings } from './config';
-import { Semaphore, abortable, elapsedMs, errorKind, onAbort } from './internal';
+import { Semaphore, abortable, elapsedMs, errorKind, onAbort, sleep } from './internal';
 import type { StorageLogger } from './resilience';
 
 /**
@@ -45,7 +45,8 @@ export const RESYNC_TIMEOUT_MS = 2000;
 const MAX_KNOWN_DIRS = 4096;
 const CLEANUP_TIMEOUT_MS = 5000;
 const UNAVAILABLE_CODES = new Set([421, 425, 426, 450, 451, 452]);
-const NOT_FOUND = 550;
+// 550 from pure-ftpd; some servers (ftp-srv) answer a missing file with 551.
+const NOT_FOUND = new Set([550, 551]);
 
 class ConnectTimeoutError extends Error {
   override readonly name = 'ConnectTimeoutError';
@@ -54,7 +55,9 @@ class ConnectTimeoutError extends Error {
 function translate(error: unknown, source?: HashingStream): unknown {
   if (error instanceof StorageError) return error;
   if (source?.isSourceError(error)) return error;
-  if (error instanceof FTPError) {
+  // basic-ftp reports socket errors (ECONNREFUSED...) as FTPError with a string code: those are
+  // connection problems, not FTP status replies.
+  if (error instanceof FTPError && typeof error.code === 'number') {
     const message = `ftp: status ${error.code}`;
     return UNAVAILABLE_CODES.has(error.code)
       ? new StorageUnavailable(message, { cause: error })
@@ -65,7 +68,7 @@ function translate(error: unknown, source?: HashingStream): unknown {
 }
 
 function isNotFound(error: unknown): boolean {
-  return error instanceof FTPError && error.code === NOT_FOUND;
+  return error instanceof FTPError && typeof error.code === 'number' && NOT_FOUND.has(error.code);
 }
 
 function splitKey(key: string): { dir: string; base: string } {
@@ -340,9 +343,15 @@ export class FtpStorage implements StorageAdapter {
         if (!settled) {
           // The consumer stopped early (cancelled download, partial read). Logging in again costs
           // seconds on pure-ftpd, so keep the connection if the channel is provably in sync.
+          // Close the data connection too (as P1's adapter does): otherwise the server keeps writing
+          // into a socket nobody reads and never sends the transfer's final reply.
           destination?.destroy();
-          await outcome;
-          reusable = !client.closed && (await resyncAfterAbort(client));
+          client.ftp.dataSocket?.destroy();
+          const finished = await Promise.race([
+            outcome.then(() => true),
+            sleep(RESYNC_TIMEOUT_MS).then(() => false),
+          ]);
+          reusable = finished && !client.closed && (await resyncAfterAbort(client));
         }
         this.pool.release(client, reusable);
       }
