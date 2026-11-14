@@ -1,0 +1,159 @@
+# Teste unitare promtool pentru regulile din prometheus-values.yaml (serverFiles."alerting_rules.yml").
+# Rulare: make obs-rules-test (scripts/obs-rules-test.sh extrage regulile langa acest fisier si ruleaza
+# promtool check rules + promtool test rules). Fara cluster.
+rule_files: [alerting_rules.yml]
+evaluation_interval: 30s
+
+tests:
+  # --- MeterReadingsLost: doar gauge-ul filegrid_meter_readings_lost (acelasi evaluator ca GET /guarantees) ---
+  - name: MeterReadingsLost tace cat timp gauge-ul e 0, si cu doua replici backend
+    interval: 30s
+    input_series:
+      - series: 'filegrid_meter_readings_lost{job="kubernetes-pods",namespace="filegrid",pod="filegrid-backend-a"}'
+        values: '0x20'
+      - series: 'filegrid_meter_readings_lost{job="kubernetes-pods",namespace="filegrid",pod="filegrid-backend-b"}'
+        values: '0x20'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: MeterReadingsLost, exp_alerts: []}
+
+  - name: MeterReadingsLost porneste dupa 2 minute cu gauge > 0
+    interval: 30s
+    input_series:
+      - series: 'filegrid_meter_readings_lost{job="kubernetes-pods",namespace="filegrid",pod="filegrid-backend-a"}'
+        values: '0 0 3x20'
+      - series: 'filegrid_meter_readings_lost{job="kubernetes-pods",namespace="filegrid",pod="filegrid-backend-b"}'
+        values: '0x22'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: MeterReadingsLost, exp_alerts: []}
+      - eval_time: 3m30s
+        alertname: MeterReadingsLost
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: Citiri de contor pierdute
+              description: >-
+                Garantia meter_readings raporteaza 3 citiri pierdute de cel putin 2 minute
+                (filegrid_meter_readings_lost, aceeasi valoare ca GET /api/v1/guarantees). Cerinta din brief: nicio
+                citire de contor nu are voie sa se piarda; verificati retry-urile, storage-ul db si logurile dupa trace_id.
+
+  # --- TargetDown: up == 0 de 2 minute ---
+  - name: TargetDown dupa 2 minute de scrape esuat
+    interval: 30s
+    input_series:
+      - series: 'up{job="kubernetes-pods",instance="10.42.0.9:8000",namespace="filegrid",pod="filegrid-backend-a"}'
+        values: '1 1 0x20'
+      - series: 'up{job="kube-state-metrics",instance="ksm:8080"}'
+        values: '1x22'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: TargetDown, exp_alerts: []}
+      - eval_time: 3m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: kubernetes-pods, instance: "10.42.0.9:8000", namespace: filegrid,
+                         pod: filegrid-backend-a}
+            exp_annotations:
+              summary: Tinta kubernetes-pods nu mai poate fi scrapuita (10.42.0.9:8000)
+              description: >-
+                Prometheus nu mai citeste metricile de la kubernetes-pods / 10.42.0.9:8000 (pod filegrid-backend-a) de
+                cel putin 2 minute. Alertele care depind de aceste metrici nu mai pot porni; verificati podul
+                (kubectl get pods -A) si NetworkPolicy-urile.
+
+  # --- PodCrashLooping: restarturi crescute cu > 3 in 15 minute ---
+  - name: PodCrashLooping la 4 restarturi in 15 minute, nu la 2
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="filegrid",pod="filegrid-backend-a",container="backend"}'
+        values: '0 0 0 1 1 2 2 3 3 4 4 5 5 5 5 5 5'
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="monitoring",pod="loki-0",container="loki"}'
+        values: '0 0 0 0 1 1 1 1 1 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - {eval_time: 6m, alertname: PodCrashLooping, exp_alerts: []}
+      - eval_time: 14m
+        alertname: PodCrashLooping
+        exp_alerts:
+          - exp_labels: {severity: warning, job: kube-state-metrics, namespace: filegrid, pod: filegrid-backend-a,
+                         container: backend}
+            exp_annotations:
+              summary: Containerul filegrid/filegrid-backend-a (backend) reporneste in bucla
+              description: >-
+                5 restarturi in ultimele 15 minute. Verificati kubectl -n filegrid describe pod filegrid-backend-a
+                (OOMKilled? probe esuate?) si logurile containerului anterior (kubectl logs --previous).
+
+  # --- ContainerMemoryNearLimit: working set > 90% din limita, 10 minute; containerele fara limita nu conteaza ---
+  - name: ContainerMemoryNearLimit dupa 10 minute peste 90%
+    interval: 1m
+    input_series:
+      - series: 'container_memory_working_set_bytes{job="kubernetes-cadvisor",namespace="monitoring",pod="grafana-x",container="grafana",id="/a"}'
+        values: '250000000x20'
+      - series: 'container_spec_memory_limit_bytes{job="kubernetes-cadvisor",namespace="monitoring",pod="grafana-x",container="grafana",id="/a"}'
+        values: '268435456x20'
+      # 50% din limita: nu porneste
+      - series: 'container_memory_working_set_bytes{job="kubernetes-cadvisor",namespace="filegrid",pod="filegrid-backend-a",container="backend",id="/b"}'
+        values: '201326592x20'
+      - series: 'container_spec_memory_limit_bytes{job="kubernetes-cadvisor",namespace="filegrid",pod="filegrid-backend-a",container="backend",id="/b"}'
+        values: '402653184x20'
+      # fara limita (cAdvisor raporteaza 0): nu porneste
+      - series: 'container_memory_working_set_bytes{job="kubernetes-cadvisor",namespace="kube-system",pod="coredns-x",container="coredns",id="/c"}'
+        values: '50000000x20'
+      - series: 'container_spec_memory_limit_bytes{job="kubernetes-cadvisor",namespace="kube-system",pod="coredns-x",container="coredns",id="/c"}'
+        values: '0x20'
+      # cgroup-ul podului (container="") e ignorat
+      - series: 'container_memory_working_set_bytes{job="kubernetes-cadvisor",namespace="monitoring",pod="grafana-x",container="",id="/p"}'
+        values: '260000000x20'
+      - series: 'container_spec_memory_limit_bytes{job="kubernetes-cadvisor",namespace="monitoring",pod="grafana-x",container="",id="/p"}'
+        values: '268435456x20'
+    alert_rule_test:
+      - {eval_time: 9m, alertname: ContainerMemoryNearLimit, exp_alerts: []}
+      - eval_time: 11m
+        alertname: ContainerMemoryNearLimit
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: monitoring, pod: grafana-x, container: grafana}
+            exp_annotations:
+              summary: Containerul monitoring/grafana-x (grafana) e aproape de limita de memorie
+              description: >-
+                Memoria folosita (working set) e 93.13% din limita de cel putin 10 minute; la 100% kernel-ul opreste
+                containerul (OOMKilled). Ridicati limita din manifest sau din valorile helm.
+
+  # --- NodeMemoryHigh / NodeDiskHigh (node-exporter) ---
+  - name: NodeMemoryHigh peste 90% folosit 10 minute
+    interval: 1m
+    input_series:
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="vps",node="vps"}'
+        values: '8000000000x20'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="vps",node="vps"}'
+        values: '2000000000 2000000000 500000000x18'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: NodeMemoryHigh, exp_alerts: []}
+      - eval_time: 13m
+        alertname: NodeMemoryHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: vps, node: vps}
+            exp_annotations:
+              summary: Nodul vps are memoria aproape plina
+              description: >-
+                93.75% din RAM-ul nodului e folosit de cel putin 10 minute. Urmeaza OOMKill-uri si evacuari de poduri;
+                verificati kubectl top pods -A.
+
+  - name: NodeDiskHigh peste 85% folosit 10 minute, doar pe sistemele de fisiere reale
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{job="node-exporter",instance="vps",node="vps",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '100000000000x20'
+      - series: 'node_filesystem_avail_bytes{job="node-exporter",instance="vps",node="vps",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '10000000000x20'
+      - series: 'node_filesystem_size_bytes{job="node-exporter",instance="vps",node="vps",device="/dev/sda15",fstype="vfat",mountpoint="/boot/efi"}'
+        values: '100000000x20'
+      - series: 'node_filesystem_avail_bytes{job="node-exporter",instance="vps",node="vps",device="/dev/sda15",fstype="vfat",mountpoint="/boot/efi"}'
+        values: '90000000x20'
+    alert_rule_test:
+      - {eval_time: 9m, alertname: NodeDiskHigh, exp_alerts: []}
+      - eval_time: 11m
+        alertname: NodeDiskHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: vps, node: vps, device: /dev/sda1,
+                         fstype: ext4, mountpoint: /}
+            exp_annotations:
+              summary: Discul / de pe nodul vps e aproape plin
+              description: >-
+                90% din / (/dev/sda1) e ocupat de cel putin 10 minute. Volumele local-path (Postgres, S3, FTP,
+                Prometheus, Loki) si imaginile stau pe acest disc; un disc plin opreste scrierile tuturor storage-urilor.

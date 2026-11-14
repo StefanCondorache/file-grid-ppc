@@ -90,4 +90,22 @@ test_backend_trusts_x_forwarded_for_only_from_the_cluster_cidrs() {
     "10.42.0.0/16,10.43.0.0/16" "backend TRUSTED_PROXY_CIDRS"
 }
 
+test_dashboard_lost_readings_stat_uses_only_the_guarantee_gauge() {
+  local exprs
+  exprs=$(jq -c '[.. | objects | select(.type? == "stat" and ((.title // "") | startswith("Pierdute")))
+      | [.targets[].expr]]' "$REPO/deploy/k8s/observability/dashboard-filegrid-overview.json")
+  assert_eq "$exprs" '[["max(filegrid_meter_readings_lost)"]]' "Pierdute stat queries"
+}
+
+test_node_exporter_is_on_without_host_network_and_with_small_limits() {
+  local v
+  v=$(values prometheus)
+  assert_eq "$(jq -c '.["prometheus-node-exporter"] | [.enabled, .hostNetwork, .hostPID]' <<<"$v")" '[true,false,false]' \
+    "node-exporter enabled/hostNetwork/hostPID"
+  assert_eq "$(jq -r '.["prometheus-node-exporter"].resources.limits.memory' <<<"$v")" 32Mi "node-exporter memory limit"
+  assert_eq "$(jq -r '.serverFiles["prometheus.yml"].scrape_configs[] | select(.job_name == "node-exporter")
+      | .kubernetes_sd_configs[0].selectors[0].label' <<<"$v")" app.kubernetes.io/name=prometheus-node-exporter \
+    "node-exporter scrape job"
+}
+
 run_tests

@@ -10,7 +10,7 @@ OBS_ALLOY_VERSION = 1.16.0
 OBS_GRAFANA_VERSION = 10.5.15
 OBS_HELM = helm upgrade --install --wait --timeout 4m
 
-.PHONY: obs-up obs-status obs-rules-check grafana-password
+.PHONY: obs-up obs-status obs-rules-check obs-rules-test grafana-password
 
 # Idempotent: secretele se creeaza doar daca lipsesc; helm upgrade fara schimbari nu reporneste nimic.
 obs-up:
@@ -37,6 +37,11 @@ obs-up:
 # Valideaza regulile de alertare cu promtool din podul Prometheus
 obs-rules-check:
 	kubectl -n monitoring exec deploy/prometheus-server -c prometheus-server -- promtool check rules /etc/config/alerting_rules.yml
+
+# Inainte de deploy, fara cluster: promtool check rules + testele unitare din $(OBS_DIR)/alerting-rules.test.yml
+# (promtool din PATH, $$PROMTOOL sau imaginea Prometheus prin docker)
+obs-rules-test:
+	./scripts/obs-rules-test.sh
 
 obs-status:
 	@kubectl -n monitoring get pods,pvc,ingress

@@ -899,7 +899,7 @@
   },
   {
    "type": "stat",
-   "title": "Pierdute (trimise - stocate, 13m, offset 2m toleranta)",
+   "title": "Pierdute (garantia meter_readings: filegrid_meter_readings_lost)",
    "id": 17,
    "datasource": {
     "type": "prometheus",
@@ -948,7 +948,7 @@
    },
    "targets": [
     {
-     "expr": "clamp_min(sum(increase(filegrid_sim_readings_sent_total[13m] offset 2m)) - (sum(increase(filegrid_meter_readings_stored_total[13m] offset 2m)) or vector(0)), 0)",
+     "expr": "max(filegrid_meter_readings_lost)",
      "legendFormat": "pierdute",
      "datasource": {
       "type": "prometheus",
@@ -956,7 +956,8 @@
      },
      "refId": "A"
     }
-   ]
+   ],
+   "description": "Citiri de contor pierdute, din acelasi evaluator ca GET /api/v1/guarantees (gauge-ul filegrid_meter_readings_lost al backend-ului). Trebuie sa fie 0; alerta MeterReadingsLost porneste dupa 2 minute peste 0."
   },
   {
    "type": "stat",
