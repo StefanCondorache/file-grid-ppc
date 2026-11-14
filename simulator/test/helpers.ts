@@ -1,5 +1,6 @@
 // Test support: an in-process fake backend (node:http) that stores readings idempotently, plus small helpers.
 
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -8,7 +9,8 @@ import { createLogger } from '../src/log.ts';
 import type { Logger } from '../src/log.ts';
 import type { Reading } from '../src/readings.ts';
 
-export const TEST_API_KEY = 'test-meter-key-0123456789';
+// Random per test run: no key, not even a fake one, is written in the repository.
+export const TEST_API_KEY = randomBytes(18).toString('base64url');
 
 export interface ReceivedRequest {
   readonly headers: IncomingHttpHeaders;

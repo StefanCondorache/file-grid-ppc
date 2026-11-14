@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { CSRF_HEADER } from './constants';
+import { CSRF_HEADER, fakeSecret } from './constants';
 import { createTestApp, resetDatabase } from './helpers';
 import { memoryLogDestination } from './log-capture';
 import { TestOnlyModule } from './test-only.module';
@@ -80,17 +80,18 @@ describe('health probes, trace id and error envelope', () => {
   });
 
   it('lists invalid fields without echoing the submitted values', async () => {
+    const submitted = fakeSecret();
     const response = await request(app.getHttpServer())
       .post('/api/v1/test-only/validate')
       .set(CSRF_HEADER)
-      .send({ username: 'ana', password: 's3cret-value', attempts: 'many' });
+      .send({ username: 'ana', password: submitted, attempts: 'many' });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('VALIDATION_ERROR');
     expect(response.body.fieldErrors.map((error: { field: string }) => error.field)).toEqual([
       'attempts',
     ]);
-    expect(response.text).not.toContain('s3cret-value');
+    expect(response.text).not.toContain(submitted);
   });
 
   it('answers malformed JSON with a 400 envelope', async () => {

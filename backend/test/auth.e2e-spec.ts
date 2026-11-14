@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
-import { CSRF_HEADER, TEST_ADMIN_PASSWORD, TEST_JWT_SECRET, TEST_METER_KEY } from './constants';
+import {
+  CSRF_HEADER,
+  TEST_ADMIN_PASSWORD,
+  TEST_JWT_SECRET,
+  TEST_METER_KEY,
+  fakeSecret,
+} from './constants';
 import {
   bearer,
   browser,
@@ -100,7 +106,7 @@ describe('auth', () => {
   });
 
   it('answers a wrong password and an unknown user identically', async () => {
-    const wrongPassword = await login(app, 'admin', 'not-the-password');
+    const wrongPassword = await login(app, 'admin', fakeSecret());
     const unknownUser = await login(app, 'ghost', 'whatever-123');
 
     expect([wrongPassword.status, unknownUser.status]).toEqual([401, 401]);
@@ -130,7 +136,7 @@ describe('auth', () => {
     ['expired', () => craftToken({ iat: nowS() - 900, exp: nowS() - 60 })],
     ['wrong audience', () => craftToken({ aud: 'someone-else' })],
     ['wrong issuer', () => craftToken({ iss: 'evil' })],
-    ['wrong secret', () => craftToken({}, 'another-secret-0123456789-0123456789')],
+    ['wrong secret', () => craftToken({}, fakeSecret(32))],
     ['unknown role', () => craftToken({ role: 'superuser' })],
     ['missing exp', () => craftToken({ exp: undefined })],
     ['missing idle', () => craftToken({ idle: undefined })],
@@ -207,14 +213,16 @@ describe('auth', () => {
 
   it('re-syncs the admin password from the environment on start', async () => {
     await app.close();
-    const first = await createTestApp({ env: { ADMIN_PASSWORD: 'first-password-123' } });
-    expect((await login(first, 'admin', 'first-password-123')).status).toBe(200);
+    const firstPassword = fakeSecret();
+    const secondPassword = fakeSecret();
+    const first = await createTestApp({ env: { ADMIN_PASSWORD: firstPassword } });
+    expect((await login(first, 'admin', firstPassword)).status).toBe(200);
     await first.close();
 
-    app = await createTestApp({ env: { ADMIN_PASSWORD: 'second-password-456' } });
+    app = await createTestApp({ env: { ADMIN_PASSWORD: secondPassword } });
 
-    expect((await login(app, 'admin', 'second-password-456')).status).toBe(200);
-    expect((await login(app, 'admin', 'first-password-123')).status).toBe(401);
+    expect((await login(app, 'admin', secondPassword)).status).toBe(200);
+    expect((await login(app, 'admin', firstPassword)).status).toBe(401);
   });
 
   it('blocks a username after 10 failed logins, even with the right password', async () => {
@@ -309,9 +317,10 @@ describe('auth', () => {
 
     it('uses DEMO_USERS_PASSWORD when it is set', async () => {
       await app.close();
-      app = await createTestApp({ env: { DEMO_USERS_PASSWORD: 'demo-only-password-9' } });
+      const demoPassword = fakeSecret();
+      app = await createTestApp({ env: { DEMO_USERS_PASSWORD: demoPassword } });
 
-      expect((await login(app, 'auditor', 'demo-only-password-9')).status).toBe(200);
+      expect((await login(app, 'auditor', demoPassword)).status).toBe(200);
       expect((await login(app, 'auditor', TEST_ADMIN_PASSWORD)).status).toBe(401);
     });
 
@@ -331,7 +340,7 @@ describe('auth', () => {
       .set('X-API-Key', TEST_METER_KEY);
     const invalid = await request(server)
       .get('/api/v1/test-only/meter')
-      .set('X-API-Key', 'guessed-key-000000');
+      .set('X-API-Key', fakeSecret());
     const missing = await request(server).get('/api/v1/test-only/meter');
 
     expect(valid.status).toBe(200);

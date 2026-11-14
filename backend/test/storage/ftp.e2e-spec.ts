@@ -7,6 +7,9 @@ import { FtpSrv } from 'ftp-srv';
 import { ObjectNotFound, StorageUnavailable } from '../../src/storage/base';
 import { FtpSettings } from '../../src/storage/config';
 import { FtpStorage } from '../../src/storage/ftp';
+import { fakeSecret } from '../constants';
+
+const FTP_PASSWORD = fakeSecret();
 
 const sha256 = (data: Buffer): string => createHash('sha256').update(data).digest('hex');
 
@@ -56,7 +59,7 @@ describe('FtpStorage against an FTP server', () => {
       } as never,
     });
     server.on('login', ({ username, password }, resolve, reject) => {
-      if (username === 'filegrid' && password === 'ftp-test-password') resolve({ root });
+      if (username === 'filegrid' && password === FTP_PASSWORD) resolve({ root });
       else reject(new Error('bad login'));
     });
     await server.listen();
@@ -65,7 +68,7 @@ describe('FtpStorage against an FTP server', () => {
         host: '127.0.0.1',
         port,
         user: 'filegrid',
-        password: 'ftp-test-password',
+        password: FTP_PASSWORD,
         maxConnections: 2,
       }),
     );

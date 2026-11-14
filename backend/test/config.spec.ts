@@ -1,12 +1,16 @@
 import { loadConfig } from '../src/config/config';
-import { TEST_JWT_SECRET, TEST_METER_KEY } from './constants';
+import { TEST_JWT_SECRET, TEST_METER_KEY, fakeSecret } from './constants';
+
+// URL-special characters on purpose: the DSN builder must encode them.
+const PG_PASSWORD = `${fakeSecret(9)}@:/`;
+const TINY_SECRET = fakeSecret(8);
 
 const BASE: NodeJS.ProcessEnv = {
   POSTGRES_USER: 'filegrid',
-  POSTGRES_PASSWORD: 'p@ss:word/1',
+  POSTGRES_PASSWORD: PG_PASSWORD,
   POSTGRES_DB: 'filegrid',
   JWT_SECRET: TEST_JWT_SECRET,
-  ADMIN_PASSWORD: 'admin-password-1',
+  ADMIN_PASSWORD: fakeSecret(),
   METER_API_KEY: TEST_METER_KEY,
 };
 
@@ -16,7 +20,7 @@ describe('loadConfig', () => {
 
     expect(config.port).toBe(8000);
     expect(config.databaseUrl).toBe(
-      'postgresql://filegrid:p%40ss%3Aword%2F1@127.0.0.1:5432/filegrid',
+      `postgresql://filegrid:${encodeURIComponent(PG_PASSWORD)}@127.0.0.1:5432/filegrid`,
     );
     expect(config.sessionTtlMinutes).toBe(480);
     expect(config.sessionIdleMinutes).toBe(30);
@@ -32,7 +36,9 @@ describe('loadConfig', () => {
         FILEGRID_PG_HOST: 'postgres.filegrid-storage.svc',
         FILEGRID_PG_PORT: '6543',
       }).databaseUrl,
-    ).toBe('postgresql://filegrid:p%40ss%3Aword%2F1@postgres.filegrid-storage.svc:6543/filegrid');
+    ).toBe(
+      `postgresql://filegrid:${encodeURIComponent(PG_PASSWORD)}@postgres.filegrid-storage.svc:6543/filegrid`,
+    );
     expect(loadConfig({ ...BASE, FILEGRID_PG_DSN: 'postgresql://x:y@z/w' }).databaseUrl).toBe(
       'postgresql://x:y@z/w',
     );
@@ -46,8 +52,8 @@ describe('loadConfig', () => {
   });
 
   it('rejects a JWT secret shorter than 32 characters without echoing it', () => {
-    expect(() => loadConfig({ ...BASE, JWT_SECRET: 'tiny-secret' })).toThrow(/JWT_SECRET/);
-    expect(() => loadConfig({ ...BASE, JWT_SECRET: 'tiny-secret' })).not.toThrow(/tiny-secret/);
+    expect(() => loadConfig({ ...BASE, JWT_SECRET: TINY_SECRET })).toThrow(/JWT_SECRET/);
+    expect(() => loadConfig({ ...BASE, JWT_SECRET: TINY_SECRET })).not.toThrow(TINY_SECRET);
   });
 
   it.each(['', 'short'])('rejects a missing or short meter API key (%p)', (key) => {

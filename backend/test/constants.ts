@@ -1,7 +1,15 @@
-// Fake credentials used only by the test suite.
-export const TEST_JWT_SECRET = 'test-jwt-secret-0123456789-0123456789-abcdef';
-export const TEST_ADMIN_PASSWORD = 'admin-test-password-1';
-export const TEST_METER_KEY = 'meter-test-key-0123456789abcdef';
-// base64 of 32 bytes 0x01..0x20: a fixed KEK for tests only.
-export const TEST_KEK = Buffer.from(Array.from({ length: 32 }, (_, i) => i + 1)).toString('base64');
+import { randomBytes } from 'node:crypto';
+
+/**
+ * Test credentials are generated at random for every test run: no password, key or secret is
+ * written in the repository, not even a fake one.
+ */
+export function fakeSecret(bytes = 24): string {
+  return randomBytes(bytes).toString('base64url');
+}
+
+export const TEST_JWT_SECRET = fakeSecret(32);
+export const TEST_ADMIN_PASSWORD = fakeSecret(15);
+export const TEST_METER_KEY = fakeSecret(24);
+export const TEST_KEK = randomBytes(32).toString('base64');
 export const CSRF_HEADER = { 'X-Requested-With': 'filegrid' } as const;

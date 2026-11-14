@@ -1,9 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ConfigError, loadConfig } from '../src/config.ts';
 import { createLogger } from '../src/log.ts';
 
-const KEY = 'super-secret-meter-key';
+const KEY = randomBytes(18).toString('base64url'); // random per run: no key is written in the repo
 
 function problemsOf(env: Record<string, string>): string[] {
   try {

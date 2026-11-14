@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { TEST_METER_KEY } from './constants';
+import { TEST_METER_KEY, fakeSecret } from './constants';
 import {
   browser,
   createTestApp,
@@ -100,7 +100,7 @@ describe('meter readings', () => {
   });
 
   it('refuses a wrong key and an invalid body', async () => {
-    const wrongKey = await send([reading(1)], 'not-the-meter-key-0000');
+    const wrongKey = await send([reading(1)], fakeSecret());
     const invalid = await send([{ ...reading(1), zone: 'ardeal' }]);
     const empty = await send([]);
 

@@ -38,6 +38,8 @@ describe('S3Storage against an S3-compatible server', () => {
     storage = new S3Storage(
       new S3Settings({
         endpoint: `http://127.0.0.1:${address.port}`,
+        // s3rver's built-in public test key (the in-process fake server accepts only this one);
+        // it is not a credential of any real storage.
         accessKey: 'S3RVER',
         secretKey: 'S3RVER',
         bucket: 'filegrid',

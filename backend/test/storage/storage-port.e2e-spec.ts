@@ -88,7 +88,9 @@ describe('FGE1 envelope encryption', () => {
 
     expect(ring.primary.keyId).toBe('k7');
     expect(JSON.stringify(ring)).not.toContain(value);
-    expect(() => Keyring.fromEnv({ FILEGRID_KEK: 'c2hvcnQ=' })).toThrow(/32 bytes/);
+    expect(() => Keyring.fromEnv({ FILEGRID_KEK: randomBytes(5).toString('base64') })).toThrow(
+      /32 bytes/,
+    );
   });
 });
 
