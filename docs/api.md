@@ -196,7 +196,7 @@ All of these need `view_statistics`.
 | `GET /storage-health` | session | `{ data: [{ storage, status: ok|degraded|down, latencyMs, lastCheckAt, circuitState }] }`, from the health monitor (every 5 s) |
 | `GET /metrics/bulkhead` | `view_observability` | `{ data: [{ category, active, queued }] }` for this replica |
 | `GET /traces/{traceId}` | session | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, name, startOffsetMs, durationMs, status, storage, errorCode }] }` |
-| `GET /healthz`, `GET /readyz` | probes | `/readyz` stays **200** when a storage or the DB is down (`status: degraded`), as the README requires |
+| `GET /healthz`, `GET /readyz` | probes | `/healthz` is 200 while the process lives. `/readyz` answers `{ status, database }`: **200** `ready`, or `degraded` when a storage or the DB is down after the start, as the README requires. It answers **503** (with `Retry-After`) only while `starting` (the database has not been reached, migrated and seeded yet) and while `stopping` (SIGTERM, see below) |
 | `GET /metrics` | Prometheus | Text exposition |
 
 ## Demo controls (demo mode only: 404 when `FILEGRID_DEMO_MODE=false`; admin, audited)
@@ -211,6 +211,21 @@ All of these need `view_statistics`.
 
 The network-slowdown control (`tc netem`) stays a `make` target run by P1, because it needs root on the
 node.
+
+## Start and shutdown
+
+- **Start:** the server listens at once (`/healthz` 200, `/readyz` 503 `starting`). It then reaches the
+  database, retrying DNS and connection errors with backoff (0.5 s doubling up to 5 s) for
+  `FILEGRID_DB_BOOT_TIMEOUT_S` (90 s), runs the migrations (a Postgres advisory lock lets replicas take
+  turns) and creates the accounts from the environment. Then `/readyz` turns 200. If the database stays
+  unreachable, the process logs `database not reachable at startup; giving up` and exits 1, and
+  Kubernetes restarts it.
+- **Shutdown (SIGTERM, SIGINT):** `/readyz` turns 503 `stopping` and the live streams (`GET /stream`) end,
+  so `EventSource` reconnects to another replica. The server stops accepting connections, and responses
+  still being written carry `Connection: close`. In-flight requests finish, for at most
+  `FILEGRID_SHUTDOWN_DRAIN_S` (20 s, below the pod's grace period), and anything still open after that is
+  cut. Only then do the database pool, the storages and the timers close, so a rolling update or an HPA
+  scale-down answers no request with 500.
 
 ## Metrics (confirmation for P1: the names match the README)
 
@@ -278,6 +293,8 @@ The variables come from the k3s Secrets `filegrid-storage-credentials` and `file
   `FILEGRID_KEK_ID`.
 
 Optional:
+- `FILEGRID_DB_BOOT_TIMEOUT_S` (default 90) and `FILEGRID_SHUTDOWN_DRAIN_S` (default 20), see
+  [Start and shutdown](#start-and-shutdown)
 - `FILEGRID_DEMO_MODE` (default `true`)
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)

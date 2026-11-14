@@ -131,7 +131,7 @@ await withCategory('fault_records', async () => {
 
 **Backend (P2)**
 - Imaginea `backend/Dockerfile` ascultă pe portul 8000 și rulează ca uid 10001.
-- Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. API-ul e servit sub `/api/v1` (Ingress-ul `/api` nu taie prefixul); `/metrics` e la rădăcină.
+- Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. `/readyz` răspunde 503 doar la pornire (cât timp baza de date nu e încă accesibilă și migrată; reîncearcă până la `FILEGRID_DB_BOOT_TIMEOUT_S`, implicit 90 s, apoi procesul iese) și la oprire (SIGTERM: cererile în curs se termină, cel mult `FILEGRID_SHUTDOWN_DRAIN_S`, implicit 20 s, apoi se închide pool-ul DB). API-ul e servit sub `/api/v1` (Ingress-ul `/api` nu taie prefixul); `/metrics` e la rădăcină.
 - Env: Secret-urile `filegrid-storage-credentials` și `filegrid-app-secrets` (`JWT_SECRET`, `METER_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FILEGRID_KEK*`) plus `FILEGRID_PG_HOST`, `FILEGRID_S3_ENDPOINT`, `FILEGRID_FTP_HOST` (setate în `deploy/k8s/app/`).
 - Metrici așteptate de dashboard și alerte:
   - `filegrid_uploads_total{category,outcome}` și `filegrid_upload_duration_seconds{category,outcome}`; outcome `success`/`ok`/`duplicate` contează ca succes;

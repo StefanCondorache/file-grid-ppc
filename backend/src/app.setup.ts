@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import { errorBody } from './common/app-error';
 import { csrfMiddleware } from './common/csrf.middleware';
 import { ErrorEnvelopeFilter } from './common/error.filter';
+import { Lifecycle } from './lifecycle/lifecycle';
 import { NestPinoLogger, ROOT_LOGGER } from './observability/logger';
 import { traceMiddleware } from './observability/trace.middleware';
 
@@ -16,6 +17,8 @@ export function configureApp(app: NestExpressApplication): void {
   const logger = app.get<Logger>(ROOT_LOGGER);
   app.useLogger(new NestPinoLogger(logger));
   app.disable('x-powered-by');
+  // First: every request counts as in flight until its response closes (graceful shutdown).
+  app.use(app.get(Lifecycle).middleware());
   // Behind Traefik in the cluster: trust X-Forwarded-* only from private networks.
   app.set('trust proxy', 'loopback, linklocal, uniquelocal');
   app.use(traceMiddleware(logger));

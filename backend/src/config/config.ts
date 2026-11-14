@@ -26,6 +26,10 @@ const envSchema = z.object({
   POSTGRES_DB: z.string().optional(),
   FILEGRID_DB_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(8),
   FILEGRID_DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).default(3000),
+  // Start-up: how long to keep retrying an unreachable database (DNS, connection) before exiting.
+  FILEGRID_DB_BOOT_TIMEOUT_S: z.coerce.number().min(1).max(3600).default(90),
+  // SIGTERM: how long in-flight requests may take to finish (stay below the pod's grace period).
+  FILEGRID_SHUTDOWN_DRAIN_S: z.coerce.number().min(0).max(600).default(20),
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(10_080).default(480),
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(10_080).default(30),
@@ -66,6 +70,8 @@ export interface AppConfig {
   readonly databaseUrl: string;
   readonly dbPoolSize: number;
   readonly dbConnectTimeoutMs: number;
+  readonly dbBootTimeoutMs: number;
+  readonly shutdownDrainMs: number;
   readonly jwtSecret: string;
   readonly sessionTtlMinutes: number;
   readonly sessionIdleMinutes: number;
@@ -156,6 +162,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     databaseUrl: databaseUrl(e),
     dbPoolSize: e.FILEGRID_DB_POOL_SIZE,
     dbConnectTimeoutMs: e.FILEGRID_DB_CONNECT_TIMEOUT_MS,
+    dbBootTimeoutMs: Math.round(e.FILEGRID_DB_BOOT_TIMEOUT_S * 1000),
+    shutdownDrainMs: Math.round(e.FILEGRID_SHUTDOWN_DRAIN_S * 1000),
     jwtSecret: e.JWT_SECRET,
     sessionTtlMinutes: e.SESSION_TTL_MINUTES,
     sessionIdleMinutes: e.SESSION_IDLE_MINUTES,

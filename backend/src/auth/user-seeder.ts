@@ -1,7 +1,6 @@
-import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import type { Role } from '../common/domain';
-import { APP_CONFIG, type AppConfig } from '../config/config';
-import { DB, type Db } from '../database/database';
+import type { AppConfig } from '../config/config';
+import type { Db } from '../database/database';
 import { hashPassword, verifyPassword } from './password';
 
 interface SeedAccount {
@@ -52,6 +51,11 @@ export const DEMO_ACCOUNTS: readonly { username: Role; displayName: string }[] =
   { username: 'auditor', displayName: 'Auditor' },
 ];
 
+/**
+ * Creates the admin account (ADMIN_USERNAME/ADMIN_PASSWORD) and, in demo mode, one account per role,
+ * and re-syncs their passwords. Run by the boot (src/lifecycle/boot.service.ts) once the database
+ * is reachable and migrated.
+ */
 export async function ensureSeedUsers(db: Db, config: AppConfig): Promise<void> {
   await ensureUser(db, {
     username: config.adminUsername,
@@ -77,31 +81,5 @@ export async function ensureSeedUsers(db: Db, config: AppConfig): Promise<void> 
       password: config.demoUsersPassword,
       role: account.username,
     });
-  }
-}
-
-/**
- * Creates the admin account (ADMIN_USERNAME/ADMIN_PASSWORD) and, in demo mode, one account per role and re-syncs their passwords.
- * The container runs migrations first, so the DB was just reachable; if it is not now, keep
- * serving (/readyz reports it) instead of crash-looping.
- */
-@Injectable()
-export class UserSeeder implements OnApplicationBootstrap {
-  private readonly logger = new Logger(UserSeeder.name);
-
-  constructor(
-    @Inject(DB) private readonly db: Db,
-    @Inject(APP_CONFIG) private readonly config: AppConfig,
-  ) {}
-
-  async onApplicationBootstrap(): Promise<void> {
-    try {
-      await ensureSeedUsers(this.db, this.config);
-    } catch (error) {
-      this.logger.error({
-        message: 'could not seed users from the environment',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 }
