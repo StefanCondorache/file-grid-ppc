@@ -1,31 +1,34 @@
 #!/usr/bin/env bash
 # First step of `make up`: prepares the host for the k8s targets. Idempotent; every step runs only when needed:
 #   1. curl, ca-certificates, openssl, jq: installed with apt only if missing
-#   2. k3s (channel K3S_CHANNEL, default stable; or exactly K3S_VERSION), only if k3s is absent.
+#   2. k3s K3S_VERSION (default: the version tested on the VPS), only if k3s is absent.
+#      K3S_CHANNEL=stable|latest opts in to the newest k3s of that channel instead (untested combination).
 #      An existing k3s is never reinstalled or restarted.
-#   3. ~/.kube/config for helm: a copy of the k3s kubeconfig, only if it does not exist
-#   4. Helm 3 (official get-helm-3 script, version HELM_VERSION), only if helm is absent
+#   3. ~/.kube/config: a copy of the k3s kubeconfig for manual helm/kubectl use, only if it does not exist
+#      (make itself exports KUBECONFIG=/etc/rancher/k3s/k3s.yaml, so helm and kubectl read the same cluster)
+#   4. Helm HELM_VERSION (get-helm-3 from the same Helm tag), only if helm is absent
 #   5. waits until the node, CoreDNS, local-path storage and Traefik are ready
 # Must run as root: apt, the k3s installer and the mode-600 k3s kubeconfig all need it (sudo make up).
 set -euo pipefail
 
-K3S_CHANNEL=${K3S_CHANNEL:-stable}
-K3S_VERSION=${K3S_VERSION:-}            # e.g. v1.37.2+k3s1 (the version on the VPS); empty = latest in channel
+K3S_VERSION=${K3S_VERSION:-v1.37.2+k3s1}   # tested; it fixes the bundled Traefik chart (deploy/k8s/traefik-config.yaml)
+K3S_CHANNEL=${K3S_CHANNEL:-}               # opt-in, overrides K3S_VERSION
 HELM_VERSION=${HELM_VERSION:-v3.22.1}
 K3S_KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 USER_KUBECONFIG=$HOME/.kube/config
+export KUBECONFIG=${KUBECONFIG:-$K3S_KUBECONFIG}
 
 log() { printf '==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-retry() {   # <what> <command...>: up to 5 minutes, every 5s
-  local what=$1 i
+retry() {   # <what> <command...>: up to 5 minutes, every 5s; on timeout shows the command's last output
+  local what=$1 i out=""
   shift
   for i in $(seq 60); do
-    "$@" >/dev/null 2>&1 && return 0
+    out=$("$@" 2>&1) && return 0
     [ "$i" = 1 ] && log "waiting for $what"
     sleep 5
   done
-  die "timed out waiting for $what"
+  die "timed out waiting for $what; last output: ${out:-<none>}"
 }
 
 [ "$(id -u)" -eq 0 ] || die "make up must run as root (apt, k3s, root-only kubeconfig): sudo make up"
@@ -43,28 +46,33 @@ if [ "${#missing[@]}" -gt 0 ]; then
   command -v apt-get >/dev/null 2>&1 || die "missing: ${missing[*]} (no apt-get here; install them first)"
   log "installing ${missing[*]} (apt)"
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq --no-install-recommends "${missing[@]}" >/dev/null
+  # A freshly booted Ubuntu often runs unattended-upgrades: wait for the dpkg lock instead of failing
+  apt-get -o DPkg::Lock::Timeout=600 update -qq
+  apt-get -o DPkg::Lock::Timeout=600 install -y -qq --no-install-recommends "${missing[@]}" >/dev/null
 fi
 
 # 2. k3s (it brings kubectl, Traefik, CoreDNS, local-path storage and the NetworkPolicy controller)
 if command -v k3s >/dev/null 2>&1; then
   log "k3s present ($(k3s --version | head -n1)); not reinstalling"
+  if command -v systemctl >/dev/null 2>&1 && systemctl cat k3s.service >/dev/null 2>&1; then
+    systemctl is-active --quiet k3s || die "k3s is installed but not running; start it with: systemctl start k3s"
+  fi
 else
-  log "installing k3s (${K3S_VERSION:-latest $K3S_CHANNEL})"
-  curl -sfL https://get.k3s.io -o "$tmp/k3s-install.sh"
-  INSTALL_K3S_CHANNEL=$K3S_CHANNEL INSTALL_K3S_VERSION=$K3S_VERSION \
-    sh "$tmp/k3s-install.sh" server --write-kubeconfig-mode 600
+  if [ -n "$K3S_CHANNEL" ]; then version=""; what="latest in channel $K3S_CHANNEL"
+  else version=$K3S_VERSION; what=$K3S_VERSION; fi
+  log "installing k3s ($what)"
+  curl -sSfL https://get.k3s.io -o "$tmp/k3s-install.sh"
+  # host-gw: single node, so no VXLAN socket (UDP 8472) on the public interface; multi-node on separate
+  # networks would need vxlan or wireguard-native. --secrets-encryption: Secrets encrypted at rest in the datastore.
+  INSTALL_K3S_CHANNEL=${K3S_CHANNEL:-stable} INSTALL_K3S_VERSION=$version \
+    sh "$tmp/k3s-install.sh" server --write-kubeconfig-mode 600 --flannel-backend=host-gw --secrets-encryption
 fi
 
-# 3. kubectl (as root) reads the k3s kubeconfig itself; helm reads ~/.kube/config
+# 3. kubectl and helm read $KUBECONFIG; the ~/.kube/config copy is only a convenience for manual commands
 retry "$K3S_KUBECONFIG" test -s "$K3S_KUBECONFIG"
 if [ ! -e "$USER_KUBECONFIG" ]; then
   log "copying $K3S_KUBECONFIG to $USER_KUBECONFIG"
   install -D -m 600 "$K3S_KUBECONFIG" "$USER_KUBECONFIG"
-elif ! cmp -s "$K3S_KUBECONFIG" "$USER_KUBECONFIG"; then
-  log "warning: $USER_KUBECONFIG differs from $K3S_KUBECONFIG and is left as is; helm uses it." \
-    "If it is not meant for this k3s: install -m 600 $K3S_KUBECONFIG $USER_KUBECONFIG"
 fi
 
 # 4. Helm
@@ -72,7 +80,7 @@ if command -v helm >/dev/null 2>&1; then
   log "helm present ($(helm version --short)); not reinstalling"
 else
   log "installing helm $HELM_VERSION (get-helm-3)"
-  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o "$tmp/get-helm-3"
+  curl -sSfL "https://raw.githubusercontent.com/helm/helm/$HELM_VERSION/scripts/get-helm-3" -o "$tmp/get-helm-3"
   DESIRED_VERSION=$HELM_VERSION bash "$tmp/get-helm-3"
 fi
 
