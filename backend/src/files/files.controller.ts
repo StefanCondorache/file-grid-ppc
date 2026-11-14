@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { Authenticated, CurrentPrincipal } from '../auth/auth.decorators';
 import type { Principal } from '../auth/auth.types';
@@ -34,9 +34,11 @@ export class FilesController {
   async content(
     @CurrentPrincipal() principal: Principal,
     @Param('fileId') fileId: string,
+    @Headers('range') range: string | undefined,
+    @Headers('if-range') ifRange: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
-    await this.downloads.send(principal, fileId, response);
+    await this.downloads.send(principal, fileId, response, { range, ifRange });
   }
 
   @Post(':fileId/verification')

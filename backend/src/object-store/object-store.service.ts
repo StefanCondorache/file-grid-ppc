@@ -217,9 +217,19 @@ export class ObjectStoreService {
     return object.encrypted ? decryptStream(verified, this.requireKeyring()) : verified;
   }
 
-  /** The raw stored bytes (ciphertext for encrypted objects), unverified: for demo corruption. */
-  readRaw(category: Category, storage: StorageName, key: string): AsyncIterable<Buffer> {
-    return withCategory(category, () => this.registry.get(storage).getStream(key));
+  /**
+   * The raw stored bytes (ciphertext for encrypted objects), unverified: for staged parts, demo
+   * corruption and byte-range downloads of plain files.
+   */
+  readRaw(
+    category: Category,
+    storage: StorageName,
+    key: string,
+    signal?: AbortSignal,
+  ): AsyncIterable<Buffer> {
+    return busyAsCategoryBusyStream(
+      withCategory(category, () => this.registry.get(storage).getStream(key, { signal })),
+    );
   }
 
   /** Replaces the raw bytes under a key (demo: corrupt a stored file in place). */
