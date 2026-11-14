@@ -17,9 +17,10 @@ FTP (pure-ftpd, passive mode: EPSV, then PASV)
     FILEGRID_FTP_HOST           default ``127.0.0.1`` (k3s: ``ftp.filegrid-storage.svc.cluster.local``)
     FILEGRID_FTP_PORT           default 21
     FTP_USER, FTP_PASSWORD      required
-    FILEGRID_FTP_MAX_CONNECTIONS max concurrent control connections per process, default 4. pure-ftpd in
-                                ``infra/`` and ``deploy/`` runs with the image defaults ``-c 5 -C 5`` (5 clients
-                                in total, 5 per IP), so keep this below 5 per process.
+    FILEGRID_FTP_MAX_CONNECTIONS max concurrent control connections per process, default 4 (plus one
+                                for health). Keep (value + 1) x processes per pod IP within pure-ftpd's
+                                per-IP limit (-C) and the total within -c; each transfer also holds one
+                                passive port, so the server's passive range must be at least -c.
 
 PostgreSQL (asyncpg; objects live in schema ``blobstore``)
     FILEGRID_PG_DSN             full DSN; if unset it is built from the variables below

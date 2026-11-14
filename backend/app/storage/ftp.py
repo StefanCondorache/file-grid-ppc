@@ -11,10 +11,11 @@ iterator early closes the data and control connections (an interrupted transfer 
 control channel in an unknown state, so that connection is never reused).
 
 Connections: a small pool of logged-in control connections, bounded by
-``FILEGRID_FTP_MAX_CONNECTIONS`` (default 4) because pure-ftpd runs with ``-c 5 -C 5``. Logging in is
-expensive (pure-ftpd verifies a deliberately slow password hash: about 1 s of server CPU in k3s, 3-4 s
-in Docker on the same VPS), so idle connections are kept for up to 120 s and reused, but only after an
-operation that finished cleanly. ``health()`` keeps one dedicated logged-in connection outside the pool
+``FILEGRID_FTP_MAX_CONNECTIONS`` (default 4) to stay within pure-ftpd's session limits (``-c`` total,
+``-C`` per client IP; the image's defaults are ``-c 5 -C 5``). Logging in is slow: about 1 s in k3s
+and 3-4 s in Docker on the 2-core VPS, spent after ``PASS`` (consistent with pure-ftpd's memory-hard
+password hash; ``-H`` does not remove it). So idle connections are kept for up to 120 s and reused, but
+only after an operation that finished cleanly. ``health()`` keeps one dedicated logged-in connection outside the pool
 and sends ``NOOP`` on it (reconnecting when it broke): a pool busy with long video transfers is never
 reported as "down", and probing every 5 s does not cost a login each time.
 
