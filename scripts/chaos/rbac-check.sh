@@ -2,8 +2,8 @@
 # Verifies the demo-panel path end to end without changing anything (all scale calls are --dry-run=server):
 #   1. RBAC: SA filegrid/filegrid-backend may scale the three storage StatefulSets and nothing broader;
 #   2. admission: as that SA, replicas 0 and 1 pass, replicas 2 is denied by the ValidatingAdmissionPolicy;
-#   3. token: the running backend pod has the SA token mounted (automountServiceAccountToken: true on the pod),
-#      otherwise every API call from the demo panel is unauthenticated. Skipped if no backend pod exists yet.
+#   3. token: the backend Deployment's pod spec mounts the SA token (automountServiceAccountToken: true),
+#      otherwise every API call from the demo panel is unauthenticated (401). Skipped if not deployed yet.
 # Exit 0 only if every check holds.
 set -uo pipefail
 
@@ -41,15 +41,14 @@ else
   esac
 fi
 
-pod=$(kubectl -n filegrid get pods -l app=filegrid-backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-if [ -z "$pod" ]; then
-  echo "SKIP  no backend pod in ns filegrid yet (token check runs once the app is deployed)"
+# The Deployment template, not "some pod labelled app=filegrid-backend": bare test pods may carry that label.
+# The SA itself has automountServiceAccountToken: false, so the pod spec must opt in explicitly.
+if ! kubectl -n filegrid get deploy filegrid-backend >/dev/null 2>&1; then
+  echo "SKIP  no Deployment filegrid/filegrid-backend yet (token check runs once the app is deployed)"
 else
-  mounts=$(kubectl -n filegrid get pod "$pod" -o jsonpath='{.spec.containers[*].volumeMounts[*].mountPath}')
-  case " $mounts " in
-    *" /var/run/secrets/kubernetes.io/serviceaccount "*) ok "backend pod $pod has the SA token mounted" ;;
-    *) bad "backend pod $pod has NO SA token: set automountServiceAccountToken: true in the backend pod spec" ;;
-  esac
+  tok=$(kubectl -n filegrid get deploy filegrid-backend -o jsonpath='{.spec.template.spec.automountServiceAccountToken}')
+  [ "$tok" = "true" ] && ok "Deployment filegrid-backend mounts the SA token (automountServiceAccountToken: true)" \
+    || bad "Deployment filegrid-backend has no SA token (automountServiceAccountToken='${tok}'): set it to true in the pod spec"
 fi
 
 [ "$fail" -eq 0 ] && echo "demo RBAC: all checks passed" || echo "demo RBAC: FAILED"
