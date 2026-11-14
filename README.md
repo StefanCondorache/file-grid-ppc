@@ -25,9 +25,4 @@ make tls-status   # starea certificatului Let's Encrypt
 make tls-retry    # re-declanșează emiterea după ce DNS-ul pointează la VPS
 ```
 
-Domeniul public și pașii DNS/Cloudflare: [docs/vps-setup.md](docs/vps-setup.md), secțiunea 6.
-
-## Documentație
-
-- [docs/vps-setup.md](docs/vps-setup.md): configurarea VPS-ului și a stack-ului de storage
-- [docs/github-ssh-setup.md](docs/github-ssh-setup.md): acces GitHub prin SSH
+Cloudflare: dacă înregistrarea DNS e proxied (nor portocaliu), modul SSL/TLS trebuie să fie **Full (strict)**, niciodată Flexible (buclă de redirect).
