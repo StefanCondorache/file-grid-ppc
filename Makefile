@@ -58,6 +58,8 @@ k8s-storage-up: k8s-secrets
 	kubectl apply -f deploy/k8s/storage/s3-init-job.yaml
 	kubectl -n filegrid-storage wait --for=condition=complete job/s3-init --timeout=180s
 
-# Dovedeste NetworkPolicy-urile: pod etichetat in filegrid ajunge la storage-uri, cel neetichetat / din default nu.
+# Dovedeste NetworkPolicy-urile: podul etichetat din filegrid foloseste real storage-urile (psql SELECT 1, HEAD S3
+# semnat, LIST FTP pasiv) inainte si dupa; podul neetichetat si cel din default sunt respinse pe aceleasi porturi.
+# Test al verificarii (trebuie sa pice): ISOCHECK_FAULT=leak|nopod|notool|badtoken|s3down make storage-isolation-check
 storage-isolation-check:
 	./scripts/storage-isolation-check.sh

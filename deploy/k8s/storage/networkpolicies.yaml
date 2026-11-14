@@ -1,6 +1,11 @@
 # Only FileGrid app pods (namespace filegrid, label filegrid.io/storage-client=true) may reach the storages.
-# Only ingress is restricted; egress (DNS etc.) stays open. Kubelet probes come from the node and are not
-# blocked by kube-router's policies (verified, see make storage-isolation-check / pods stay Ready).
+# Only ingress is restricted; egress (DNS etc.) stays open. k3s's kube-router rejects denied traffic with
+# ICMP port-unreachable (clients see "connection refused"); `make storage-isolation-check` proves the rules.
+# Probes: every storage readiness/liveness probe is an exec probe that runs inside its own container
+# (pg_isready on the local socket, wget / bash /dev/tcp to 127.0.0.1), so probe traffic never crosses the pod
+# network and these policies cannot affect it. What was verified: postgres-0, s3-0 and ftp-0 stayed 1/1 Ready
+# with 0 restarts after the policies were applied. No httpGet/tcpSocket probes are used, so how kube-router
+# treats kubelet-to-pod probe traffic was not tested.
 ---
 # Default deny: every pod in filegrid-storage accepts no ingress unless another policy allows it.
 apiVersion: networking.k8s.io/v1
