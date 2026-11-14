@@ -192,6 +192,9 @@ export const upload = {
   policy,
   network,
   queue,
+  tray: {
+    storageUnavailable: (storage: string) => `${storage} nu este disponibil. Celelalte categorii funcționează normal. Reîncercăm automat.`,
+  },
   /** Name of a progress bar that has no file name next to it. */
   progressLabel: 'Progresul încărcării',
   dropzone: { title: 'Trage fișierele aici', orPick: 'sau alege-le de pe dispozitiv', choose: 'Alege fișiere' },
