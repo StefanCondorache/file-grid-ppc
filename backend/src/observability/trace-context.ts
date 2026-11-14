@@ -22,6 +22,8 @@ export interface SpanRecord {
 export class Trace {
   readonly startedAt = performance.now();
   readonly spans: SpanRecord[] = [];
+  /** Attributes of the whole request (method, path, upload id...): the root `api` span. */
+  readonly attributes: SpanAttributes = {};
 
   constructor(
     readonly traceId: string,
@@ -66,6 +68,32 @@ export function runWithTrace<T>(
 ): T {
   const trace = new Trace(traceId, clientIp);
   return storage.run(trace, () => fn(trace));
+}
+
+/** Add attributes to the whole current request (the root `api` span of its trace). */
+export function annotate(attrs: SpanAttributes): void {
+  const trace = storage.getStore();
+  if (trace) Object.assign(trace.attributes, attrs);
+}
+
+/**
+ * Record a step that was timed by hand, for work interleaved with another step (encryption runs
+ * chunk by chunk inside the storage write). `startedAt` is a `performance.now()` timestamp.
+ */
+export function recordSpan(
+  name: string,
+  startedAt: number,
+  durationMs: number,
+  attrs: SpanAttributes,
+): void {
+  const trace = storage.getStore();
+  trace?.spans.push({
+    name,
+    startMs: startedAt - trace.startedAt,
+    durationMs,
+    status: 'ok',
+    attrs: { ...attrs },
+  });
 }
 
 /** Time one step of the current operation. `fn` may add attributes to the span. */

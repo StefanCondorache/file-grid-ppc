@@ -10,9 +10,10 @@ import {
 } from '@nestjs/common';
 import { collectDefaultMetrics, register } from 'prom-client';
 import { z } from 'zod';
-import { Authenticated } from '../auth/auth.decorators';
+import { Authenticated, CurrentPrincipal } from '../auth/auth.decorators';
+import type { Principal } from '../auth/auth.types';
 import { AppError } from '../common/app-error';
-import { CATEGORIES, STORAGES, ZONES } from '../common/domain';
+import { CATEGORIES, STORAGES, VIEW_CAPABILITY, ZONES, can } from '../common/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { DB, type Db } from '../database/database';
 import { initAppMetrics } from './app-metrics';
@@ -42,14 +43,23 @@ export class MetricsController implements OnModuleInit {
 
 const traceIdParam = new ZodPipe(z.string().regex(/^[A-Za-z0-9-]{1,64}$/));
 
-/** GET /traces/{traceId}: every step of one operation, for the trace view of a file. */
+const traceNotFound = (): AppError =>
+  new AppError(404, 'NOT_FOUND', 'Nu există o urmă cu acest ID.');
+
+/**
+ * GET /traces/{traceId}: every step of one operation, for the trace view of a file. A role that may
+ * not see the category of the operation gets the same 404 as for a trace that does not exist.
+ */
 @Controller('traces')
 export class TracesController {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   @Get(':traceId')
   @Authenticated()
-  async get(@Param('traceId', traceIdParam) traceId: string) {
+  async get(
+    @CurrentPrincipal() principal: Principal,
+    @Param('traceId', traceIdParam) traceId: string,
+  ) {
     const row = await this.db
       .selectFrom('operations')
       .selectAll()
@@ -57,7 +67,10 @@ export class TracesController {
       .orderBy('started_at', 'desc')
       .limit(1)
       .executeTakeFirst();
-    if (!row) throw new AppError(404, 'NOT_FOUND', 'Nu există o urmă cu acest ID.');
+    if (!row) throw traceNotFound();
+    if (row.category && !can(principal.activeRole, VIEW_CAPABILITY[row.category])) {
+      throw traceNotFound();
+    }
     return {
       traceId: row.trace_id,
       operation: row.operation,
@@ -67,7 +80,7 @@ export class TracesController {
       startedAt: row.started_at.toISOString(),
       durationMs: row.duration_ms,
       status: row.status,
-      spans: row.spans,
+      spans: row.spans.map((span) => ({ ...span, attributes: span.attributes ?? {} })),
     };
   }
 }

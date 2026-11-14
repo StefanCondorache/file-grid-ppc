@@ -1,14 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Principal } from '../auth/auth.types';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
-import { AppError } from '../common/app-error';
+import { AppError, failedStorage } from '../common/app-error';
 import { UPLOAD_CAPABILITY, can } from '../common/domain';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import type { Keyring } from '../crypto/keys';
 import { DB, type Db } from '../database/database';
 import { maskCnp, maskName, sealPii } from '../files/pii';
 import { KEYRING, ObjectStoreService } from '../object-store/object-store.service';
-import { currentTraceId, span } from '../observability/trace-context';
+import { OperationsService } from '../observability/operations.service';
+import { annotate, currentTraceId, span } from '../observability/trace-context';
 import { PoliciesService } from '../policies/policies.service';
 import { METADATA_KIND, type CreateUpload } from './upload.schemas';
 import { type SessionRow, expectedPartSize, sessionView, statusView } from './upload.views';
@@ -48,6 +49,7 @@ export class UploadsService {
     private readonly policies: PoliciesService,
     private readonly store: ObjectStoreService,
     private readonly bulkhead: BulkheadService,
+    private readonly operations: OperationsService,
   ) {}
 
   async create(
@@ -141,6 +143,10 @@ export class UploadsService {
     return statusView(session, parts);
   }
 
+  /**
+   * PUT /uploads/{id}/parts/{n}. Every part is an operation of its own (`upload.part`) with its own
+   * trace: the answer carries its traceId, so the chunk grid can open the trace of one part.
+   */
   async receivePart(
     principal: Principal,
     uploadId: string,
@@ -149,7 +155,44 @@ export class UploadsService {
     declaredLength: number | undefined,
     declaredSha256: string | undefined,
   ) {
-    const session = await this.expireIfDue(await this.owned(principal, uploadId));
+    const owned = await this.owned(principal, uploadId);
+    annotate({ uploadId, partNumber: part });
+    try {
+      const session = await this.expireIfDue(owned);
+      const { view, storage } = await this.storePart(
+        session,
+        part,
+        body,
+        declaredLength,
+        declaredSha256,
+      );
+      await this.operations.record({
+        operation: 'upload.part',
+        category: session.category,
+        storage,
+        sizeBytes: view.size,
+        status: 'ok',
+      });
+      return { ...view, traceId: currentTraceId() ?? null };
+    } catch (error) {
+      await this.operations.record({
+        operation: 'upload.part',
+        category: owned.category,
+        storage: failedStorage(error),
+        status: 'error',
+      });
+      throw error;
+    }
+  }
+
+  private async storePart(
+    session: SessionRow,
+    part: number,
+    body: AsyncIterable<Uint8Array>,
+    declaredLength: number | undefined,
+    declaredSha256: string | undefined,
+  ) {
+    const uploadId = session.id;
     this.requireOpen(session);
     if (part < 1 || part > session.part_count) {
       throw new AppError(
@@ -175,10 +218,13 @@ export class UploadsService {
       .executeTakeFirst();
     if (previous && declaredSha256 !== undefined && previous.sha256 === declaredSha256) {
       return {
-        partNumber: part,
-        size: previous.size_bytes,
-        sha256: previous.sha256,
-        alreadyReceived: true,
+        storage: previous.storage,
+        view: {
+          partNumber: part,
+          size: previous.size_bytes,
+          sha256: previous.sha256,
+          alreadyReceived: true,
+        },
       };
     }
     const policy = await this.policies.get(session.category);
@@ -237,10 +283,13 @@ export class UploadsService {
       await this.store.delete(session.category, previous.storage, key);
     }
     return {
-      partNumber: part,
-      size: written.plain.size,
-      sha256: written.plain.sha256,
-      alreadyReceived: false,
+      storage: written.storage,
+      view: {
+        partNumber: part,
+        size: written.plain.size,
+        sha256: written.plain.sha256,
+        alreadyReceived: false,
+      },
     };
   }
 
