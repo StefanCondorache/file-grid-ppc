@@ -20,6 +20,39 @@ let bufferedDownloads = 0;
 
 type Outcome = 'success' | 'corrupt' | 'aborted' | 'error';
 
+export type ByteRange =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'range'; readonly start: number; readonly end: number };
+
+const SINGLE_RANGE = /^bytes=(\d*)-(\d*)$/;
+
+/**
+ * One `Range: bytes=a-b` (also `a-` and `-n`) against a file of `size` bytes, end clamped to the
+ * file. Other units and lists of ranges are ignored (the whole file is sent, as RFC 9110 allows);
+ * anything else that cannot be served is `invalid` (416).
+ */
+export function parseRange(header: string | undefined, size: number): ByteRange {
+  const value = header?.trim();
+  if (!value || !value.startsWith('bytes=') || value.includes(',')) return { kind: 'none' };
+  const match = SINGLE_RANGE.exec(value);
+  if (!match || (match[1] === '' && match[2] === '') || size === 0) return { kind: 'invalid' };
+  if (match[1] === '') {
+    const suffix = Number(match[2]);
+    if (suffix === 0) return { kind: 'invalid' };
+    return { kind: 'range', start: Math.max(0, size - suffix), end: size - 1 };
+  }
+  const start = Number(match[1]);
+  const end = match[2] === '' ? size - 1 : Number(match[2]);
+  if (start > end || start >= size) return { kind: 'invalid' };
+  return { kind: 'range', start, end: Math.min(end, size - 1) };
+}
+
+export interface DownloadOptions {
+  readonly range?: string;
+  readonly ifRange?: string;
+}
+
 function isCorruption(error: unknown): boolean {
   return (
     error instanceof IntegrityError || (error instanceof Error && error.name === 'DecryptionError')
@@ -52,9 +85,16 @@ export class DownloadService {
     private readonly operations: OperationsService,
   ) {}
 
-  async send(principal: Principal, fileId: string, response: Response): Promise<void> {
+  async send(
+    principal: Principal,
+    fileId: string,
+    response: Response,
+    options: DownloadOptions = {},
+  ): Promise<void> {
     const row = await this.files.visible(principal, fileId);
     if (row.integrity === 'corrupt') throw this.corrupt(row, null);
+    const range = this.rangeOf(row, options);
+    if (range.kind === 'range') return this.sendRange(principal, row, response, range);
     const buffered =
       Number(row.size_bytes) <= VERIFY_BEFORE_SEND_BYTES &&
       bufferedDownloads < MAX_BUFFERED_DOWNLOADS;
@@ -151,6 +191,105 @@ export class DownloadService {
     }
   }
 
+  /** Byte ranges only for plain files (an encrypted file is decrypted and verified whole). */
+  private rangeOf(row: FileRow, options: DownloadOptions): ByteRange {
+    if (row.encrypted || options.range === undefined) return { kind: 'none' };
+    if (options.ifRange !== undefined && options.ifRange !== `"${row.sha256}"`) {
+      return { kind: 'none' };
+    }
+    const size = Number(row.size_bytes);
+    const range = parseRange(options.range, size);
+    if (range.kind === 'invalid') {
+      throw new AppError(
+        416,
+        'RANGE_NOT_SATISFIABLE',
+        'Intervalul de octeți cerut nu există în fișier.',
+        { size },
+        { 'Content-Range': `bytes */${size}` },
+      );
+    }
+    return range;
+  }
+
+  /**
+   * 206 with the bytes start..end, read from the start of the stored object and skipped up to
+   * `start` (the storages have no ranged reads). No whole-file hash is checked for a part.
+   */
+  private async sendRange(
+    principal: Principal,
+    row: FileRow,
+    response: Response,
+    range: { start: number; end: number },
+  ): Promise<void> {
+    const length = range.end - range.start + 1;
+    response
+      .status(206)
+      .set(this.headers(row))
+      .set({
+        'Content-Range': `bytes ${range.start}-${range.end}/${row.size_bytes}`,
+        'Content-Length': String(length),
+      });
+    const gone = new AbortController();
+    const onClose = (): void => {
+      if (!response.writableFinished) gone.abort(new Error('client went away'));
+    };
+    response.once('close', onClose);
+    let offset = 0;
+    let outcome: Outcome = 'success';
+    try {
+      const chunks = this.store.readRaw(row.category, row.storage, row.storage_key, gone.signal);
+      await span('storage.get', { storage: row.storage, category: row.category }, async () => {
+        for await (const chunk of chunks) {
+          const from = Math.max(0, range.start - offset);
+          const to = Math.min(chunk.length, range.end + 1 - offset);
+          offset += chunk.length;
+          if (to <= from) {
+            if (offset > range.end) break;
+            continue;
+          }
+          if (!response.write(chunk.subarray(from, to))) {
+            await once(response, 'drain', { signal: gone.signal });
+          }
+          if (offset > range.end) break; // stop reading: closes the storage connection
+        }
+      });
+      response.end();
+    } catch (error) {
+      outcome = gone.signal.aborted ? 'aborted' : 'error';
+      response.destroy();
+      this.logger.warn({
+        message: 'range download aborted',
+        category: row.category,
+        storage: row.storage,
+        file_id: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      response.off('close', onClose);
+    }
+    DOWNLOADS_TOTAL.labels(row.category, outcome).inc();
+    await this.operations.record({
+      operation: 'file.download',
+      category: row.category,
+      storage: row.storage,
+      fileId: row.id,
+      sizeBytes: length,
+      status: outcome === 'success' ? 'ok' : 'error',
+    });
+    // A player seeks with many ranges: only the first one (from byte 0) is a custody event.
+    if (outcome === 'success' && range.start === 0) {
+      await this.audit.record(this.db, {
+        actor: principal.username,
+        actingAs: principal.activeRole === principal.role ? null : principal.activeRole,
+        action: 'download',
+        outcome: 'success',
+        category: row.category,
+        fileId: row.id,
+        details: `range ${range.start}-${range.end}`,
+      });
+    }
+  }
+
   /** Set only once the bytes are known good (small files) or about to stream: errors stay JSON. */
   private headers(row: FileRow): Record<string, string> {
     return {
@@ -159,6 +298,7 @@ export class DownloadService {
       'X-Content-Type-Options': 'nosniff',
       'X-File-SHA256': row.sha256,
       ETag: `"${row.sha256}"`,
+      'Accept-Ranges': row.encrypted ? 'none' : 'bytes',
       'Cache-Control': 'private, no-store',
     };
   }

@@ -36,7 +36,8 @@ import type { StorageLogger } from './resilience';
  * on pure-ftpd (1-4 s), so idle connections are kept for up to 120 s and reused, but only after an
  * operation that finished cleanly. `health()` keeps one dedicated logged-in connection outside the
  * pool and sends NOOP on it; a login that outlasts a probe keeps running in the background, so the
- * next probe only sends NOOP instead of starting another login.
+ * next probe only sends NOOP instead of starting another login. While it runs, `healthPending()`
+ * is true, so the resilience layer does not count those timed-out probes as failures.
  */
 
 export const READ_BUFFER = 256 * 1024;
@@ -195,6 +196,7 @@ export class FtpStorage implements StorageAdapter {
   private readonly logger?: StorageLogger;
   private healthClient: Client | undefined;
   private healthLogin: Promise<{ client: Client; loginMs: number }> | undefined;
+  private healthLoginRunning = false;
   private noop: Promise<void> | undefined;
 
   constructor(
@@ -429,8 +431,14 @@ export class FtpStorage implements StorageAdapter {
     return { ok: true, latencyMs: result.loginMs, detail: 'login + NOOP ok' };
   }
 
+  /** True while the shared health login is still running (see `HealthStatus.pending`). */
+  healthPending(): boolean {
+    return this.healthLoginRunning;
+  }
+
   private loginForHealth(): Promise<{ client: Client; loginMs: number }> {
     const start = performance.now();
+    this.healthLoginRunning = true;
     const login = (async () => {
       const client = await this.pool.connect();
       try {
@@ -442,7 +450,14 @@ export class FtpStorage implements StorageAdapter {
       return { client, loginMs: elapsedMs(start) };
     })();
     // A login nobody waits for any more must not become an unhandled rejection.
-    login.catch(() => undefined);
+    login.then(
+      () => {
+        this.healthLoginRunning = false;
+      },
+      () => {
+        this.healthLoginRunning = false;
+      },
+    );
     return login;
   }
 

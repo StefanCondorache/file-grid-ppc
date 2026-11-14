@@ -3,11 +3,14 @@
 #   1. curl, ca-certificates, openssl, jq: installed with apt only if missing
 #   2. k3s K3S_VERSION (default: the version tested on the VPS), only if k3s is absent.
 #      K3S_CHANNEL=stable|latest opts in to the newest k3s of that channel instead (untested combination).
-#      An existing k3s is never reinstalled or restarted.
+#      An existing k3s is never reinstalled or restarted, so flags of a new install (host-gw, Secrets encryption)
+#      do not reach it: the current VPS runs k3s installed without them.
 #   3. ~/.kube/config: a copy of the k3s kubeconfig for manual helm/kubectl use, only if it does not exist
 #      (make itself exports KUBECONFIG=/etc/rancher/k3s/k3s.yaml, so helm and kubectl read the same cluster)
 #   4. Helm HELM_VERSION (get-helm-3 from the same Helm tag), only if helm is absent
 #   5. waits until the node, CoreDNS, local-path storage and Traefik are ready
+#   6. reports whether Secrets are encrypted at rest. It never turns that on for an existing k3s (that needs a k3s
+#      restart): on such a k3s, like the current VPS, encryption stays OFF until `sudo make k3s-secrets-encrypt`.
 # Must run as root: apt, the k3s installer and the mode-600 k3s kubeconfig all need it (sudo make up).
 set -euo pipefail
 
@@ -63,7 +66,8 @@ else
   log "installing k3s ($what)"
   curl -sSfL https://get.k3s.io -o "$tmp/k3s-install.sh"
   # host-gw: single node, so no VXLAN socket (UDP 8472) on the public interface; multi-node on separate
-  # networks would need vxlan or wireguard-native. --secrets-encryption: Secrets encrypted at rest in the datastore.
+  # networks would need vxlan or wireguard-native. --secrets-encryption: Secrets encrypted at rest in the datastore
+  # from the first start (a new install only; an existing k3s: make k3s-secrets-encrypt).
   INSTALL_K3S_CHANNEL=${K3S_CHANNEL:-stable} INSTALL_K3S_VERSION=$version \
     sh "$tmp/k3s-install.sh" server --write-kubeconfig-mode 600 --flannel-backend=host-gw --secrets-encryption
 fi
@@ -91,3 +95,12 @@ kubectl wait --for=condition=Ready node --all --timeout=300s >/dev/null
 retry "CoreDNS, local-path-provisioner and Traefik" \
   kubectl -n kube-system get deploy coredns local-path-provisioner traefik
 kubectl -n kube-system rollout status deploy/coredns deploy/local-path-provisioner deploy/traefik --timeout=300s
+
+# 6. Secrets encryption at rest: reported, never changed here
+encryption=$(k3s secrets-encrypt status 2>/dev/null || true)
+if grep -q '^Encryption Status: Enabled' <<<"$encryption"; then
+  log "Secrets encryption at rest: on"
+else
+  log "Secrets encryption at rest: OFF on this k3s (${encryption%%$'\n'*});" \
+    "turn it on with: sudo make k3s-secrets-encrypt (restarts k3s once)"
+fi

@@ -11,6 +11,7 @@ import { ensureSeedUsers } from '../src/auth/user-seeder';
 import { configureApp } from '../src/app.setup';
 import { APP_CONFIG, type AppConfig, loadConfig } from '../src/config/config';
 import type { Database } from '../src/database/schema';
+import { BootService } from '../src/lifecycle/boot.service';
 import { ROOT_LOGGER, createRootLogger } from '../src/observability/logger';
 import { STORAGE_NAMES, type StorageName } from '../src/storage/base';
 import { MemoryStorage } from '../src/storage/memory';
@@ -29,6 +30,7 @@ import {
 } from './constants';
 
 const DATA_TABLES = [
+  'alerts',
   'operations',
   'audit_log',
   'meter_readings',
@@ -95,6 +97,8 @@ export interface TestAppOptions {
   logDestination?: DestinationStream;
   /** Storages for the app; default: fresh in-memory ones (no S3/FTP needed in tests). */
   storage?: StorageRegistry;
+  /** Wait until the boot (database reachable, migrated, accounts seeded) is done. Default true. */
+  waitForBoot?: boolean;
 }
 
 /** Three in-memory storages behind the real resilience layer, with test hooks. */
@@ -104,10 +108,14 @@ export function memoryStorages() {
   return {
     registry,
     adapter: (name: StorageName): MemoryStorage => adapters[STORAGE_NAMES.indexOf(name)],
-    /** Empty every storage, make it healthy and close the breakers again. */
-    reset: (): void => {
+    /**
+     * Empty every storage, make it healthy, close the breakers again and re-probe, so no storage
+     * is still remembered as down by the health monitor (writes would skip it).
+     */
+    reset: async (): Promise<void> => {
       for (const adapter of adapters) adapter.clear();
       for (const name of STORAGE_NAMES) registry.get(name).breaker.recordSuccess(true);
+      await registry.monitor.checkOnce();
     },
   };
 }
@@ -139,6 +147,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
   configureApp(app);
   await app.init();
+  if (options.waitForBoot ?? true) await app.get(BootService).ready;
   return app;
 }
 

@@ -127,9 +127,18 @@ export class UploadsService {
     return { created: true, view: sessionView(session, [], policy.maxFileSize) };
   }
 
+  /** GET /uploads/{id}: what was received, so the client can resume (counted as a resume). */
   async status(principal: Principal, uploadId: string) {
     const session = await this.expireIfDue(await this.owned(principal, uploadId));
-    return statusView(session, await this.parts(uploadId));
+    const parts = await this.parts(uploadId);
+    if (session.status === 'open' && parts.length > 0) {
+      await this.db
+        .updateTable('upload_sessions')
+        .set((eb) => ({ resume_count: eb('resume_count', '+', 1) }))
+        .where('id', '=', uploadId)
+        .execute();
+    }
+    return statusView(session, parts);
   }
 
   async receivePart(

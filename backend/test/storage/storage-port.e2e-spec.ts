@@ -10,6 +10,7 @@ import { Kek, Keyring } from '../../src/crypto/keys';
 import {
   IntegrityError,
   ObjectNotFound,
+  StorageBusy,
   StorageUnavailable,
   verifyStream,
 } from '../../src/storage/base';
@@ -217,5 +218,33 @@ describe('DbStorage (PostgreSQL blobstore)', () => {
 
   it('reports health', async () => {
     expect((await storage.health()).ok).toBe(true);
+  });
+
+  it('reports a pool full of transfers as busy, not as an outage', async () => {
+    const small = new DbStorage(
+      new DbSettings({
+        dsn: testDatabaseUrl(),
+        chunkSize: 64 * 1024,
+        poolMax: 1,
+        acquireTimeoutMs: 200,
+      }),
+    );
+    const resilient = new ResilientStorage(small, {
+      breaker: new CircuitBreaker('db', { failureThreshold: 1, resetTimeoutMs: 60_000 }),
+    });
+    try {
+      await resilient.putStream('test/busy.bin', chunksOf(randomBytes(200_000)));
+      const holding = resilient.getStream('test/busy.bin')[Symbol.asyncIterator]();
+      await holding.next(); // the only pooled connection is now checked out
+
+      await expect(
+        resilient.putStream('test/other.bin', chunksOf(Buffer.from('x'))),
+      ).rejects.toThrow(StorageBusy);
+      expect(resilient.breaker.stateName).toBe('closed');
+      await holding.return(undefined);
+      await expect(collect(resilient.getStream('test/busy.bin'))).resolves.toHaveLength(200_000);
+    } finally {
+      await small.close();
+    }
   });
 });

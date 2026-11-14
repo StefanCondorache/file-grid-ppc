@@ -308,7 +308,8 @@ export class Sender {
     const { log, metrics } = this.#o;
     const traceId = newTraceId();
     const size = batch.fresh.length + batch.duplicates.length;
-    const context = { traceId, batch: batch.seq, readings: size, attempt: failures + 1 };
+    // trace_id: the same log field as the backend, so one search finds both sides of a request.
+    const context = { trace_id: traceId, batch: batch.seq, readings: size, attempt: failures + 1 };
     let res: Response;
     try {
       res = await this.#fetch(this.#url, {
@@ -332,7 +333,9 @@ export class Sender {
     const status = res.status;
     if (status >= 200 && status < 300) {
       const response = parseAck(text);
-      log.debug('meter batch acknowledged', { ...context, status, ...response });
+      // The backend echoes our trace id as `traceId`; it is already in the context as trace_id.
+      const { traceId: _echoed, ...counts } = response ?? {};
+      log.debug('meter batch acknowledged', { ...context, status, ...counts });
       return { kind: 'acked', response };
     }
     const detail = { ...context, status, body: text.slice(0, LOG_BODY_LIMIT) };

@@ -17,6 +17,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/login-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the login form asks for a password (public, cacheable for 5 s)
+         * @description `passwordless` is true only when the backend runs with `FILEGRID_PASSWORDLESS_LOGIN=true` and demo mode
+         *     on (temporary, for the demo). The login page then shows only the role dropdown and sends `{username}`.
+         */
+        get: operations["auth_loginOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -818,10 +839,14 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @description `password` is required unless `GET /auth/login-options` answers `passwordless: true`. */
         LoginRequest: {
             username: string;
             /** Format: password */
-            password: string;
+            password?: string;
+        };
+        LoginOptions: {
+            passwordless: boolean;
         };
         Me: {
             user: components["schemas"]["UserRef"];
@@ -1640,7 +1665,29 @@ export interface operations {
                 };
             };
             401: components["responses"]["InvalidCredentials"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    auth_loginOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["XTraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginOptions"];
+                };
+            };
         };
     };
     auth_logout: {

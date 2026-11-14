@@ -14,22 +14,38 @@ testFramework:
 # Sidecar-ul de dashboard-uri cauta oricum doar in propriul namespace (searchNamespace nesetat).
 rbac:
   namespaced: true
+# 256Mi: la 192Mi Grafana 12 ajungea la limita (restarturi). GOMEMLIMIT ramane 160MiB (heap-ul Go), restul limitei
+# e pentru memoria din afara heap-ului. NU schimbati valoarea in loc: chart-ul pune si el o variabila GOMEMLIMIT
+# (= limits.memory) in acelasi container, iar cu doua intrari cu acelasi nume patch-ul strategic al lui helm ar
+# scrie noua valoare peste intrarea chart-ului (value + valueFrom = Deployment invalid, upgrade esuat).
 resources:
   requests: {cpu: 20m, memory: 96Mi}
-  limits: {cpu: 500m, memory: 192Mi}
+  limits: {cpu: 500m, memory: 256Mi}
 env:
   GOMEMLIMIT: 160MiB
 grafana.ini:
   server:
     serve_from_sub_path: true
+  # Cookie-ul de sesiune doar pe HTTPS (Traefik termina TLS) si doar pentru cereri same-site
+  security:
+    cookie_secure: true
+    cookie_samesite: strict
+  # /metrics al Grafana era public (https://<DOMAIN>/grafana/metrics). Prometheus nu scrapeaza Grafana (podul nu
+  # are adnotarea prometheus.io/scrape), deci endpoint-ul e oprit: cererea ajunge la login (302).
+  metrics:
+    enabled: false
   auth.anonymous:
     enabled: false
+    # versiunea nu mai apare pentru cine nu e logat (subsol, /api/health); singura setare care o ascunde
+    hide_version: true
   users:
     allow_sign_up: false
+  # Fara cereri catre grafana.com (statistici, verificari de versiune) si fara link-uri de feedback
   analytics:
     reporting_enabled: false
     check_for_updates: false
     check_for_plugin_updates: false
+    feedback_links_enabled: false
   news:
     news_feed_enabled: false
 datasources:
@@ -51,9 +67,10 @@ datasources:
         jsonData: {maxLines: 1000}
 # Dashboard-uri din ConfigMap-uri cu eticheta grafana_dashboard=1 (namespace monitoring)
 sidecar:
+  # 160Mi: sidecar-ul (Python) ajungea la limita de 96Mi
   resources:
     requests: {cpu: 5m, memory: 48Mi}
-    limits: {cpu: 200m, memory: 96Mi}
+    limits: {cpu: 200m, memory: 160Mi}
   dashboards:
     enabled: true
     # doar ConfigMap-uri (nu si Secret-uri); reload-ul trebuie sa includa sub-path-ul /grafana

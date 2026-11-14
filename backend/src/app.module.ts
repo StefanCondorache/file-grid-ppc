@@ -5,8 +5,11 @@ import { BulkheadModule } from './bulkhead/bulkhead.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
+import { EventsModule } from './events/events.module';
 import { FilesModule } from './files/files.module';
+import { GuaranteesModule } from './guarantees/guarantees.module';
 import { HealthModule } from './health/health.module';
+import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { MetersModule } from './meters/meters.module';
 import { MonitoringModule } from './monitoring/monitoring.controller';
 import { ObjectStoreModule } from './object-store/object-store.module';
@@ -21,11 +24,13 @@ import { UploadsModule } from './uploads/uploads.module';
   imports: [
     ConfigModule,
     LoggingModule,
+    LifecycleModule,
     DatabaseModule,
     StorageModule,
     ObjectStoreModule,
     ObservabilityModule,
     BulkheadModule,
+    EventsModule,
     AuditModule,
     HealthModule,
     AuthModule,
@@ -34,6 +39,7 @@ import { UploadsModule } from './uploads/uploads.module';
     FilesModule,
     MetersModule,
     MonitoringModule,
+    GuaranteesModule,
     StatisticsModule,
     DemoModule,
   ],

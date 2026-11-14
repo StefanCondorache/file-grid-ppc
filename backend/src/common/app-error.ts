@@ -49,3 +49,20 @@ export const forbidden = (message = 'Nu aveți dreptul să faceți această acț
 export function retryAfter(seconds: number): Record<string, string> {
   return { 'Retry-After': String(Math.max(1, Math.ceil(seconds))) };
 }
+
+/** 503 CATEGORY_BUSY: too much at once for this category (bulkhead full, storage pool exhausted). */
+export function categoryBusy(): AppError {
+  return new AppError(
+    503,
+    'CATEGORY_BUSY',
+    'Prea multe operații simultane pentru această categorie. Reîncercați în câteva secunde.',
+    { retryAfterMs: 2000 },
+    retryAfter(2),
+  );
+}
+
+/** The storage named by an error (STORAGE_UNAVAILABLE carries it), for the operations log. */
+export function failedStorage(error: unknown): 's3' | 'ftp' | 'db' | null {
+  const storage = error instanceof AppError ? error.extras.storage : undefined;
+  return storage === 's3' || storage === 'ftp' || storage === 'db' ? storage : null;
+}

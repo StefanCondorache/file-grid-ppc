@@ -15,6 +15,7 @@ import {
   type PutResult,
   type StorageAdapter,
   type StorageCallOptions,
+  StorageBusy,
   StorageError,
   type StorageName,
   StorageUnavailable,
@@ -46,8 +47,9 @@ import type { StorageLogger } from './resilience';
 export const SCHEMA = 'blobstore';
 const SCHEMA_LOCK_ID = 0x46470001; // advisory lock id for ensureSchema ("FG" 0001)
 const KEY_LOCK_CLASS = 0x4647; // first half of the two-int advisory lock taken per key
-// Waiting for a free pooled connection (all busy) is overload, not an outage: allow longer.
-const ACQUIRE_TIMEOUT_MS = 10_000;
+// pg-pool's error when every pooled client stayed checked out for connectionTimeoutMillis: overload
+// (slow transfers hold the connections), not an outage. A failed *connect* has another message.
+const POOL_EXHAUSTED = /timeout exceeded when trying to connect/;
 const IDLE_CONNECTION_MS = 60_000;
 const READ_BATCH = 2;
 const CLOSE_TIMEOUT_MS = 5000;
@@ -104,6 +106,9 @@ async function acquire(pool: Pool, signal: AbortSignal | undefined): Promise<Poo
       (client) => client.release(),
       () => undefined,
     );
+    if (error instanceof Error && POOL_EXHAUSTED.test(error.message)) {
+      throw new StorageBusy('db: every pooled connection is in use', { cause: error });
+    }
     throw error;
   }
 }
@@ -135,7 +140,8 @@ export class DbStorage implements StorageAdapter {
     const pool = new Pool({
       connectionString: this.settings.dsn,
       max: this.settings.poolMax,
-      connectionTimeoutMillis: ACQUIRE_TIMEOUT_MS,
+      // Waiting for a free pooled connection (all busy) is overload, not an outage: allow longer.
+      connectionTimeoutMillis: this.settings.acquireTimeoutMs,
       idleTimeoutMillis: IDLE_CONNECTION_MS,
       Client: TimedClient as unknown as new () => ClientBase,
     });

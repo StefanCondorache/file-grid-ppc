@@ -2,7 +2,10 @@ import { resolveDatabaseUrl } from '../config/config';
 import { createRootLogger } from '../observability/logger';
 import { migrateDatabaseUrl } from './migrator';
 
-/** Container entry point run before the server: `node dist/database/migrate.js`. */
+/**
+ * Manual migration entry point: `node dist/database/migrate.js`. The server migrates by itself at
+ * start (src/lifecycle/boot.service.ts); this is for running the migrations alone.
+ */
 async function main(): Promise<void> {
   const logger = createRootLogger(process.env.LOG_LEVEL ?? 'info');
   try {

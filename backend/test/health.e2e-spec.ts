@@ -125,19 +125,3 @@ describe('request logging', () => {
     expect(line).toMatchObject({ method: 'GET', path: '/api/does-not-exist', status: 404 });
   });
 });
-
-describe('readiness without a database', () => {
-  it('stays ready (so the pod keeps serving) and reports the database as down', async () => {
-    const app = await createTestApp({
-      env: { FILEGRID_PG_DSN: 'postgresql://nobody:x@127.0.0.1:1/nowhere' },
-    });
-    try {
-      const response = await request(app.getHttpServer()).get('/readyz');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ status: 'degraded', database: 'error' });
-    } finally {
-      await app.close();
-    }
-  });
-});

@@ -2,6 +2,8 @@ import { Kysely, PostgresDialect } from 'kysely';
 import { type Migration, type MigrationResult, Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import { Pool } from 'pg';
 import { migration0001 } from './migrations/0001_initial';
+import { migration0002 } from './migrations/0002_guarantees_alerts';
+import { migration0003 } from './migrations/0003_audit_client_ip';
 import type { Database } from './schema';
 
 /**
@@ -10,6 +12,8 @@ import type { Database } from './schema';
  */
 const MIGRATIONS: Readonly<Record<string, Migration>> = {
   '0001_initial': migration0001,
+  '0002_guarantees_alerts': migration0002,
+  '0003_audit_client_ip': migration0003,
 };
 
 function migratorFor(db: Kysely<Database>): Migrator {

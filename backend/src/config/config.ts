@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 /**
@@ -15,6 +16,28 @@ const bool = z
   .enum(['true', 'false', '1', '0', 'yes', 'no'])
   .transform((value) => ['true', '1', 'yes'].includes(value));
 
+/** `a.b.c.d`, `a.b.c.d/n` (n <= 32), an IPv6 address or `x::y/n` (n <= 128). */
+function isAddressOrCidr(entry: string): boolean {
+  const [address, prefix, extra] = entry.split('/');
+  const family = isIP(address ?? '');
+  if (family === 0 || extra !== undefined) return false;
+  if (prefix === undefined) return true;
+  const bits = Number(prefix);
+  return /^\d{1,3}$/.test(prefix) && bits <= (family === 4 ? 32 : 128);
+}
+
+const cidrList = z
+  .string()
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  )
+  .refine((entries) => entries.every(isAddressOrCidr), {
+    message: 'must be a comma-separated list of IP addresses or CIDR ranges',
+  });
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(8000),
   // Metadata database: the same PostgreSQL as the `db` storage, tables in schema public.
@@ -26,6 +49,10 @@ const envSchema = z.object({
   POSTGRES_DB: z.string().optional(),
   FILEGRID_DB_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(8),
   FILEGRID_DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).default(3000),
+  // Start-up: how long to keep retrying an unreachable database (DNS, connection) before exiting.
+  FILEGRID_DB_BOOT_TIMEOUT_S: z.coerce.number().min(1).max(3600).default(90),
+  // SIGTERM: how long in-flight requests may take to finish (stay below the pod's grace period).
+  FILEGRID_SHUTDOWN_DRAIN_S: z.coerce.number().min(0).max(600).default(20),
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(10_080).default(480),
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(10_080).default(30),
@@ -35,12 +62,30 @@ const envSchema = z.object({
   METER_API_KEY: z.string({ error: 'is required' }).min(16, 'must be at least 16 characters'),
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(1).default(10),
   LOGIN_WINDOW_S: z.coerce.number().int().min(1).default(300),
+  // Peers whose X-Forwarded-For is believed (Traefik runs in the pod CIDR). Everyone else's is ignored.
+  TRUSTED_PROXY_CIDRS: cidrList.default(['10.42.0.0/16', '10.43.0.0/16']),
   FILEGRID_DEMO_MODE: bool.default(true),
+  // Temporary demo switch: log in by picking a role, without a password. Ignored unless demo mode is on.
+  FILEGRID_PASSWORDLESS_LOGIN: bool.default(false),
   // Password of the per-role demo accounts (teren, dispecerat, racordari, auditor); default ADMIN_PASSWORD.
   DEMO_USERS_PASSWORD: z.string().min(8, 'must be at least 8 characters').optional(),
   SIMULATOR_URL: z.string().url().default('http://filegrid-simulator.filegrid.svc:8080'),
   UPLOAD_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  // Live stream (GET /stream, ADR-0008).
+  STREAM_PING_S: z.coerce.number().min(0.1).max(300).default(20),
+  STREAM_COUNTERS_INTERVAL_S: z.coerce.number().min(0.5).max(300).default(2),
+  STREAM_MAX_CLIENTS: z.coerce.number().int().min(1).max(10_000).default(200),
+  // Business guarantees (GET /guarantees) and their alerts (GET /alerts).
+  GUARANTEE_EVAL_INTERVAL_S: z.coerce.number().min(0.5).max(3600).default(15),
+  GUARANTEE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(10_080).default(60),
+  GUARANTEE_AT_RISK_RATIO: z.coerce.number().gt(0).max(1).default(0.8),
+  GUARANTEE_METER_LOST_MAX: z.coerce.number().int().min(0).default(0),
+  GUARANTEE_FAULT_P95_MS: z.coerce.number().int().min(1).default(5000),
+  GUARANTEE_CONNECTION_ENCRYPTED_PCT: z.coerce.number().min(0).max(100).default(100),
+  GUARANTEE_CONNECTION_UNMASK_MAX: z.coerce.number().int().min(0).default(20),
+  GUARANTEE_DRONE_SUCCESS_MIN: z.coerce.number().min(0).max(1).default(0.95),
+  GUARANTEE_DRONE_SUCCESS_AT_RISK: z.coerce.number().min(0).max(1).default(0.99),
   // Envelope encryption keys (Secret filegrid-app-secrets); parsed and checked by src/crypto/keys.ts.
   FILEGRID_KEK: z.string().optional(),
   FILEGRID_KEK_ID: z.string().optional(),
@@ -52,6 +97,8 @@ export interface AppConfig {
   readonly databaseUrl: string;
   readonly dbPoolSize: number;
   readonly dbConnectTimeoutMs: number;
+  readonly dbBootTimeoutMs: number;
+  readonly shutdownDrainMs: number;
   readonly jwtSecret: string;
   readonly sessionTtlMinutes: number;
   readonly sessionIdleMinutes: number;
@@ -61,13 +108,41 @@ export interface AppConfig {
   readonly meterApiKey: string;
   readonly loginMaxFailures: number;
   readonly loginWindowS: number;
+  /** Express `trust proxy`: X-Forwarded-For is used only when the TCP peer is in one of these. */
+  readonly trustedProxyCidrs: readonly string[];
   readonly demoMode: boolean;
+  /**
+   * Login without a password (POST /auth/login checks only that the account exists): true only when
+   * FILEGRID_PASSWORDLESS_LOGIN and FILEGRID_DEMO_MODE are both on.
+   */
+  readonly passwordlessLogin: boolean;
+  /** FILEGRID_PASSWORDLESS_LOGIN as set, even when demo mode is off and it has no effect. */
+  readonly passwordlessLoginRequested: boolean;
   readonly demoUsersPassword: string;
   readonly simulatorUrl: string;
   readonly uploadSessionTtlHours: number;
   readonly logLevel: LogLevel;
+  readonly stream: {
+    readonly pingMs: number;
+    readonly countersIntervalMs: number;
+    readonly maxClients: number;
+  };
+  readonly guarantees: GuaranteeThresholds;
   /** The FILEGRID_KEK* variables, handed to Keyring.fromEnv (never logged). */
   readonly kekEnv: Readonly<Record<string, string | undefined>>;
+}
+
+export interface GuaranteeThresholds {
+  readonly evalIntervalMs: number;
+  readonly windowMinutes: number;
+  /** A metric at this fraction of its limit turns the guarantee `at_risk`. */
+  readonly atRiskRatio: number;
+  readonly meterLostMax: number;
+  readonly faultP95Ms: number;
+  readonly connectionEncryptedPct: number;
+  readonly connectionUnmaskMax: number;
+  readonly droneSuccessMin: number;
+  readonly droneSuccessAtRisk: number;
 }
 
 export class ConfigError extends Error {
@@ -123,6 +198,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     databaseUrl: databaseUrl(e),
     dbPoolSize: e.FILEGRID_DB_POOL_SIZE,
     dbConnectTimeoutMs: e.FILEGRID_DB_CONNECT_TIMEOUT_MS,
+    dbBootTimeoutMs: Math.round(e.FILEGRID_DB_BOOT_TIMEOUT_S * 1000),
+    shutdownDrainMs: Math.round(e.FILEGRID_SHUTDOWN_DRAIN_S * 1000),
     jwtSecret: e.JWT_SECRET,
     sessionTtlMinutes: e.SESSION_TTL_MINUTES,
     sessionIdleMinutes: e.SESSION_IDLE_MINUTES,
@@ -132,11 +209,33 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     meterApiKey: e.METER_API_KEY,
     loginMaxFailures: e.LOGIN_MAX_FAILURES,
     loginWindowS: e.LOGIN_WINDOW_S,
+    trustedProxyCidrs: e.TRUSTED_PROXY_CIDRS,
     demoMode: e.FILEGRID_DEMO_MODE,
+    passwordlessLogin: e.FILEGRID_PASSWORDLESS_LOGIN && e.FILEGRID_DEMO_MODE,
+    passwordlessLoginRequested: e.FILEGRID_PASSWORDLESS_LOGIN,
     demoUsersPassword: e.DEMO_USERS_PASSWORD ?? e.ADMIN_PASSWORD,
     simulatorUrl: e.SIMULATOR_URL,
     uploadSessionTtlHours: e.UPLOAD_SESSION_TTL_HOURS,
     logLevel: e.LOG_LEVEL,
+    stream: {
+      pingMs: Math.round(e.STREAM_PING_S * 1000),
+      countersIntervalMs: Math.round(e.STREAM_COUNTERS_INTERVAL_S * 1000),
+      maxClients: e.STREAM_MAX_CLIENTS,
+    },
+    guarantees: {
+      evalIntervalMs: Math.round(e.GUARANTEE_EVAL_INTERVAL_S * 1000),
+      windowMinutes: e.GUARANTEE_WINDOW_MINUTES,
+      atRiskRatio: e.GUARANTEE_AT_RISK_RATIO,
+      meterLostMax: e.GUARANTEE_METER_LOST_MAX,
+      faultP95Ms: e.GUARANTEE_FAULT_P95_MS,
+      connectionEncryptedPct: e.GUARANTEE_CONNECTION_ENCRYPTED_PCT,
+      connectionUnmaskMax: e.GUARANTEE_CONNECTION_UNMASK_MAX,
+      droneSuccessMin: e.GUARANTEE_DRONE_SUCCESS_MIN,
+      droneSuccessAtRisk: Math.max(
+        e.GUARANTEE_DRONE_SUCCESS_AT_RISK,
+        e.GUARANTEE_DRONE_SUCCESS_MIN,
+      ),
+    },
     kekEnv: {
       FILEGRID_KEK: e.FILEGRID_KEK,
       FILEGRID_KEK_ID: e.FILEGRID_KEK_ID,

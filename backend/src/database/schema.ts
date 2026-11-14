@@ -10,7 +10,7 @@ import type {
 } from '../common/domain';
 
 /**
- * Kysely view of the metadata schema created by migrations/0001_initial.ts.
+ * Kysely view of the metadata schema created by migrations/0001_initial.ts and 0002_guarantees_alerts.ts.
  * node-postgres returns int8 and numeric as strings, timestamptz as Date and jsonb parsed.
  */
 
@@ -124,6 +124,8 @@ export interface UploadSessionsTable {
   created_at: DefaultNow;
   updated_at: DefaultNow;
   expires_at: Timestamp;
+  /** How often the uploader came back to resume (GET /uploads/{id} with parts received). */
+  resume_count: Generated<number>;
 }
 
 export interface UploadPartsTable {
@@ -173,6 +175,8 @@ export interface AuditLogTable {
   reason: string | null;
   details: string | null;
   trace_id: string | null;
+  /** The client of the request (X-Forwarded-For from a trusted proxy, else the TCP peer). */
+  client_ip: string | null;
 }
 
 export interface SpanRow {
@@ -200,6 +204,22 @@ export interface OperationsTable {
   spans: Json<SpanRow[]>;
 }
 
+export type AlertState = 'at_risk' | 'violated' | 'resolved';
+
+export interface AlertsTable {
+  id: Generated<string>;
+  category: Category;
+  state: AlertState;
+  cause_code: string;
+  cause_facts: Json<Record<string, unknown>>;
+  raised_at: DefaultNow;
+  updated_at: DefaultNow;
+  resolved_at: NullableTimestamp;
+  acknowledged_at: NullableTimestamp;
+  acknowledged_by: string | null;
+  trace_id: string | null;
+}
+
 export interface Database {
   users: UsersTable;
   policies: PoliciesTable;
@@ -211,4 +231,5 @@ export interface Database {
   meter_batches: MeterBatchesTable;
   audit_log: AuditLogTable;
   operations: OperationsTable;
+  alerts: AlertsTable;
 }

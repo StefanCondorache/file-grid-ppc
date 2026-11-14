@@ -23,7 +23,8 @@ import { createHash } from 'node:crypto';
  * Every method accepts an optional `{ signal }`: aborting it makes the adapter give up the
  * operation and release its connection (`ResilientStorage` uses it for its timeouts).
  *
- * Errors (all `StorageError`): `StorageUnavailable` (down, timed out, circuit open: retry later or
+ * Errors (all `StorageError`): `StorageBusy` (no free pooled connection: retry shortly; not an outage),
+ * `StorageUnavailable` (down, timed out, circuit open: retry later or
  * use the policy's fallback storage), `ObjectNotFound`, `IntegrityError` (hash mismatch: the file
  * is corrupted), `InvalidKey`. Messages never contain credentials.
  *
@@ -60,6 +61,8 @@ export interface HealthStatus {
   readonly ok: boolean;
   readonly latencyMs: number;
   readonly detail: string;
+  /** Inconclusive: the probe ran out of time while a slow login was still in progress. */
+  readonly pending?: boolean;
 }
 
 export interface StorageCallOptions {
@@ -76,6 +79,11 @@ export interface StorageAdapter {
   getStream(key: string, options?: StorageCallOptions): AsyncIterable<Buffer>;
   delete(key: string, options?: StorageCallOptions): Promise<void>;
   health(options?: StorageCallOptions): Promise<HealthStatus>;
+  /**
+   * Optional: true while the adapter's own health login (started by an earlier probe) is still
+   * running. A probe that times out then says nothing about the storage (FTP logins take seconds).
+   */
+  healthPending?(): boolean;
   close(): Promise<void>;
 }
 
@@ -89,6 +97,13 @@ export class StorageError extends Error {
 
 /** The storage cannot serve the request now (down, timed out, or its circuit breaker is open). */
 export class StorageUnavailable extends StorageError {}
+
+/**
+ * The storage works but this process has no free connection to it right now (pool full of slow
+ * transfers): overload, not an outage. Not a `StorageUnavailable`, so it neither counts against
+ * the circuit breaker nor moves the write to the fallback; the caller retries a bit later.
+ */
+export class StorageBusy extends StorageError {}
 
 /** No object is stored under the requested key. */
 export class ObjectNotFound extends StorageError {}

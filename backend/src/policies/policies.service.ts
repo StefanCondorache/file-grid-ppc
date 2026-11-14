@@ -12,6 +12,7 @@ import {
   STORAGES,
 } from '../common/domain';
 import { DB, type Db } from '../database/database';
+import { EventBus } from '../events/event-bus.service';
 import type { PoliciesTable, PolicyChangeRow } from '../database/schema';
 import type { Policy, PolicyView } from './policy.types';
 import { z } from 'zod';
@@ -93,6 +94,7 @@ export class PoliciesService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly audit: AuditService,
+    private readonly events: EventBus,
   ) {}
 
   async get(category: Category): Promise<Policy> {
@@ -187,6 +189,7 @@ export class PoliciesService {
       });
       return updated;
     });
+    this.events.publish('policy.updated', { category, version: saved.version });
     return this.view(saved);
   }
 

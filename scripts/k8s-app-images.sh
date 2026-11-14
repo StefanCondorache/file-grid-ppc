@@ -20,7 +20,9 @@ for c in backend frontend simulator; do
   }
   img="filegrid-$c:$TAG"
   echo "build $img"
-  docker build -q -t "$img" "$c" >/dev/null
+  # --provenance=false: BuildKit otherwise attaches a provenance attestation (build timestamps) to the image index,
+  # so a rebuild from the same sources and cache would get a new digest on every `make up`.
+  docker build -q --provenance=false -t "$img" "$c" >/dev/null
   echo "import $img into k3s"
   docker save "$img" | k3s ctr -n k8s.io images import - >/dev/null
   built=$((built + 1))

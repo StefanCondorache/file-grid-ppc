@@ -27,5 +27,8 @@ ENV NODE_OPTIONS=--max-old-space-size=192
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD ["node", "-e", "fetch('http://127.0.0.1:8000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-# Migrations first (Kysely holds a Postgres advisory lock, so replicas take turns), then the API.
-CMD ["sh", "-c", "node dist/database/migrate.js && exec node dist/main.js"]
+# The server listens at once (/healthz up, /readyz 503 "starting"), then waits for the database
+# (retried with backoff for FILEGRID_DB_BOOT_TIMEOUT_S, default 90 s), runs the migrations (Kysely
+# holds a Postgres advisory lock, so replicas take turns) and seeds the accounts. Node is PID 1 and
+# handles SIGTERM itself (graceful drain, src/lifecycle/shutdown.ts).
+CMD ["node", "dist/main.js"]

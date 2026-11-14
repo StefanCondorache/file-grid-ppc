@@ -1,22 +1,33 @@
 import { http, HttpResponse } from 'msw';
 import { apiUrl } from '@/lib/api/base';
-import type { Role } from '@/lib/api/types';
+import type { FieldError, Role } from '@/lib/api/types';
 import { db } from '../db';
 import { SEED_PASSWORD, SEED_USERS } from '../seed/auth';
 import { currentSession, endSession, mockSettings, startSession, toMe, touchSession, userById } from '../session';
 
 const trace = () => `mock-${Math.random().toString(16).slice(2, 10)}`;
-const fail = (status: number, code: string, message: string) => HttpResponse.json({ code, message, traceId: trace() }, { status });
+const fail = (status: number, code: string, message: string, fieldErrors?: FieldError[]) =>
+  HttpResponse.json({ code, message, traceId: trace(), ...(fieldErrors ? { fieldErrors } : {}) }, { status });
 const unauthenticated = () => fail(401, 'UNAUTHENTICATED', 'Sesiunea a expirat.');
 const ACTING_ROLES: Role[] = ['teren', 'dispecerat', 'racordari', 'auditor'];
 
+/** Like the backend: passwordless login exists only together with demo mode (both are mock knobs). */
+const passwordless = () => (mockSettings().passwordless ?? false) && (mockSettings().demoMode ?? true);
+
 export const authHandlers = [
+  http.get(apiUrl('/auth/login-options'), () => HttpResponse.json({ passwordless: passwordless() })),
   http.post(apiUrl('/auth/login'), async ({ request }) => {
     const body = (await request.json()) as { username?: string; password?: string };
+    const free = passwordless();
+    // Like the backend's zod schema: without the passwordless switch a missing or empty password is a 422, not a 401.
+    if (!free && !body.password) {
+      const code = body.password === undefined ? 'invalid_type' : 'too_small';
+      return fail(422, 'VALIDATION_ERROR', 'Datele trimise nu sunt valide.', [{ field: 'password', code, message: 'Parola lipsește.' }]);
+    }
     const user = SEED_USERS.find((u) => u.username === body.username);
-    if (!user || body.password !== SEED_PASSWORD) return fail(401, 'INVALID_CREDENTIALS', 'Rol sau parolă greșită.');
+    if (!user || (!free && body.password !== SEED_PASSWORD)) return fail(401, 'INVALID_CREDENTIALS', 'Rol sau parolă greșită.');
     const s = startSession(user);
-    db.audit.append({ actor: user, actingAs: null, demo: false, action: 'login', traceId: trace() });
+    db.audit.append({ actor: user, actingAs: null, demo: free, action: 'login', ...(free ? { details: 'passwordless' } : {}), traceId: trace() });
     return HttpResponse.json(toMe(s));
   }),
   http.get(apiUrl('/auth/me'), () => {
