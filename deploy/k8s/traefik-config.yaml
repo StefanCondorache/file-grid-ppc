@@ -1,5 +1,10 @@
-# k3s HelmChartConfig: HTTP -> HTTPS redirect permanent pe entrypoint-ul `web` (Traefik).
-# Cheile sunt cele din chart-ul inclus in k3s (traefik-41.6.101+up41.6.1).
+# k3s HelmChartConfig pentru Traefik-ul inclus in k3s. Cheile sunt cele din chart-ul inclus in k3s v1.37.2+k3s1
+# (traefik-41.6.101+up41.6.1; scripts/host-bootstrap.sh fixeaza aceasta versiune pe masini noi).
+# - HTTP -> HTTPS redirect permanent pe entrypoint-ul `web`.
+# - readTimeout pe `websecure`: implicit 60s in Traefik v3 si acopera citirea intregii cereri, cu tot corpul
+#   (per stream la HTTP/2), deci un upload lent ar fi taiat dupa 60s. 900s = 15 minute per cerere, limitat
+#   (nu 0) ca o conexiune lenta sa nu poata tine un worker la nesfarsit. Upload-urile mari: in bucati de 1-5 MB.
+# - resources: limita de memorie, ca orice container de pe VPS-ul de 4 GB.
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -15,3 +20,13 @@ spec:
               to: websecure
               scheme: https
               permanent: true
+      websecure:
+        transport:
+          respondingTimeouts:
+            readTimeout: 900s
+    resources:
+      requests:
+        cpu: 10m
+        memory: 48Mi
+      limits:
+        memory: 256Mi

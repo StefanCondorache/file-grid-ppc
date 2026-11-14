@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftp
+  namespace: filegrid-storage
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: ftp}
+  ports:
+    - {name: ftp, port: 21, targetPort: 21}
+    - {name: pasv-21000, port: 21000, targetPort: 21000}
+    - {name: pasv-21001, port: 21001, targetPort: 21001}
+    - {name: pasv-21002, port: 21002, targetPort: 21002}
+    - {name: pasv-21003, port: 21003, targetPort: 21003}
+    - {name: pasv-21004, port: 21004, targetPort: 21004}
+    - {name: pasv-21005, port: 21005, targetPort: 21005}
+    - {name: pasv-21006, port: 21006, targetPort: 21006}
+    - {name: pasv-21007, port: 21007, targetPort: 21007}
+    - {name: pasv-21008, port: 21008, targetPort: 21008}
+    - {name: pasv-21009, port: 21009, targetPort: 21009}
+    - {name: pasv-21010, port: 21010, targetPort: 21010}
+    - {name: pasv-21011, port: 21011, targetPort: 21011}
+    - {name: pasv-21012, port: 21012, targetPort: 21012}
+    - {name: pasv-21013, port: 21013, targetPort: 21013}
+    - {name: pasv-21014, port: 21014, targetPort: 21014}
+    - {name: pasv-21015, port: 21015, targetPort: 21015}
+    - {name: pasv-21016, port: 21016, targetPort: 21016}
+    - {name: pasv-21017, port: 21017, targetPort: 21017}
+    - {name: pasv-21018, port: 21018, targetPort: 21018}
+    - {name: pasv-21019, port: 21019, targetPort: 21019}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ftp
+  namespace: filegrid-storage
+spec:
+  serviceName: ftp
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: ftp}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ftp
+        app.kubernetes.io/part-of: filegrid-storage
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: pure-ftpd
+          image: stilliard/pure-ftpd:bookworm-1.0.50
+          ports:
+            - {name: ftp, containerPort: 21}
+          env:
+            - name: FTP_USER_NAME
+              valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: FTP_USER}}
+            - name: FTP_USER_PASS
+              valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: FTP_PASSWORD}}
+            - name: FTP_USER_HOME
+              value: /home/ftpuser
+            # PASV replies carry the pod IP (downward API). Default clients ignore that address: Python ftplib
+            # (trust_server_pasv_ipv4_address=False) and curl >= 7.74 open the data connection to the control
+            # peer, i.e. the Service ClusterIP on the same passive port. So the Service must list every passive
+            # port, and this StatefulSet must stay at 1 replica (the passive port has to reach the session's pod).
+            - name: PUBLICHOST
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            # Sessions: 10 in total (-c), 8 per client IP (-C), i.e. per app pod, so one pod cannot take them all;
+            # without these the image's run.sh adds -c 5 -C 5. pure-ftpd caps -c at half the passive range
+            # (tested: 20 ports -> 10 clients, 40 -> 20), so more sessions need a wider range.
+            # Passive range 21000-21019: keep in sync with the Service above, the NetworkPolicy endPort,
+            # infra/docker-compose.yml, README.md and PASV_PORTS in scripts/storage-isolation-check.sh.
+            # -H: no reverse DNS lookup of each client before the 220 greeting.
+            - name: FTP_MAX_CLIENTS
+              value: "10"
+            - name: FTP_MAX_CONNECTIONS
+              value: "8"
+            - name: ADDED_FLAGS
+              value: "-p 21000:21019 -E -H"
+          readinessProbe:
+            exec: {command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/21"]}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            exec: {command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/21"]}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            # The image runs as root (it creates the virtual user, chroots and switches to it per session),
+            # so: only the capabilities pure-ftpd needs, no NET_RAW / MKNOD / KILL / SETPCAP / SETFCAP / FSETID.
+            # AUDIT_WRITE is required: without it pure-ftpd exits with code 252 at startup (tested).
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID, SYS_CHROOT, NET_BIND_SERVICE, AUDIT_WRITE]
+          volumeMounts:
+            - {name: data, mountPath: /home/ftpuser}
+  # Written out with the API server's defaults (apiVersion, kind, volumeMode, status): the list is atomic,
+  # so without them every `kubectl apply` re-sends it and reports "configured" although nothing changes.
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        volumeMode: Filesystem
+        resources:
+          requests: {storage: 5Gi}
+      status: {phase: Pending}

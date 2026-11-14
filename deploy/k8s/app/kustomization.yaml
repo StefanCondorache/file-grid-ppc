@@ -1,0 +1,10 @@
+# Full FileGrid app (all three components), used for validation: kubectl apply -k deploy/k8s/app --dry-run=server.
+# make app-up does NOT apply this file: scripts/k8s-app-up.sh renders a temporary overlay with only the components
+# whose image exists in k3s, pinned to the built tag (images: newTag). Images are local-only (imagePullPolicy Never).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - base
+  - backend
+  - frontend
+  - simulator

@@ -32,3 +32,9 @@ node_modules/
 .vscode/
 *.iml
 .DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

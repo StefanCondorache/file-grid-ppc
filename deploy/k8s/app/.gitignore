@@ -1,0 +1,2 @@
+# temporary overlays rendered by scripts/k8s-app-up.sh
+.render.*

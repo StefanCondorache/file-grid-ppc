@@ -1,0 +1,64 @@
+# grafana/grafana servit la https://<DOMAIN>/grafana (root_url/domain se dau din obs-up cu --set, dupa DOMAIN).
+# Parola admin: Secret grafana-admin generat de scripts/obs-secrets.sh (niciodata in git); `make grafana-password`.
+# Fara persistenta: datasource-urile si dashboard-urile sunt provizionate din git la fiecare pornire.
+fullnameOverride: grafana
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+persistence:
+  enabled: false
+testFramework:
+  enabled: false
+# Least privilege: Role doar in namespace monitoring (nu ClusterRole cu get/list/watch pe secrets in tot clusterul).
+# Sidecar-ul de dashboard-uri cauta oricum doar in propriul namespace (searchNamespace nesetat).
+rbac:
+  namespaced: true
+resources:
+  requests: {cpu: 20m, memory: 96Mi}
+  limits: {cpu: 500m, memory: 192Mi}
+env:
+  GOMEMLIMIT: 160MiB
+grafana.ini:
+  server:
+    serve_from_sub_path: true
+  auth.anonymous:
+    enabled: false
+  users:
+    allow_sign_up: false
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+    check_for_plugin_updates: false
+  news:
+    news_feed_enabled: false
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus-server.monitoring.svc.cluster.local
+        isDefault: true
+        jsonData: {timeInterval: 30s}
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        jsonData: {maxLines: 1000}
+# Dashboard-uri din ConfigMap-uri cu eticheta grafana_dashboard=1 (namespace monitoring)
+sidecar:
+  resources:
+    requests: {cpu: 5m, memory: 48Mi}
+    limits: {cpu: 200m, memory: 96Mi}
+  dashboards:
+    enabled: true
+    # doar ConfigMap-uri (nu si Secret-uri); reload-ul trebuie sa includa sub-path-ul /grafana
+    resource: configmap
+    reloadURL: http://localhost:3000/grafana/api/admin/provisioning/dashboards/reload
+    label: grafana_dashboard
+    labelValue: "1"
+    folder: /tmp/dashboards

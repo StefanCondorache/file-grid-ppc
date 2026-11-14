@@ -1,0 +1,24 @@
+# Grafana pe acelasi host, sub /grafana (Traefik). TLS: Ingress-ul placeholder/frontend din namespace-ul filegrid
+# detine certificatul Let's Encrypt (secret ppc-filegrid-tls, emis de cert-manager). Traefik alege certificatul dupa
+# SNI din toate certificatele incarcate, deci aici `tls.hosts` fara secretName activeaza HTTPS pe router si refoloseste
+# acelasi certificat; nu cerem al doilea certificat identic (limita Let's Encrypt de 5 duplicate/saptamana).
+# DOMAIN inlocuieste ppc.filegrid.cc.cd la aplicare (obs-up).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ppc.filegrid.cc.cd]
+  rules:
+    - host: ppc.filegrid.cc.cd
+      http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port: {number: 80}
