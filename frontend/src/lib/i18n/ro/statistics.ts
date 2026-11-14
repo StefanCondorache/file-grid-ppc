@@ -81,6 +81,27 @@ export const statistics = {
     yes: 'da',
     no: 'nu',
   },
+  /** S2 · the dumbbell chart, its legend and its table. */
+  comparison: {
+    eyebrow: 'S2',
+    title: 'Zi normală vs. zi de vârf',
+    caption: (axisMax: string) => `Timp de scriere (p95) pe categorie · axa 0–${axisMax}`,
+    legend: 'Legendă',
+    /** Legend entry: "Perioada A: Zi normală · 12 nov". */
+    period: (name: string, label: string) => `${name}: ${label}`,
+    /** Table header: "Perioada A (Zi normală · 12 nov)". */
+    column: (name: string, label: string) => `${name} (${label})`,
+    /** What the dumbbell draws, in words for screen readers. */
+    row: (p: { a: string; b: string; delta: string | null }) => `Perioada A: ${p.a}; perioada B: ${p.b}${paren(p.delta)}.`,
+    notMeasured: 'nemăsurat',
+    noDelta: 'nu se poate calcula',
+    waiting: 'Alegeți perioadele de comparat.',
+    waitingBody: 'S2 compară o zi normală cu o zi de vârf. Pornirea unei furtuni din camera de demo înregistrează o perioadă de vârf.',
+    empty: 'Nu există măsurători ale timpului de scriere în perioadele alese.',
+    metric: { p95Ms: 'p95 la scriere', opsPerS: 'Operații/s', errorRate: 'Rata de erori', volume: 'Volum' },
+    readings: { one: 'o citire', few: '# citiri', other: '# de citiri' },
+    columns: { category: 'Categorie', metric: 'Indicator', delta: 'Diferență' },
+  },
   /** S1 · storage fit, one category. */
   s1: {
     faster: (p: { subject: string; times: string; fast: string; slow: string; fastP95: string; slowP95: string }) =>

@@ -10,6 +10,7 @@ import { useMe } from '@/features/auth/queries';
 import { roleLabel } from '@/features/auth/roles';
 import { can } from '@/lib/auth/capabilities';
 import { useT } from '@/lib/i18n';
+import { PeriodComparison } from './PeriodComparison';
 import { PeriodPicker, pickPeriods, type PeriodChoice } from './PeriodPicker';
 import { usePeriods, useRefreshStatistics } from './queries';
 import { StorageFit } from './StorageFit';
@@ -62,6 +63,7 @@ function Statistics() {
       </div>
       {periods.isError && <ErrorState error={periods.error} onRetry={() => void periods.refetch()} />}
       <StorageFit />
+      <PeriodComparison a={choice.a} b={choice.b} />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
-import { ChartTable, type ChartColumn } from '@/components/charts/ChartTable';
+import type { ChartColumn } from '@/components/charts/ChartTable';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { Card } from '@/components/ui/card';
@@ -14,9 +14,10 @@ import { STORAGE_IDS, type StatsCategoryId, type StorageFit as StorageFitData, t
 import { Insight } from './Insight';
 import { formatLatency, interpretS1 } from './interpret';
 import { useStorageFit } from './queries';
+import { TableDetails } from './TableDetails';
 
 /** Bars take their category's colour; the storages are told apart by the axis label only, never by colour (FE-10). */
-const BAR: Readonly<Record<StatsCategoryId, string>> = {
+export const CATEGORY_FILL: Readonly<Record<StatsCategoryId, string>> = {
   meter_readings: 'bg-cat-meter',
   fault_records: 'bg-cat-fault',
   connection_documents: 'bg-cat-connection',
@@ -132,13 +133,7 @@ export function StorageFitView({ fit }: { fit: StorageFitData }) {
         interpretation={lines.map(({ key, label, text }) => ({ key, label, text }))}
         recommendation={lines.map(({ key, label, recommendation }) => ({ key, label, text: recommendation }))}
       />
-      <details>
-        <summary className="cursor-pointer text-sm font-semibold text-link">{t.common.viewAsTable}</summary>
-        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- A11Y-23: a table that scrolls sideways on narrow screens sits in a focusable named region, so keyboard users can scroll it (axe scrollable-region-focusable). */}
-        <div role="region" aria-label={s.fit.title} tabIndex={0} className="overflow-x-auto">
-          <ChartTable columns={columns} rows={rows} caption={s.fit.title} />
-        </div>
-      </details>
+      <TableDetails title={s.fit.title} columns={columns} rows={rows} />
     </>
   );
 }
@@ -155,7 +150,7 @@ function Facet({ item }: { item: StorageFitItem }) {
     <div role="group" aria-labelledby={headingId} className="flex min-w-0 flex-col gap-2.5">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <h3 id={headingId} className="flex items-center gap-2 text-[15px] font-bold">
-          <span aria-hidden="true" className={cn('size-2.5 shrink-0 rounded-full', BAR[item.category])} />
+          <span aria-hidden="true" className={cn('size-2.5 shrink-0 rounded-full', CATEGORY_FILL[item.category])} />
           {category.label}
         </h3>
         <span className="text-[13px] text-ink-2">{category.size}</span>
@@ -168,7 +163,7 @@ function Facet({ item }: { item: StorageFitItem }) {
             </span>
             <span aria-hidden="true" className="h-[18px] overflow-hidden rounded-r-chip bg-sunken">
               {m.p95Ms !== null && (
-                <span data-bar className={cn('block h-full rounded-r-chip', BAR[item.category])} style={{ width: `${barWidth(m.p95Ms, max)}%` }} />
+                <span data-bar className={cn('block h-full rounded-r-chip', CATEGORY_FILL[item.category])} style={{ width: `${barWidth(m.p95Ms, max)}%` }} />
               )}
             </span>
             <span data-value className={cn('text-right', m.p95Ms === null ? 'text-ink-2' : 'font-semibold')}>

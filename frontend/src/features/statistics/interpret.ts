@@ -55,6 +55,8 @@ function delta(pct: number): string {
   const whole = Math.round(pct);
   return `${whole > 0 ? '+' : whole < 0 ? '−' : ''}${formatPercent(Math.abs(whole) / 100, 0)}`;
 }
+/** A change as the sentences quote it, so the chart and table print the very same "+467 %". */
+export const formatDelta = delta;
 const kwh = (n: number) => `${decimal(n, 2, 2)}${NBSP}kWh`;
 const hour = (h: number) => `${String(h).padStart(2, '0')}:00`;
 /** b ÷ a to 1 decimal; null when a is 0 or a value is missing. */

@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('StatisticsScreen', () => {
-  it('answers S1 for the auditor and preselects the last normal day vs the most recent peak', async () => {
+  it('answers S1 and S2 for the auditor, comparing the last normal day with the most recent peak', async () => {
     signIn('auditor');
     renderWithClient(<StatisticsScreen />);
     expect(await screen.findByRole('heading', { level: 2, name: 'Ce ne spun datele' })).toBeInTheDocument();
@@ -48,6 +48,10 @@ describe('StatisticsScreen', () => {
     expect(screen.getByLabelText('Perioada B')).toHaveDisplayValue('Furtună · 14 nov 15:33');
     expect(screen.getByRole('heading', { level: 2, name: 'Ce storage se potrivește fiecărei categorii?' })).toBeInTheDocument();
     expect(await screen.findAllByText('Recomandat: S3')).toHaveLength(2);
+    // S2 compares the preselected pair.
+    expect(screen.getByRole('heading', { level: 2, name: 'Zi normală vs. zi de vârf' })).toBeInTheDocument();
+    expect(await screen.findByText('Perioada A: Zi normală · 12 nov')).toBeInTheDocument();
+    expect(screen.getByText('Perioada B: Furtună · 14 nov 15:33')).toBeInTheDocument();
   });
 
   it('reads the periods from the URL, ignores an unknown one and writes a new choice back', async () => {

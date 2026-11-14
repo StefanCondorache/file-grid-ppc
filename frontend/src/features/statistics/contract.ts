@@ -75,7 +75,9 @@ export type StorageFit = {
   items: StorageFitItem[];
 };
 
-export type ComparisonMetric = 'p95Ms' | 'opsPerS' | 'errorRate' | 'volume';
+/** The S2 metrics, in the backend's row order. */
+export const COMPARISON_METRICS = ['p95Ms', 'opsPerS', 'errorRate', 'volume'] as const;
+export type ComparisonMetric = (typeof COMPARISON_METRICS)[number];
 
 export type ComparisonRow = {
   category: StatsCategoryId;
