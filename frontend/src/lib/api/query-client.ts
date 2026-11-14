@@ -1,9 +1,16 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { isSessionEnding, notifyUnauthenticated } from '@/lib/auth/session-end';
 import { ApiError } from './errors';
 
-/** Server state defaults (ADR-0009): no focus refetch jumps during the demo, never retry client errors. */
+const onError = (error: unknown) => {
+  if (isSessionEnding(error)) notifyUnauthenticated(error);
+};
+
+/** Server state defaults (ADR-0009). Every 401 from any query or mutation ends the session (SR-19). */
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,

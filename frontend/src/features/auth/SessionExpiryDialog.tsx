@@ -10,16 +10,21 @@ function mmss(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** Mounted only while the dialog is open, so its clock starts at the moment it opens. */
+function Countdown({ deadline }: { deadline: number }) {
+  const t = useT();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{t.session.warnBody(mmss(deadline - now))}</>;
+}
+
 /** T−2 min warning with a one-action extend (A11Y-18, WCAG 2.2.1). Focus starts on "Rămân conectat". */
 export function SessionExpiryDialog({ open, deadline, onStay, onLogout }: { open: boolean; deadline: number; onStay: () => void; onLogout: () => void }) {
   const t = useT();
-  const [now, setNow] = useState(() => Date.now());
   const stayRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [open]);
 
   return (
     <AlertDialog.Root open={open}>
@@ -30,10 +35,11 @@ export function SessionExpiryDialog({ open, deadline, onStay, onLogout }: { open
             e.preventDefault();
             stayRef.current?.focus();
           }}
-          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-card bg-card p-6 shadow-e3">
+          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-card bg-card p-6 shadow-e3"
+        >
           <AlertDialog.Title className="text-xl font-bold">{t.session.warnTitle}</AlertDialog.Title>
           <AlertDialog.Description className="text-ink-2">
-            {t.session.warnBody(mmss(deadline - now))}
+            <Countdown deadline={deadline} />
           </AlertDialog.Description>
           <div className="flex justify-end gap-3">
             <AlertDialog.Cancel asChild>

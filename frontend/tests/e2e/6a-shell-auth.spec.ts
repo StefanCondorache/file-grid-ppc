@@ -27,6 +27,8 @@ test('session expiry warning appears and Rămân conectat extends it', async ({ 
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible({ timeout: 15_000 });
   await expect(dialog).toContainText('Sesiunea expiră');
+  // Final review #3: the countdown starts from the real remaining time (about 2:00), not a skewed value.
+  await expect(dialog).toContainText(/expiră în (1:5\d|2:00)/);
   await expect(page.getByRole('button', { name: 'Rămân conectat' })).toBeFocused();
   await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Rămân conectat' }).click();

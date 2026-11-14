@@ -20,7 +20,8 @@ export const authHandlers = [
     return HttpResponse.json(toMe(s));
   }),
   http.get(apiUrl('/auth/me'), () => {
-    const s = touchSession();
+    // Reading `me` must not keep a session alive (final review #9); refresh and real activity do.
+    const s = currentSession();
     return s ? HttpResponse.json(toMe(s)) : unauthenticated();
   }),
   http.post(apiUrl('/auth/refresh'), () => {

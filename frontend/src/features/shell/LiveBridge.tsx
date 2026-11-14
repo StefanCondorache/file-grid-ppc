@@ -45,6 +45,11 @@ export function LiveBridge() {
       onOpen: () => bridge.resync(),
       onStatus: setLive,
       onExpired: () => void qc.invalidateQueries({ queryKey: qk.me }),
+      onGiveUp: () => {
+        setLive('polling');
+        const stop = bridge.startPolling();
+        liveHandle.set({ close: stop, reconnect: () => bridge.resync() });
+      },
       checkSession: () =>
         unwrap(api.GET('/auth/me')).then(
           () => 'ok' as const,
@@ -52,7 +57,10 @@ export function LiveBridge() {
         ),
     });
     liveHandle.set(handle);
-    return () => handle.close();
+    return () => {
+      handle.close();
+      liveHandle.get().close();
+    };
   }, [qc, setLive, markEvent]);
 
   useEffect(() => {

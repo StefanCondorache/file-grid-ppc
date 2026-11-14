@@ -13,6 +13,9 @@ type Options = {
   onExpired: () => void;
   checkSession: () => Promise<'ok' | 'expired'>;
   EventSourceImpl?: typeof EventSource;
+  /** Called once after `maxFailures` consecutive connects that never opened (e.g. no /stream on the backend). */
+  onGiveUp?: () => void;
+  maxFailures?: number;
   rng?: () => number;
 };
 
@@ -26,6 +29,7 @@ export function connectStream(opts: Options): { close(): void; reconnect(): void
   let es: EventSource | null = null;
   let lastId: number | null = null;
   let attempt = 0;
+  let failuresWithoutOpen = 0;
   let closed = false;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
@@ -52,6 +56,7 @@ export function connectStream(opts: Options): { close(): void; reconnect(): void
     opts.onStatus('connecting');
     current.onopen = () => {
       attempt = 0;
+      failuresWithoutOpen = 0;
       opts.onStatus('open');
       opts.onOpen();
       armWatchdog();
@@ -73,6 +78,14 @@ export function connectStream(opts: Options): { close(): void; reconnect(): void
   const scheduleRetry = async () => {
     if (closed || retry) return;
     if (watchdog) clearTimeout(watchdog);
+    failuresWithoutOpen += 1;
+    if (opts.onGiveUp && failuresWithoutOpen >= (opts.maxFailures ?? 3)) {
+      closed = true;
+      clearTimers();
+      es?.close();
+      opts.onGiveUp();
+      return;
+    }
     if ((await opts.checkSession()) === 'expired') {
       closed = true;
       clearTimers();
