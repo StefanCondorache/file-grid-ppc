@@ -1,0 +1,17 @@
+# k3s HelmChartConfig: HTTP -> HTTPS redirect permanent pe entrypoint-ul `web` (Traefik).
+# Cheile sunt cele din chart-ul inclus in k3s (traefik-41.6.101+up41.6.1).
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
