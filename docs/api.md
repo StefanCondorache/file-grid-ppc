@@ -332,4 +332,6 @@ Optional:
 - `LOG_LEVEL`
 
 Simulator variables: `BACKEND_URL`, `METER_API_KEY`, `METER_RATE` (default 10/s), `STORM_FACTOR` (10),
-`PORT` (8080), `METER_COUNT`, `BATCH_MAX`, `DUPLICATE_RATIO` (0.02) and `MAX_RATE`.
+`PORT` (8080), `METER_COUNT`, `BATCH_MAX`, `DUPLICATE_RATIO` (0.02) and `MAX_RATE`. The simulator logs JSON
+lines with the trace id of each batch request in `trace_id`, the same field as the backend's logs (it sends
+the same id as `X-Trace-Id`).
