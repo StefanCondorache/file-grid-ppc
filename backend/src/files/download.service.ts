@@ -11,8 +11,8 @@ import { span } from '../observability/trace-context';
 import { HashingStream, IntegrityError } from '../storage/base';
 import { type FileRow, FilesService, located } from './files.service';
 
-/** Files up to this size are read and verified completely before the first byte is sent. */
-const VERIFY_BEFORE_SEND_BYTES = 16 * 1024 * 1024;
+/** Files up to this size are verified completely before the first byte is sent (bounded: the pod has 384Mi). */
+const VERIFY_BEFORE_SEND_BYTES = 8 * 1024 * 1024;
 
 function isCorruption(error: unknown): boolean {
   return (

@@ -149,7 +149,7 @@ How the server handles an upload:
   - `origin` is one of `manual`, `simulator`, `storm` or `seed`.
 - **Download headers:** `Content-Disposition: attachment` with a sanitised `filename*`, `nosniff`,
   `X-File-SHA256` and an `ETag` taken from the hash.
-- **Integrity on download:** files up to 16 MiB are verified completely before the first byte is sent, so
+- **Integrity on download:** files up to 8 MiB are verified completely before the first byte is sent, so
   corruption answers `409 FILE_CORRUPT` with both hashes. Larger files are streamed, and the connection is
   cut (never ended cleanly) if the hash turns out wrong. In both cases the file is marked `corrupt`.
 - **What never leaves the backend:** storage URLs, keys and FTP paths.
