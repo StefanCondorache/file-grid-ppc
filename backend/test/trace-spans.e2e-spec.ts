@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { sql } from 'kysely';
 import request from 'supertest';
 import {
   binary,
@@ -9,6 +10,7 @@ import {
   loginCookie,
   memoryStorages,
   resetDatabase,
+  testDb,
 } from './helpers';
 
 const MiB = 1024 * 1024;
@@ -41,6 +43,7 @@ describe('traces: every step of one operation, from the request to the storage',
   let app: NestExpressApplication;
   let admin: string;
   const server = () => app.getHttpServer();
+  const storages = memoryStorages();
 
   /** Create, send every part (each one traced), complete; returns the part and complete answers. */
   async function upload(cookie: string, category: string, file: Buffer, metadata: object) {
@@ -104,11 +107,12 @@ describe('traces: every step of one operation, from the request to the storage',
   const names = (spans: SpanView[]) => spans.map((s) => s.name);
 
   beforeAll(async () => {
-    app = await createTestApp({ storage: memoryStorages().registry });
+    app = await createTestApp({ storage: storages.registry });
   });
 
   beforeEach(async () => {
     await resetDatabase();
+    await storages.reset();
     admin = await loginCookie(app);
   });
 
@@ -211,6 +215,75 @@ describe('traces: every step of one operation, from the request to the storage',
     const answer = await trace(admin, refused.headers['x-trace-id'] as string);
 
     expect(answer.body).toMatchObject({ operation: 'upload.part', status: 'error' });
+  });
+
+  it('records the download in the operations log even when its audit insert fails', async () => {
+    const { done } = await upload(admin, 'fault_records', Buffer.alloc(200, 6), FAULT_METADATA);
+    const db = testDb();
+    await sql`CREATE OR REPLACE FUNCTION test_refuse_download_audit() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.action = 'download' THEN RAISE EXCEPTION 'audit is down'; END IF;
+        RETURN NEW;
+      END $$`.execute(db);
+    await sql`CREATE TRIGGER test_refuse_download_audit BEFORE INSERT ON audit_log
+      FOR EACH ROW EXECUTE FUNCTION test_refuse_download_audit()`.execute(db);
+    try {
+      const downloaded = await binary(
+        request(server()).get(`/api/v1/files/${done.body.fileId}/content`).set(browser(admin)),
+      );
+      expect(downloaded.status).toBe(200);
+
+      const traceId = downloaded.headers['x-trace-id'] as string;
+      let answer = await trace(admin, traceId);
+      for (let attempt = 0; answer.status === 404 && attempt < 20; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        answer = await trace(admin, traceId);
+      }
+
+      expect(answer.status).toBe(200);
+      expect(answer.body.operation).toBe('file.download');
+      const audit = (answer.body.spans as SpanView[]).find((s) => s.name === 'audit');
+      expect(audit?.status).toBe('error');
+    } finally {
+      await sql`DROP TRIGGER IF EXISTS test_refuse_download_audit ON audit_log`.execute(db);
+      await sql`DROP FUNCTION IF EXISTS test_refuse_download_audit()`.execute(db);
+      await db.destroy();
+    }
+  });
+
+  it('shows the encryption step of an encrypted write that failed, as an error', async () => {
+    const part = Buffer.alloc(100, 8);
+    const created = await request(server())
+      .post('/api/v1/uploads')
+      .set({ ...browser(admin), 'Idempotency-Key': randomUUID() })
+      .send({
+        category: 'connection_documents',
+        fileName: 'test-trace-down.pdf',
+        fileSize: part.length,
+        mimeType: 'application/pdf',
+        metadata: CONNECTION_METADATA,
+      });
+    storages.adapter('s3').setAvailable(false);
+    storages.adapter('db').setAvailable(false);
+    let refused: request.Response;
+    try {
+      refused = await request(server())
+        .put(`/api/v1/uploads/${created.body.uploadId}/parts/1`)
+        .set({ ...browser(admin), 'Content-Type': 'application/octet-stream' })
+        .send(part);
+    } finally {
+      storages.adapter('s3').setAvailable(true);
+      storages.adapter('db').setAvailable(true);
+    }
+    expect(refused.status).toBe(503);
+
+    const spans: SpanView[] = (await trace(admin, refused.headers['x-trace-id'] as string)).body
+      .spans;
+
+    const encryption = spans.filter((s) => s.name === 'encryption');
+    expect(encryption.length).toBeGreaterThan(0);
+    expect(encryption.every((s) => s.status === 'error')).toBe(true);
+    expect(encryption[0]?.attributes).toMatchObject({ algorithm: 'AES-256-GCM' });
   });
 
   it('shows the audit step of a download', async () => {

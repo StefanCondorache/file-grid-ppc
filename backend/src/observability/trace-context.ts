@@ -85,13 +85,17 @@ export function recordSpan(
   startedAt: number,
   durationMs: number,
   attrs: SpanAttributes,
+  error?: unknown,
 ): void {
   const trace = storage.getStore();
+  const failure =
+    error === undefined ? undefined : error instanceof Error ? error.constructor.name : 'Error';
   trace?.spans.push({
     name,
     startMs: startedAt - trace.startedAt,
     durationMs,
-    status: 'ok',
+    status: failure ? 'error' : 'ok',
+    ...(failure ? { error: failure } : {}),
     attrs: { ...attrs },
   });
 }

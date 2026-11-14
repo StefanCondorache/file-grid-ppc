@@ -319,18 +319,27 @@ export class ObjectStoreService {
       const bytes = keyring
         ? timed(encryptStream(timed(plain, input), keyring.primary), output)
         : plain;
-      const stored = await withCategory(category, () =>
-        this.registry.get(storage).putStream(key, bytes),
-      );
-      attrs.sizeBytes = plain.size;
-      if (keyring) {
-        recordSpan('encryption', started, Math.max(0, output.ms - input.ms), {
-          algorithm: ENCRYPTION_ALGORITHM,
-          keyId: keyring.primary.keyId,
-          sizeBytes: plain.size,
-        });
+      let failure: unknown;
+      try {
+        const stored = await withCategory(category, () =>
+          this.registry.get(storage).putStream(key, bytes),
+        );
+        attrs.sizeBytes = plain.size;
+        return { stored, plain: { size: plain.size, sha256: plain.sha256 } };
+      } catch (error) {
+        failure = error;
+        throw error;
+      } finally {
+        // Also when the write failed: the trace then shows how far the encryption got.
+        if (keyring) {
+          const attributes = {
+            algorithm: ENCRYPTION_ALGORITHM,
+            keyId: keyring.primary.keyId,
+            sizeBytes: plain.size,
+          };
+          recordSpan('encryption', started, Math.max(0, output.ms - input.ms), attributes, failure);
+        }
       }
-      return { stored, plain: { size: plain.size, sha256: plain.sha256 } };
     });
   }
 
