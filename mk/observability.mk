@@ -31,6 +31,7 @@ obs-up:
 	$(OBS_HELM) grafana grafana/grafana --version $(OBS_GRAFANA_VERSION) -n monitoring -f $(OBS_DIR)/grafana-values.yaml \
 		--set-string "grafana\.ini.server.domain=$$DOMAIN" --set-string "grafana\.ini.server.root_url=https://$$DOMAIN/grafana/"
 	sed "s/ppc\.filegrid\.cc\.cd/$$DOMAIN/g" $(OBS_DIR)/grafana-ingress.yaml | kubectl apply -f -
+	kubectl apply -f $(OBS_DIR)/networkpolicies.yaml
 	$(MAKE) --no-print-directory obs-rules-check
 
 # Valideaza regulile de alertare cu promtool din podul Prometheus

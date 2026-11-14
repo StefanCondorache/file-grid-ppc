@@ -21,7 +21,7 @@ configmapReload:
   prometheus:
     resources:
       requests: {cpu: 5m, memory: 12Mi}
-      limits: {cpu: 50m, memory: 32Mi}
+      limits: {cpu: 50m, memory: 24Mi}
 
 prometheus-node-exporter:
   enabled: false
@@ -30,9 +30,38 @@ prometheus-pushgateway:
 
 kube-state-metrics:
   enabled: true
+  # Lista implicita fara "secrets" (si deci fara list/watch pe secrets in ClusterRole: list intoarce si datele).
+  collectors:
+    - certificatesigningrequests
+    - configmaps
+    - cronjobs
+    - daemonsets
+    - deployments
+    - endpointslices
+    - horizontalpodautoscalers
+    - ingresses
+    - jobs
+    - leases
+    - limitranges
+    - mutatingwebhookconfigurations
+    - namespaces
+    - networkpolicies
+    - nodes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - poddisruptionbudgets
+    - pods
+    - replicasets
+    - replicationcontrollers
+    - resourcequotas
+    - services
+    - statefulsets
+    - storageclasses
+    - validatingwebhookconfigurations
+    - volumeattachments
   resources:
     requests: {cpu: 10m, memory: 32Mi}
-    limits: {cpu: 200m, memory: 64Mi}
+    limits: {cpu: 200m, memory: 48Mi}
 
 # Alertmanager: deocamdata receiver "null" (decizia echipei: fara webhook). Configuratia NU sta in git si nici in
 # ConfigMap-ul chart-ului, ci in Secret-ul monitoring/alertmanager-config (cheia alertmanager.yml), creat o singura
@@ -157,11 +186,15 @@ serverFiles:
     groups:
       - name: filegrid
         rules:
+          # Ultima ramura: blackbox-exporter cazut/nescrapuit -> probe_success dispare, dar up{job=blackbox-storage}=0
+          # (cu eticheta storage statica pe target), deci monitorizarea nu devine oarba in tacere.
           - alert: FileGridStorageDown
             expr: |
               max by (storage) (probe_success{job="blackbox-storage"}) == 0
               or
               max by (storage) (filegrid_storage_up) == 0
+              or
+              max by (storage) (up{job="blackbox-storage"}) == 0
             for: 1m
             labels: {severity: critical}
             annotations:
@@ -182,14 +215,16 @@ serverFiles:
                 catre el. Cerinta din brief: degradare controlata, fara blocarea celorlalte categorii; investigati
                 storage-ul si urmariti revenirea circuitului (half-open -> closed).
 
-          # Citiri trimise de simulator in fereastra [t-7m, t-2m] care nu apar ca stocate pana la t (2m pentru
-          # citirile in zbor/retry). Presupune ca filegrid_sim_readings_sent_total numara citiri unice (nu reincercari)
-          # si filegrid_meter_readings_stored_total doar citiri stocate prima data (duplicatele separat).
+          # Trimise vs stocate pe ACEEASI fereastra [t-7m, t-2m] (offset 2m = toleranta pentru citirile in zbor/retry);
+          # ferestre egale, altfel alerta pornea abia peste ~28% pierderi. Backend nescrapuit/cazut => stocate = 0
+          # (or vector(0)), deci alerta porneste in loc sa taca. "> 1" absoarbe zgomotul de extrapolare al increase().
+          # Contract (P2): filegrid_sim_readings_sent_total numara citiri UNICE (un reading_id o singura data, fara
+          # reincercari/duplicate intentionate) si filegrid_meter_readings_stored_total doar prima stocare.
           - alert: MeterReadingsLost
             expr: |
               sum(increase(filegrid_sim_readings_sent_total[5m] offset 2m))
-                - sum(increase(filegrid_meter_readings_stored_total[7m]))
-              > 0
+                - (sum(increase(filegrid_meter_readings_stored_total[5m] offset 2m)) or vector(0))
+              > 1
             for: 5m
             labels: {severity: critical}
             annotations:

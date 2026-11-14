@@ -10,6 +10,10 @@ persistence:
   enabled: false
 testFramework:
   enabled: false
+# Least privilege: Role doar in namespace monitoring (nu ClusterRole cu get/list/watch pe secrets in tot clusterul).
+# Sidecar-ul de dashboard-uri cauta oricum doar in propriul namespace (searchNamespace nesetat).
+rbac:
+  namespaced: true
 resources:
   requests: {cpu: 20m, memory: 96Mi}
   limits: {cpu: 500m, memory: 192Mi}
@@ -49,7 +53,7 @@ datasources:
 sidecar:
   resources:
     requests: {cpu: 5m, memory: 48Mi}
-    limits: {cpu: 200m, memory: 128Mi}
+    limits: {cpu: 200m, memory: 96Mi}
   dashboards:
     enabled: true
     # doar ConfigMap-uri (nu si Secret-uri); reload-ul trebuie sa includa sub-path-ul /grafana

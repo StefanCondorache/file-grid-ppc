@@ -899,7 +899,7 @@
   },
   {
    "type": "stat",
-   "title": "Pierdute (trimise - stocate, 15m, cu 2m toleranta)",
+   "title": "Pierdute (trimise - stocate, 13m, offset 2m toleranta)",
    "id": 17,
    "datasource": {
     "type": "prometheus",
@@ -948,7 +948,7 @@
    },
    "targets": [
     {
-     "expr": "clamp_min(sum(increase(filegrid_sim_readings_sent_total[13m] offset 2m)) - sum(increase(filegrid_meter_readings_stored_total[15m])), 0)",
+     "expr": "clamp_min(sum(increase(filegrid_sim_readings_sent_total[13m] offset 2m)) - (sum(increase(filegrid_meter_readings_stored_total[13m] offset 2m)) or vector(0)), 0)",
      "legendFormat": "pierdute",
      "datasource": {
       "type": "prometheus",

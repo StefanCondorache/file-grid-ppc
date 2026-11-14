@@ -6,11 +6,15 @@ fullnameOverride: blackbox-exporter
 pod:
   labels:
     filegrid.io/storage-client: "true"
+# Helm combina map-ul modules cu cel implicit: http_2xx (al chart-ului) se sterge explicit cu null, ca exporter-ul
+# sa nu poata fi folosit ca proxy HTTP spre storage-uri. Accesul la :9115 e limitat la namespace-ul monitoring de
+# NetworkPolicy-ul blackbox-exporter-from-monitoring (networkpolicies.yaml).
 config:
   modules:
+    http_2xx: null
     tcp_connect:
       prober: tcp
       timeout: 5s
 resources:
   requests: {cpu: 5m, memory: 16Mi}
-  limits: {cpu: 100m, memory: 48Mi}
+  limits: {cpu: 100m, memory: 32Mi}

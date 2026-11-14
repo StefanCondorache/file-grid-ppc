@@ -4,19 +4,32 @@
 # (interogabile: {namespace="filegrid"} | trace_id="..." sau | json | trace_id="..."), nu etichete.
 controller:
   type: daemonset
+# Least privilege: regulile implicite ale chart-ului dau get/list/watch pe configmaps+secrets in tot clusterul.
+# Config-ul de mai jos foloseste doar discovery.kubernetes role=pod, deci ClusterRole-ul (generat de chart din
+# rules+clusterRules) contine doar pods, namespaces si nodes (citire).
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "namespaces"]
+      verbs: ["get", "list", "watch"]
+  clusterRules:
+    - apiGroups: [""]
+      resources: ["nodes"]
+      verbs: ["get", "list", "watch"]
 configReloader:
   resources:
     requests: {cpu: 5m, memory: 12Mi}
-    limits: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 50m, memory: 24Mi}
 alloy:
   mounts:
     varlog: true
   clustering: {enabled: false}
   resources:
     requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 112Mi}
   extraEnv:
-    - {name: GOMEMLIMIT, value: "100MiB"}
+    - {name: GOMEMLIMIT, value: "90MiB"}
   configMap:
     content: |-
       // Podurile de pe nodul curent (chart-ul seteaza HOSTNAME = spec.nodeName).
