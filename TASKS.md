@@ -132,7 +132,38 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
 - [x] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it. **Done 14.11** through the demo API: 10x storm, S3 stopped (fault records on the `db` fallback, FTP and DB categories unaffected, 0 readings lost, `FileGridStorageDown(s3)` fired and cleared), S3 restarted, corrupted file answered `409 FILE_CORRUPT` and was marked corrupt.
 - [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
 - [x] Known limits from the code review: **fixed** (merged `ed83f8f`). A primary that is known down is skipped before the body is read; a full DB pool answers 503 `CATEGORY_BUSY` and no longer opens the circuit; the S3 read timeout runs only while waiting on S3; a slow FTP health login no longer counts as a failed probe.
-- [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`. **Mostly done** (merged `ed83f8f`): SSE `/stream`, `/audit-events`, `/guarantees`, `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series and `Range` (206/416) are implemented and tested (199 backend tests). **Still open:** `/api/docs-json`, and `docs/api.md` does not describe the new endpoints yet (see the completion plan at the end).
+- [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`. **Mostly done** (merged `ed83f8f`): SSE `/stream`, `/audit-events`, `/guarantees`, `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series and `Range` (206/416) are implemented and tested (199 backend tests). **Done 14.11 evening** on branch `p2/api-docs` (see below): `GET /api/v1/docs-json` and the `docs/api.md` sections.
+
+### P2 parallel tasks (from the `feat/handoff` guide, 14.11.2026, evening)
+
+Each task is a branch on `origin` (`StefanCondorache/file-grid-ppc`), cut from `feat/handoff`, with a PR to open towards `feat/handoff`. Upstream has changed no backend or docs file since, so the branches merge cleanly, in any order. Each one passed the full backend suite, typecheck and lint.
+
+| Guide task | Branch | What it adds | Backend tests |
+|---|---|---|---|
+| 4 · Full trace | `p2/trace-spans` | Root `api` span (method, path without query, upload id and part number), `encryption` span (AES-256-GCM, key id, size, time in the cipher), `audit` span; every uploaded part is an `upload.part` operation with its own `traceId` (also when refused); only allow-listed span attributes are stored; `GET /traces/{id}` answers the same 404 as an unknown id to a role that may not see the category. A connection document reads `api → policy → encryption → storage.put → audit → confirm`. | 268/268 |
+| 6 · API docs | `p2/api-docs` | `GET /api/v1/docs-json` (public), the OpenAPI document of the real API: the proposal corrected to what the backend answers. A test fails when a Nest route is missing from it (or it has one Nest lacks), when a real answer or live SSE event does not match its schema, or when a `$ref` dangles. `docs/api.md` now describes the `/stream` events and payloads, `/metrics/matrix`, the bulkhead series, `Range` and the session rule for background GETs. Also fixed there: policy versions answer the `GET /policies` shape (the seeded v1 was a raw DB row), and `/demo/status` no longer shows the storage probe detail (it named the S3 bucket). | 269/269 |
+| 5 · Demo data | `p2/demo-seed` | `npm run seed:demo` (in `backend/`, `FILEGRID_URL=https://<host>`): 60 fault records (Dobrogea 27, Muntenia 21, Banat 12; the substation names carry the county, e.g. `Stația 110 kV Medgidia (CT)`), 20 connection documents (PDF, invented applicants and CNPs, encrypted by policy, uploaded by `racordari`), 4 short drone videos (ffmpeg test pattern; skipped without ffmpeg), each uploaded by its demo account. Idempotent (`seed-…`, `RC-SEED-…`). `GET /statistics/grid-insights` then shows three zones with different fault counts. Not run on the VPS: the guide runs it together after the final deploy. | 262/262 |
+| 3 · 1 GB proof | `p2/proof-1gb` | `backend/scripts/proof-1gb-upload.ts`: 1.1 GiB through the resumable API, streamed download, SHA-256 comparison, memory of every backend pod per phase (`PROOF_MEMORY_CMD`, `kubectl top`), markdown tables for the results below. Tested locally at 40 MiB. This branch also holds this TASKS.md section. | 263/263 |
+
+**For the frontend (Mihail):** `API_SPEC=https://<host>/api/v1/docs-json npm run gen:api` generates the types from the real API. Measured on the current `feat/handoff` frontend (`tsc --noEmit`, compared with its own 73 existing errors), the switch adds 27 type errors: 26 in `src/mocks/` and test files (category ids `fault_records`, storage ids `s3`, `storageControl` gone from `DemoStatus`) and 1 in a screen, `src/features/audit/AuditTable.tsx:34` (an audit actor's role can be `null`, e.g. a system actor). `fallbackAvailable` (used by "Restaurează din rezervă") is not sent by the backend nor described anywhere: it needs a decision (P2 adds it, or the screen drops it).
+
+**1 GB proof results (VPS, NestJS backend).** Pending: the run needs the team's go-ahead (1.1 GiB through the domain; the test file then stays on the FTP storage, the API has no delete). Command, run on the VPS from the repo checkout (it needs Node 26 there; not checked yet, since nothing was run on the VPS for these tasks):
+
+```
+FILEGRID_URL=https://ppc.filegrid.cc.cd \
+PROOF_MEMORY_CMD='kubectl -n filegrid top pod -l app=filegrid-backend --no-headers' \
+node backend/scripts/proof-1gb-upload.ts
+```
+
+| Size | Parts | Upload s | Complete s | Download s | Stored on | SHA-256 after download |
+|---|---|---|---|---|---|---|
+| _pending_ | | | | | | |
+
+| Backend pod | Baseline MiB | Upload peak | Complete peak | Download peak | Growth MiB | Under +64 MiB |
+|---|---|---|---|---|---|---|
+| _pending_ | | | | | | |
+
+**Deferred minors (from the review of these branches):** a download whose audit insert fails is no longer recorded in the operations log (the audit now runs first so the trace shows it; both writes go to the same database); an encrypted write that fails shows its `storage.put` error but no `encryption` span; the response-conformance test accepts extra fields, so a newly leaked field would pass it (the `/demo/status` detail has its own test).
 
 ## P3: Frontend
 
