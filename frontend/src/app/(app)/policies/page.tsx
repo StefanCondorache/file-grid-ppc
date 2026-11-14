@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ComingSoon';
+import { PoliciesScreen } from '@/features/policies/PoliciesScreen';
 
 export const metadata: Metadata = { title: 'Politici · FileGrid' };
 
 export default function Page() {
-  return <ComingSoon title="Politici" />;
+  return <PoliciesScreen />;
 }
