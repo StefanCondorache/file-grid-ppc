@@ -819,7 +819,7 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "`FILE_CORRUPT`: detected before streaming; body has `expectedSha256`, `actualSha256`, `storage`.",
+            "description": "`FILE_CORRUPT`: detected before streaming; body has `expectedSha256`, `actualSha256`, `storage` and `fallbackAvailable: false` (each file is stored once, so there is no copy to restore: the UI shows \"notify the storage team\").",
             "content": {
               "application/json": {
                 "schema": {
@@ -2152,6 +2152,10 @@
           },
           "actualSha256": {
             "$ref": "#/components/schemas/Sha256"
+          },
+          "fallbackAvailable": {
+            "type": "boolean",
+            "description": "FILE_CORRUPT only: whether a second copy exists to restore from (always false: one copy per file)"
           }
         }
       },
@@ -2858,7 +2862,7 @@
       },
       "PartReceipt": {
         "type": "object",
-        "required": ["partNumber", "size", "sha256", "alreadyReceived"],
+        "required": ["partNumber", "size", "sha256", "alreadyReceived", "traceId"],
         "properties": {
           "partNumber": {
             "type": "integer"
@@ -3245,7 +3249,15 @@
       },
       "Span": {
         "type": "object",
-        "required": ["spanId", "name", "startOffsetMs", "durationMs", "status"],
+        "required": [
+          "spanId",
+          "name",
+          "startOffsetMs",
+          "durationMs",
+          "status",
+          "parentSpanId",
+          "attributes"
+        ],
         "properties": {
           "spanId": {
             "type": "string"
