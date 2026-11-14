@@ -58,6 +58,9 @@
   --shadow-e1: var(--fg-shadow-e1);
   --shadow-e2: var(--fg-shadow-e2);
   --shadow-e3: var(--fg-shadow-e3);
+  --shadow-raise: var(--fg-shadow-raise);
+  --shadow-press: var(--fg-shadow-press);
+  --shadow-inset: var(--fg-shadow-inset);
 
   --ease-smooth: var(--fg-ease-smooth);
   --ease-sharp: var(--fg-ease-sharp);
@@ -71,13 +74,24 @@ html {
   background: var(--fg-page);
 }
 
+/* The page plane stays on <html> (canvas); a static brand-tinted gradient sits on a fixed layer above it,
+   so glass surfaces have something to show and scrolling never repaints the gradient. */
 body {
   margin: 0;
-  background: var(--fg-page);
+  min-height: 100vh;
   color: var(--fg-ink);
   font-family: var(--fg-font-sans);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--fg-backdrop);
 }
 
 :focus-visible {
@@ -85,3 +99,121 @@ body {
   outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--fg-focus-inner);
 }
+
+/* ---- soft depth: every text field, select and toggle reads as gently pressed in (its border stays) ---- */
+@layer base {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"]),
+  select,
+  textarea,
+  [role="switch"] {
+    box-shadow: var(--fg-shadow-inset);
+  }
+}
+
+@layer components {
+  /* ---- glass: only large layers (chrome, dialogs, menus, login card). Never tables, rows or data cards. ---- */
+  .glass,
+  .glass-strong,
+  .glass-chrome {
+    -webkit-backdrop-filter: var(--fg-glass-filter);
+    backdrop-filter: var(--fg-glass-filter);
+  }
+  .glass { background-color: var(--fg-glass); border-color: var(--fg-glass-border); }
+  .glass-strong { background-color: var(--fg-glass-strong); border-color: var(--fg-glass-border); }
+  .glass-chrome { background-color: var(--fg-glass-chrome); }
+
+  .soft-inset { box-shadow: var(--fg-shadow-inset); }
+
+  /* ---- hover lift for cards/KPI tiles: moves with `translate`, the deeper shadow fades in on a pseudo layer ---- */
+  .lift {
+    position: relative;
+    isolation: isolate;
+    transition: translate var(--fg-dur-fast) var(--fg-ease-smooth);
+  }
+  .lift::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: var(--fg-shadow-e2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fg-dur-fast) var(--fg-ease-smooth);
+  }
+  @media (hover: hover) {
+    .lift:hover { translate: 0 var(--fg-lift); }
+    .lift:hover::after { opacity: 1; }
+  }
+
+  /* ---- page enter: direct children fade and rise once when mounted (route change, loaded content) ---- */
+  .enter > * { animation: fg-rise var(--fg-dur-enter) var(--fg-ease-smooth) backwards; }
+  .enter > :nth-child(2) { animation-delay: var(--fg-stagger); }
+  .enter > :nth-child(3) { animation-delay: calc(var(--fg-stagger) * 2); }
+  .enter > :nth-child(n + 4) { animation-delay: calc(var(--fg-stagger) * 3); }
+
+  /* ---- dialogs and popovers (Radix data-state; Presence waits for the exit animation) ---- */
+  .pop { transform-origin: var(--radix-popper-transform-origin, center); }
+  .pop:is([data-state="open"], [data-state="delayed-open"], [data-state="instant-open"]) {
+    animation: fg-pop-in var(--fg-dur-pop) var(--fg-ease-smooth);
+  }
+  .pop[data-state="closed"] { animation: fg-pop-out var(--fg-dur-quick) var(--fg-ease-sharp) forwards; }
+  .scrim[data-state="open"] { animation: fg-fade-in var(--fg-dur-pop) var(--fg-ease-smooth); }
+  .scrim[data-state="closed"] { animation: fg-fade-out var(--fg-dur-quick) var(--fg-ease-sharp) forwards; }
+
+  /* ---- loading skeleton: a soft sweep instead of a blink ---- */
+  .skeleton { position: relative; overflow: hidden; }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    translate: -100% 0;
+    background: var(--fg-shimmer);
+    animation: fg-shimmer var(--fg-dur-shimmer) ease-in-out infinite;
+  }
+
+  /* ---- long tables: bounded scroller so the header row stays in view ---- */
+  .table-scroll {
+    max-height: calc(100dvh - var(--fg-topbar-h) - var(--fg-space-8));
+    overflow: auto;
+  }
+  .table-scroll thead { position: sticky; top: 0; z-index: 1; }
+
+  /* ---- live: a newly arrived row slides in once; live dot rings; critical edge breathes 3× (< 5 s) ---- */
+  .row-in { animation: fg-row-in var(--fg-dur-enter) var(--fg-ease-smooth); }
+  .pulse-ring { position: relative; }
+  .pulse-ring::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: fg-ping var(--fg-dur-pulse) var(--fg-ease-smooth) infinite;
+  }
+  .attention { animation: fg-breathe calc(var(--fg-dur-pulse) * 0.6) ease-in-out 3; }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .glass, .glass-strong { background-color: var(--fg-surface); }
+  .glass-chrome { background-color: var(--fg-chrome); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-strong { background-color: var(--fg-surface); }
+  .glass-chrome { background-color: var(--fg-chrome); }
+}
+
+/* Durations/distances are zeroed in tokens.css; keyframe animations are dropped outright so Radix never waits. */
+@media (prefers-reduced-motion: reduce) {
+  .enter > *, .pop, .scrim, .skeleton::after, .row-in, .pulse-ring::after, .attention { animation: none !important; }
+}
+
+@keyframes fg-rise { from { opacity: 0; translate: 0 var(--fg-rise); } }
+@keyframes fg-pop-in { from { opacity: 0; scale: var(--fg-pop-scale); } }
+@keyframes fg-pop-out { to { opacity: 0; scale: var(--fg-pop-scale); } }
+@keyframes fg-fade-in { from { opacity: 0; } }
+@keyframes fg-fade-out { to { opacity: 0; } }
+@keyframes fg-shimmer { to { translate: 100% 0; } }
+@keyframes fg-row-in { from { opacity: 0; translate: 0 calc(var(--fg-rise) * -1); } }
+@keyframes fg-ping { from { opacity: 0.55; scale: 1; } to { opacity: 0; scale: 2.6; } }
+@keyframes fg-breathe { 50% { opacity: 0.45; } }
