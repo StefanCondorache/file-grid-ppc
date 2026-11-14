@@ -69,12 +69,12 @@ test_grafana_sidecar_and_alloy_get_the_raised_memory_limits() {
   assert_eq "$(values alloy | jq -r '.alloy.resources.limits.memory')" 192Mi "alloy memory limit"
 }
 
-test_traefik_keeps_the_client_ip_and_trusts_forwarded_headers_only_from_the_pod_cidr() {
+test_traefik_keeps_the_client_ip_and_trusts_no_forwarded_headers() {
   local v ep
   v=$(traefik_values)
   assert_eq "$(jq -r '.service.spec.externalTrafficPolicy' <<<"$v")" Local "service.spec.externalTrafficPolicy"
   for ep in web websecure; do
-    assert_eq "$(jq -c --arg e "$ep" '.ports[$e].forwardedHeaders.trustedIPs' <<<"$v")" '["10.42.0.0/16"]' \
+    assert_eq "$(jq -c --arg e "$ep" '.ports[$e].forwardedHeaders.trustedIPs' <<<"$v")" 'null' \
       "ports.$ep.forwardedHeaders.trustedIPs"
     assert_eq "$(jq -r --arg e "$ep" '.ports[$e].forwardedHeaders.insecure // false' <<<"$v")" false \
       "ports.$ep.forwardedHeaders.insecure"

@@ -10,10 +10,10 @@
 #     deci kube-proxy preia direct conexiunile catre IP-ul public; cu politica implicita Cluster le face SNAT
 #     (Traefik vedea 10.42.0.1 pentru oricine), cu Local nu, iar Traefik vede IP-ul sursa real. Un singur nod,
 #     deci Local nu pierde trafic.
-#   * forwardedHeaders.trustedIPs = doar CIDR-ul podurilor (10.42.0.0/16, implicit k3s): X-Forwarded-* trimise de
-#     un client din Internet sunt sterse, iar Traefik pune in X-Forwarded-For IP-ul de la care a primit conexiunea.
-#     Exceptie acceptata: conexiunile care trec prin podul svclb-traefik (adrese ale nodului altele decat IP-ul
-#     LoadBalancer, de ex. 127.0.0.1) ajung cu sursa = IP de pod, deci header-ele lor sunt pastrate.
+#   * fara forwardedHeaders.trustedIPs: Traefik nu are niciun hop de incredere, deci sterge orice X-Forwarded-*
+#     trimis de client si pune in X-Forwarded-For IP-ul de la care a primit conexiunea. Cu externalTrafficPolicy
+#     Local clientii din Internet ajung cu IP-ul real; conexiunile pornite chiar de pe nod (kube-proxy le face
+#     masquerade la 10.42.0.1) apar ca 10.42.0.1 si nu mai pot falsifica IP-ul (verificare live, 14.11).
 #   Backend-ul crede X-Forwarded-For doar de la 10.42.0.0/16 si 10.43.0.0/16 (TRUSTED_PROXY_CIDRS).
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -27,8 +27,6 @@ spec:
         externalTrafficPolicy: Local
     ports:
       web:
-        forwardedHeaders:
-          trustedIPs: [10.42.0.0/16]
         http:
           redirections:
             entryPoint:
@@ -36,8 +34,6 @@ spec:
               scheme: https
               permanent: true
       websecure:
-        forwardedHeaders:
-          trustedIPs: [10.42.0.0/16]
         transport:
           respondingTimeouts:
             readTimeout: 900s
