@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { Announcer } from '@/components/a11y/Announcer';
 import './globals.css';
 
 const figtree = localFont({
@@ -17,7 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ro" className={figtree.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Announcer />
+      </body>
     </html>
   );
 }
