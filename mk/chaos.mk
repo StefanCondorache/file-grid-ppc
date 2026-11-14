@@ -8,14 +8,23 @@
 #   make chaos-netem-on NS=filegrid-storage POD=s3-0 [DELAY=300ms JITTER=50ms LOSS=5%]
 #   make chaos-netem-off NS=filegrid-storage POD=s3-0
 #   make chaos-netem-status [NS=filegrid-storage]   (fara POD: toate podurile storage)
-.PHONY: chaos-rbac chaos-storage-stop chaos-storage-start chaos-storage-status chaos-netem-on chaos-netem-off chaos-netem-status
+#   make chaos-rbac-check             RBAC + plafon replicas (dry run ca SA-ul backend) + token montat in podul backend
+.PHONY: chaos-rbac chaos-rbac-check chaos-storage-stop chaos-storage-start chaos-storage-status chaos-netem-on chaos-netem-off chaos-netem-status
 
 DELAY ?= 300ms
 JITTER ?= 50ms
 LOSS ?= 5%
 
+# RBAC-ul panoului demo se aplica la fiecare `make app-up` (deci si la `make up`, care cheama app-up): fara el,
+# dupa o reconstruire a clusterului, panoul ar primi 403. Doar prerechizita, reteta app-up ramane in mk/app.mk.
+# RoleBinding-ul poate exista inaintea SA-ului; ns filegrid-storage exista deja (k8s-storage-up ruleaza inainte).
+app-up: chaos-rbac
+
 chaos-rbac:
 	kubectl apply -f deploy/k8s/demo-rbac.yaml
+
+chaos-rbac-check:
+	./scripts/chaos/rbac-check.sh
 
 chaos-storage-stop:
 	@test -n "$(S)" || { echo "S=postgres|s3|ftp"; exit 2; }

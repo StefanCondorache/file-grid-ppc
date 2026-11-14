@@ -6,6 +6,12 @@
 #     they only expose the StatefulSet objects of this one namespace);
 #   - only namespace filegrid-storage (a Role, not a ClusterRole).
 # Network degradation (tc netem) is NOT exposed to the cluster: it needs root on the node (make chaos-netem-*).
+# The RBAC only works if the backend pod actually has an API token: the SA has automountServiceAccountToken: false,
+# so the backend Deployment (app stream) must set automountServiceAccountToken: true in its pod spec, otherwise
+# every scale call is rejected as unauthenticated (401). `make chaos-rbac-check` verifies both halves.
+# Applied by `make chaos-rbac`, which mk/chaos.mk makes a prerequisite of `app-up` (so `make up` applies it too).
+# The ValidatingAdmissionPolicy at the end caps what the SA may scale to: 0 (stop) or 1 (start), never N replicas
+# (each extra replica = a new pod + PVC, enough to OOM a 3.8 GiB node).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -46,3 +52,43 @@ subjects:
   - kind: ServiceAccount
     name: filegrid-backend
     namespace: filegrid
+---
+# RBAC cannot restrict the replica count, so an in-process admission policy does (GA since k8s 1.30, no webhook,
+# no extra pod). Scope: only the backend SA, only statefulsets/scale in filegrid-storage. kubectl/admin scaling
+# (scripts/chaos/storage.sh) is not affected. Scale.spec.replicas=0 is omitted when serialized, hence the has().
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: filegrid-demo-storage-scale-0-or-1
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: filegrid-storage
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["statefulsets/scale"]
+  matchConditions:
+    - name: demo-backend-only
+      expression: "request.userInfo.username == 'system:serviceaccount:filegrid:filegrid-backend'"
+  validations:
+    - expression: "!has(object.spec) || !has(object.spec.replicas) || object.spec.replicas <= 1"
+      message: "the demo panel may only stop (replicas=0) or start (replicas=1) a storage"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: filegrid-demo-storage-scale-0-or-1
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+spec:
+  policyName: filegrid-demo-storage-scale-0-or-1
+  validationActions: [Deny]
