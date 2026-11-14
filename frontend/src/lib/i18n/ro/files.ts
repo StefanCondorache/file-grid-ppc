@@ -31,6 +31,8 @@ export const files = {
   encrypted: 'Criptat în repaus',
   noZone: 'fără zonă',
   uploadedBy: (name: string) => `de ${name}`,
+  /** A fault created in the last minute (live list, 6c.3); the number comes formatted. */
+  newRow: (seconds: string) => `Nou · acum ${seconds} s`,
   columns: {
     name: 'Nume',
     zone: 'Zonă',
