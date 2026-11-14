@@ -1,5 +1,5 @@
 import type { StreamEvent, StreamEventType } from '@/lib/live/events';
-import type { Policy } from '@/lib/api/types';
+import type { Policy, Role, UserRef } from '@/lib/api/types';
 import {
   CATEGORY_IDS, STORAGE_IDS, ZONES, type Alert, type BulkheadPoint, type BulkheadResponse, type CategoryId, type Comparator,
   type GuaranteeMetric, type GuaranteeStatus, type MatrixWindow, type MeterCounters, type MetricsCell, type MetricsMatrix, type SeriesWindow,
@@ -87,9 +87,11 @@ function metric(key: string, value: number | string | null, extra: { unit?: stri
 }
 
 /**
- * Mock "server" (6a.8 clock, 6e.1 state): every TICK_MS it advances the per-category latency series and emits the
- * matching stream events. Persistent parts (storms) live in the mock db so a reload keeps them; the latency series
- * is transient.
+ * Mock "server" (6a.8 clock, 6e.1 state). Every TICK_MS it advances the per-category latency series, the meter
+ * counters, the storage health and the four guarantees (raising and resolving alerts), and emits the matching stream
+ * events. The actions (storms, storages, corruption, simulator) are what the demo endpoints and `window.__fgScenario`
+ * call. Persistent parts (storms, counters, simulator, alerts, periods, storage up/down) live in the shared mock db so
+ * a reload keeps them; the latency series is transient. Wire shapes follow the real backend (lib/monitoring/contract).
  */
 export function createScenario(options: ScenarioOptions = {}) {
   const d = options.db ?? sharedDb;
@@ -127,7 +129,8 @@ export function createScenario(options: ScenarioOptions = {}) {
   const load = (c: CategoryId): number =>
     c === 'meter_readings' ? state().simulator.ratePerS / NORMAL_RATE_PER_S : state().storms.find((s) => s.category === c)?.factor ?? 1;
 
-  const smoothed = Object.fromEntries(CATEGORY_IDS.map((c) => [c, PROFILES[c].p95Ms])) as Record<CategoryId, number>;
+  const baseLatency = () => Object.fromEntries(CATEGORY_IDS.map((c) => [c, PROFILES[c].p95Ms])) as Record<CategoryId, number>;
+  let smoothed = baseLatency();
 
   const sample = (c: CategoryId, mult: number): Sample => {
     const { primary } = route(c);
@@ -152,7 +155,8 @@ export function createScenario(options: ScenarioOptions = {}) {
   let history: Tick[] = prefill();
 
   /** Meter readings stored in the last tick, per zone (the rate shown). */
-  let lastStored: Record<Zone, number> = Object.fromEntries(ZONES.map((z) => [z, NORMAL_RATE_PER_S * ZONE_SHARE[z] * TICK_S])) as Record<Zone, number>;
+  const normalStored = () => Object.fromEntries(ZONES.map((z) => [z, NORMAL_RATE_PER_S * ZONE_SHARE[z] * TICK_S])) as Record<Zone, number>;
+  let lastStored = normalStored();
 
   /** The simulator sends; readings are stored when their storage is up, else they wait in its queue. lost = sent − acked − queued = 0. */
   const advanceMeters = (storageUp: boolean) => {
@@ -222,8 +226,8 @@ export function createScenario(options: ScenarioOptions = {}) {
       : OK;
 
     const p95 = last.fault_records.p95Ms;
-    const samples = Math.round(history.slice(-SERIES_POINTS).reduce((n, tk) => n + tk.samples.fault_records.opsPerS, 0) * (TICK_MS / 1000));
-    const faultFacts = { p95Ms: p95, targetMs: THRESHOLDS.faultTargetMs, samples, windowMinutes: 1 };
+    const faultOps = Math.round(history.slice(-SERIES_POINTS).reduce((n, tk) => n + tk.samples.fault_records.opsPerS, 0) * TICK_S);
+    const faultFacts = { p95Ms: p95, targetMs: THRESHOLDS.faultTargetMs, samples: faultOps, windowMinutes: 1 };
     const fault: Verdict = p95 === null || p95 <= THRESHOLDS.faultTargetMs
       ? OK
       : { state: p95 > THRESHOLDS.faultViolatedMs ? 'violated' : 'at_risk', causeCode: 'FAULT_P95_ABOVE_TARGET', causeFacts: faultFacts };
@@ -333,6 +337,16 @@ export function createScenario(options: ScenarioOptions = {}) {
       pingTimer = tickTimer = null;
     },
 
+    /** Stops the clock and forgets the transient state (latency series); the db's part resets with `db.reset()`. */
+    reset(): void {
+      api.stop();
+      smoothed = baseLatency();
+      history = prefill();
+      lastStored = normalStored();
+      guarantees = judge();
+      health = probe();
+    },
+
     /** One step of the mock server. */
     tick(): void {
       for (const storm of state().storms) if (storm.endsAt <= now()) api.stopStorm(storm.category);
@@ -376,6 +390,20 @@ export function createScenario(options: ScenarioOptions = {}) {
     /** Latest guarantee statuses (GET /guarantees). */
     guarantees(): GuaranteeStatus[] {
       return guarantees;
+    },
+
+    /** Who saw it and when (POST /alerts/{id}/acknowledge); a second acknowledgement changes nothing. Null if unknown. */
+    acknowledge(alertId: string, by: UserRef, actingAs: Role | null = null): Alert | null {
+      const alert = d.find<AlertRow>('alerts', (a) => a.id === alertId);
+      if (!alert) return null;
+      if (alert.acknowledgedAt !== null) return alert;
+      const acked = d.update<AlertRow>('alerts', (a) => a.id === alertId, {
+        acknowledgedAt: iso(now()),
+        acknowledgedBy: { id: by.id, username: by.username, displayName: by.displayName, role: by.role },
+      })!;
+      d.audit.append({ actor: by, actingAs, demo: false, action: 'alert_ack', category: alert.category, details: `${alert.causeCode} (${alert.state})` });
+      api.emit('alert.updated', acked);
+      return acked;
     },
 
     /** Alerts, newest first (GET /alerts; `active` = not resolved). */
@@ -487,3 +515,8 @@ export type Scenario = ReturnType<typeof createScenario>;
 
 /** The single scenario of the running mock. */
 export const scenario = createScenario();
+
+// Development only: e2e specs and rehearsals drive it from the console (`__fgScenario.startStorm('fault', 10, 60)`).
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  (window as unknown as { __fgScenario?: Scenario }).__fgScenario = scenario;
+}
