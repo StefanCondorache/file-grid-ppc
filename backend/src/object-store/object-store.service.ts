@@ -73,12 +73,14 @@ export class ObjectStoreService {
     placement: Placement,
     source: () => AsyncIterable<Uint8Array>,
   ): Promise<WriteResult> {
-    const targets = [placement.primary, ...(placement.fallback ? [placement.fallback] : [])];
+    const targets = this.skipsPrimary(placement)
+      ? [placement.fallback as StorageName]
+      : [placement.primary, ...(placement.fallback ? [placement.fallback] : [])];
     let lastError: unknown;
-    for (const [index, storage] of targets.entries()) {
+    for (const storage of targets) {
       try {
         const result = await this.writeTo(category, storage, key, placement.encrypted, source);
-        return { ...result, storage, usedFallback: index > 0 };
+        return { ...result, storage, usedFallback: storage !== placement.primary };
       } catch (error) {
         if (!(error instanceof StorageUnavailable)) throw error;
         lastError = error;
@@ -97,9 +99,11 @@ export class ObjectStoreService {
   }
 
   /**
-   * Writes the caller's one-shot stream (an HTTP body). It falls back only when the primary failed
-   * before reading a single byte of it (circuit open, connection refused): then the untouched body
-   * can go to the fallback. A failure mid-stream surfaces as 503 and the client resends the part.
+   * Writes the caller's one-shot stream (an HTTP body). A primary the health monitor or the circuit
+   * breaker already knows to be down is skipped, so the body goes to the fallback at once. Otherwise
+   * it falls back only when the primary failed before reading a single byte of it (connection
+   * refused): then the untouched body can go to the fallback. A failure mid-stream surfaces as 503
+   * and the client resends the part.
    */
   async writeOnce(
     category: Category,
@@ -107,6 +111,16 @@ export class ObjectStoreService {
     placement: Placement,
     body: AsyncIterable<Uint8Array>,
   ): Promise<WriteResult> {
+    if (this.skipsPrimary(placement)) {
+      const fallback = placement.fallback as StorageName;
+      try {
+        const result = await this.writeTo(category, fallback, key, placement.encrypted, () => body);
+        return { ...result, storage: fallback, usedFallback: true };
+      } catch (error) {
+        if (error instanceof StorageUnavailable) throw storageUnavailable(fallback);
+        throw error;
+      }
+    }
     const iterator = body[Symbol.asyncIterator]();
     let touched = false;
     const tracked: AsyncIterable<Uint8Array> = {
@@ -202,6 +216,21 @@ export class ObjectStoreService {
 
   status() {
     return this.registry.status();
+  }
+
+  /** Down for the last health probe, or its circuit is open. */
+  private knownDown(storage: StorageName): boolean {
+    const status = this.registry.status()[storage];
+    return status.up === false || status.circuit === 'open';
+  }
+
+  /** Write straight to the fallback: the primary is known down and the fallback is not. */
+  private skipsPrimary(placement: Placement): boolean {
+    return (
+      placement.fallback !== null &&
+      this.knownDown(placement.primary) &&
+      !this.knownDown(placement.fallback)
+    );
   }
 
   private async writeTo(
