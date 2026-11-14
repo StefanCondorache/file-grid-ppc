@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ComingSoon';
+import { FilesScreen } from '@/features/files/FilesScreen';
 
+// The title never carries a filter value: a search may hold anything the user typed (SR-10).
 export const metadata: Metadata = { title: 'Fișiere · FileGrid' };
 
 export default function Page() {
-  return <ComingSoon title="Fișiere" />;
+  return <FilesScreen />;
 }

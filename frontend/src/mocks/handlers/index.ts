@@ -5,6 +5,7 @@ import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
 import { auditHandlers } from './audit';
 import { actingRoleHandlers, authHandlers } from './auth';
+import { fileHandlers } from './files';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
 import { statisticsHandlers } from './statistics';
@@ -14,7 +15,7 @@ export const groupHandlers: Record<Group, RequestHandler[]> = {
   auth: [...authHandlers],
   policies: [],
   uploads: [...uploadHandlers],
-  files: [],
+  files: [...fileHandlers],
   audit: [...auditHandlers],
   meters: [],
   monitoring: [],
