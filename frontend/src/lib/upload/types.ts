@@ -1,4 +1,7 @@
 /** Upload engine vocabulary (docs/frontend/architecture/upload-engine.md §4, §11). Framework-free. */
+import type { Role } from '@/lib/api/types';
+
+export type { Role };
 
 /** Category ids of the real backend (docs/api.md "Basics"); the UI shows Romanian labels. */
 export const UPLOAD_CATEGORIES = ['fault_records', 'connection_documents', 'drone_videos'] as const;
@@ -70,3 +73,32 @@ export type UploadEvent =
   | { type: 'RESTORE' };
 
 export type UploadEventType = UploadEvent['type'];
+
+/** What survives a reload, in IndexedDB (upload-engine.md §8.1). No bytes, no File, no PII (pii.ts). */
+export interface PersistedUpload {
+  localId: string;
+  /** The real user: records of other users are never shown or resumed (BA-65). */
+  userId: string;
+  startedByRole: Role;
+  /** Idempotency-Key of POST /uploads, written before the call. */
+  clientKey: string;
+  uploadId: string | null;
+  category: UploadCategoryId;
+  state: UploadState;
+  pauseReason?: PauseReason;
+  failReason?: FailReason;
+  /** `name` is omitted for categories with personal data; `nameHash` = SHA-256 of the name. */
+  fingerprint: { nameHash: string; name?: string; size: number; lastModified: number; type: string };
+  /** Server-confirmed policy snapshot (from POST /uploads), never refreshed. */
+  policy: PolicySnapshot | null;
+  chunkSize: number | null;
+  partCount: number | null;
+  fileSha256?: string;
+  partSha256?: string[];
+  /** Bitset of server-confirmed parts, bit n-1 = part n. */
+  confirmed: Uint8Array;
+  safeMetadata: Record<string, string>;
+  displayName: string;
+  createdAt: number;
+  updatedAt: number;
+}
