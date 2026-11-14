@@ -2871,6 +2871,10 @@
           },
           "alreadyReceived": {
             "type": "boolean"
+          },
+          "traceId": {
+            "type": "string",
+            "description": "The trace of this part (the same as X-Trace-Id): GET /traces/{traceId}"
           }
         }
       },
@@ -3252,7 +3256,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Operation label only (no paths/keys/hosts): request, auth, policy, encryption, storage, confirm, …"
+            "description": "The step: api (the whole request, always first), policy, encryption, storage.put, storage.get, hash.verify, audit, confirm. Never a path, key or host"
           },
           "startOffsetMs": {
             "type": "number"
@@ -3275,6 +3279,23 @@
           "errorCode": {
             "type": "string",
             "nullable": true
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Allow-listed, non-personal attributes: method, path (no query), uploadId, partNumber, category, storage, encrypted, sizeBytes, algorithm, keyId, action, outcome (see docs/api.md, \"Trace spans\")"
           }
         }
       },
