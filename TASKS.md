@@ -126,11 +126,9 @@ Frontendul e **Next.js 16 (App Router) + TypeScript**, nu React + Vite. Codul e 
 |---|---|
 | PRD, arhitectură, model de amenințări, accesibilitate | ✅ `docs/frontend/` + ADR 0001–0022 |
 | Contract API (propunere) + handoff pentru backend | ✅ `docs/api/openapi.frontend-proposal.yaml`, `HANDOFF-backend.md` |
-| Sincronizare cu codul P1/P2 | ✅ `docs/api/backend-sync-2026-11-14.md` (provizoriu: backend-ul nu e decis) |
 | Design: tokeni PPC, temă „dispecerat”, font Figtree, machete pentru 6 ecrane | ✅ `docs/frontend/design/` |
-| 5 · Fundație: Next.js, tokeni, i18n română, client API tipat, mock-uri MSW din OpenAPI, CSP, imagine Docker (port 8080, uid 101, ~45 MiB) | ✅ |
+| 5 · Fundație: Next.js, tokeni, i18n, client API tipat, mock-uri MSW din OpenAPI, CSP, imagine Docker (port 8080, uid 101, ~45 MiB) | ✅ |
 | 6a · Login cu listă de roluri + parolă, shell, navigare pe roluri, comutator de rol demo, expirarea sesiunii, flux live (SSE + polling) | ✅ 95 de teste unitare + 6 e2e (Edge, axe WCAG 2.2 AA) |
-| Review final (Opus): 2 probleme critice + 4 importante | ✅ reparate, cu teste |
 
 Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `0` (NestJS). `NEXT_PUBLIC_API_MOCK_GROUPS=…` pune doar unele grupuri pe mock. Un build de producție cu mock-uri e refuzat dacă nu e setat explicit `FILEGRID_ALLOW_MOCKS=1`. Pe mock-uri, parola pentru toate cele 5 conturi demo e `demo-2026`.
 
