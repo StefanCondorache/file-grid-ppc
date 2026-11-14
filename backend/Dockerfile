@@ -6,7 +6,9 @@ FROM node:26-slim AS build
 WORKDIR /app
 ENV npm_config_audit=false npm_config_fund=false
 COPY package.json package-lock.json ./
-RUN npm ci
+# No install scripts and no optional packages: the image needs neither (they are the embedded test
+# Postgres and native file watchers of the test tools), and a slim image has no compiler for them.
+RUN npm ci --ignore-scripts --omit=optional
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
