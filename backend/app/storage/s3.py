@@ -9,6 +9,12 @@ error or cancellation the multipart upload is aborted, so no orphan parts are le
 Read path: ``GetObject`` streaming body, read in blocks of at most 1 MiB; the HTTP connection is closed
 when the iterator is closed early.
 
+Retries: botocore's own retries are off (``total_max_attempts=1``), because their randomized backoff made a
+call to a dead endpoint take 2-4 s instead of failing fast; the circuit breaker and the caller's resume
+logic handle that case. The one place where a retry is cheap and valuable is a multipart part, which is
+already in memory: it is re-sent up to ``PART_ATTEMPTS`` times (0.25 s, then 0.5 s pause) on transient
+errors, so a connection reset does not throw away the parts of a large upload.
+
 Settings: see ``config.S3Settings`` (FILEGRID_S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, ...).
 """
 
@@ -43,6 +49,7 @@ __all__ = ["S3Storage"]
 log = logging.getLogger("filegrid.storage.s3")
 
 READ_BLOCK = 1024 * 1024
+PART_ATTEMPTS = 3
 _NOT_FOUND = {"NoSuchKey", "404", "NotFound"}
 _session = None
 
@@ -95,7 +102,7 @@ class S3Storage(StorageAdapter):
                         s3={"addressing_style": "path"},
                         connect_timeout=s.connect_timeout,
                         read_timeout=s.read_timeout,
-                        retries={"max_attempts": 2, "mode": "standard"},
+                        retries={"total_max_attempts": 1, "mode": "standard"},  # no botocore retries
                         max_pool_connections=s.max_pool,
                         # SeaweedFS does not need the newer default CRC trailers; keep requests plain.
                         request_checksum_calculation="when_required",
@@ -133,10 +140,8 @@ class S3Storage(StorageAdapter):
                         resp = await client.create_multipart_upload(Bucket=self._bucket, Key=key)
                         upload_id = resp["UploadId"]
                     number = len(parts) + 1
-                    resp = await client.upload_part(
-                        Bucket=self._bucket, Key=key, PartNumber=number, UploadId=upload_id, Body=block
-                    )
-                    parts.append({"ETag": resp["ETag"], "PartNumber": number})
+                    etag = await self._upload_part(client, key, upload_id, number, block)
+                    parts.append({"ETag": etag, "PartNumber": number})
                     del block
             if upload_id is None:  # empty input
                 await client.put_object(Bucket=self._bucket, Key=key, Body=b"")
@@ -153,6 +158,20 @@ class S3Storage(StorageAdapter):
             if translated is exc:
                 raise
             raise translated from exc
+
+    async def _upload_part(self, client, key: str, upload_id: str, number: int, block: bytes) -> str:  # noqa: ANN001
+        for attempt in range(1, PART_ATTEMPTS + 1):
+            try:
+                resp = await client.upload_part(
+                    Bucket=self._bucket, Key=key, PartNumber=number, UploadId=upload_id, Body=block
+                )
+                return resp["ETag"]
+            except Exception as exc:
+                if attempt == PART_ATTEMPTS or not isinstance(_translate(exc, key), StorageUnavailable):
+                    raise
+                log.warning("s3: part %d of %r failed (%s), retry %d", number, key, type(exc).__name__, attempt)
+                await asyncio.sleep(0.25 * 2 ** (attempt - 1))
+        raise AssertionError("unreachable")  # pragma: no cover
 
     async def _abort(self, key: str, upload_id: str) -> None:
         try:
