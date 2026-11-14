@@ -49,7 +49,8 @@ export function UploadTray() {
         {say?.priority === 'assertive' ? say.text : ''}
       </div>
       {items.length > 0 && (
-        <section
+        <div
+          role="group"
           aria-label={u.queue.title}
           onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
           className="fixed right-4 bottom-4 z-30 w-[min(92vw,360px)] rounded-card border border-border bg-card shadow-e3"
@@ -70,7 +71,7 @@ export function UploadTray() {
               ))}
             </ul>
           )}
-        </section>
+        </div>
       )}
     </>
   );
