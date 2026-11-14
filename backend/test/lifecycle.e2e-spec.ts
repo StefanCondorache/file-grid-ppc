@@ -252,6 +252,19 @@ describe('graceful shutdown (SIGTERM: rolling update, HPA scale-down)', () => {
     expect(Date.now() - started).toBeLessThan(3000);
   });
 
+  it('closes a live stream opened while stopping right away, so EventSource reconnects elsewhere', async () => {
+    const cookie = await loginCookie(app);
+    app.get(Lifecycle).beginStopping();
+    const started = Date.now();
+
+    const stream = await openStream(baseUrl, browser(cookie));
+    await stream.ended;
+
+    expect(stream.status).toBe(200);
+    expect(stream.text()).toContain('retry:');
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
   it('runs the shutdown once on SIGTERM and exits 0 when it is done', async () => {
     const signals = new EventEmitter();
     const exits: number[] = [];

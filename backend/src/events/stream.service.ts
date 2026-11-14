@@ -119,6 +119,9 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     request.once('close', () => client.close());
     client.start();
     client.send(this.pingEvent());
+    // Opened during the shutdown drain (a reused connection): end it now; EventSource retries
+    // after `retry` ms and reaches a replica that is still ready.
+    if (this.lifecycle.state === 'stopping') client.close();
   }
 
   private dispatch(event: StreamEvent): void {
