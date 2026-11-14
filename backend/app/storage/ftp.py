@@ -247,7 +247,7 @@ class FtpStorage(StorageAdapter):
             if self._health_login is None:
                 self._health_login = asyncio.create_task(self._login_for_health(), name="ftp-health-login")
             try:
-                client = await asyncio.shield(self._health_login)
+                client, login_ms = await asyncio.shield(self._health_login)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - health never raises
@@ -255,16 +255,18 @@ class FtpStorage(StorageAdapter):
                 return HealthStatus(False, (time.perf_counter() - start) * 1000, str(_translate(exc)))
             self._health_login = None
             self._health_client = client
-            return HealthStatus(True, (time.perf_counter() - start) * 1000, "login + NOOP ok")
+            # latency = how long the login took, even if an earlier probe had already given up on it
+            return HealthStatus(True, login_ms, "login + NOOP ok")
 
-    async def _login_for_health(self) -> aioftp.Client:
+    async def _login_for_health(self) -> tuple[aioftp.Client, float]:
+        start = time.perf_counter()
         client = await self._pool.connect()
         try:
             await client.command("NOOP", "2xx")
         except BaseException:
             client.close()
             raise
-        return client
+        return client, (time.perf_counter() - start) * 1000
 
     def _drop_health_client(self) -> None:
         client, self._health_client = self._health_client, None
@@ -276,7 +278,7 @@ class FtpStorage(StorageAdapter):
         if login is not None:
             login.cancel()
             with contextlib.suppress(BaseException):
-                client = await login
+                client, _ = await login
                 client.close()
         self._drop_health_client()
         self._pool.close()

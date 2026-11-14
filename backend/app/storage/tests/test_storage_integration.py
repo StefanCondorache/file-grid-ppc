@@ -367,7 +367,13 @@ async def test_registry_health_and_metrics_with_real_storages() -> None:
     registry = StorageRegistry.from_env()
     try:
         await registry.start(monitor=False)
-        statuses = await registry.monitor.check_once()
+        # An FTP login can outlast one 2 s probe on a busy host; it continues in the background and the
+        # next probe succeeds (as with the real HealthMonitor, which polls every 5 s and trips after 2).
+        for probe in range(1, 4):
+            statuses = await registry.monitor.check_once()
+            if all(s.ok for s in statuses.values()):
+                break
+            await asyncio.sleep(2)
         assert {n: s.ok for n, s in statuses.items()} == {"s3": True, "ftp": True, "db": True}, statuses
         for name in NAMES:
             assert REGISTRY.get_sample_value("filegrid_storage_up", {"storage": name}) == 1
@@ -385,7 +391,8 @@ async def test_registry_health_and_metrics_with_real_storages() -> None:
                 await storage.delete(key)
             assert REGISTRY.get_sample_value("filegrid_storage_bytes_total", labels) == before + 4096
         REPORT.append(
-            "HEALTH: " + ", ".join(f"{n} ok in {s.latency_ms:.1f} ms" for n, s in statuses.items())
+            f"HEALTH (all up at probe {probe}): "
+            + ", ".join(f"{n} {s.detail} in {s.latency_ms:.1f} ms" for n, s in statuses.items())
         )
     finally:
         await registry.aclose()

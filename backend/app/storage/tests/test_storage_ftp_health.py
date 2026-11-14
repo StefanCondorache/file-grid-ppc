@@ -44,7 +44,7 @@ async def test_slow_login_is_not_restarted_by_every_probe(monkeypatch) -> None: 
     assert not first.ok and "timed out" in first.detail
     await asyncio.sleep(0.3)  # the shielded login finished in the background
     second = await rs.check_health(trip_after=5)
-    assert second.ok
+    assert second.ok and second.latency_ms >= 250  # reports how long the login took
     third = await rs.check_health(trip_after=5)
     assert third.ok and third.detail == "NOOP ok"
     assert len(logins) == 1  # one login, then NOOPs on the same connection
