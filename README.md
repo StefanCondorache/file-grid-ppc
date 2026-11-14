@@ -2,7 +2,7 @@
 
 Platformă care rutează fișierele încărcate către FTP, S3 sau baza de date, în funcție de categoria datelor. Cerințele: [docs/brief/FileGrid_PPC.pdf](docs/brief/FileGrid_PPC.pdf). Împărțirea pe echipă: [TASKS.md](TASKS.md).
 
-> Stare: rulează platforma (k3s + HTTPS) și storage-urile. Aplicația (backend FastAPI, frontend React + Vite) și observabilitatea nu există încă; pe domeniu e o pagină placeholder. Manifestele lor și livrarea imaginilor în k3s (k3s nu vede imaginile construite cu Docker și nu e configurat niciun registry) se adaugă odată cu codul; până atunci `make up` nu le pornește.
+> Stare: rulează platforma (k3s + HTTPS), storage-urile și observabilitatea. Backend-ul (NestJS, `backend/`) și simulatorul de contoare (`simulator/`) au `Dockerfile`, deci `make up` le construiește și le pornește; frontend-ul (`frontend/`) nu are încă imagine, iar pe `/` rămâne pagina placeholder.
 
 ## Arhitectură
 
@@ -85,38 +85,19 @@ spec:
 | S3 | `http://s3.filegrid-storage.svc.cluster.local:8333` | `http://127.0.0.1:9000` |
 | FTP | `ftp.filegrid-storage.svc.cluster.local:21`, pasiv 21000-21019 | `127.0.0.1:21`, pasiv 21000-21019 |
 
-Python (backend FastAPI). Același cod merge în ambele medii: în k3s variabilele vin din Secret + ConfigMap, pe laptop din `infra/.env` (`set -a; . infra/.env; set +a` înainte de pornire), unde host-ul și portul diferă ca în tabel:
+Backend-ul (NestJS, TypeScript) citește aceleași variabile în ambele medii (lista completă: `backend/.env.example`): în k3s vin din Secret + ConfigMap și din `deploy/k8s/app/backend/deployment.yaml`, pe laptop din `infra/.env` (`set -a; . infra/.env; set +a` înainte de pornire), unde host-ul și portul diferă ca în tabel. Adaptoarele din `backend/src/storage/` le citesc singure:
 
-```python
-import os, ftplib
-import boto3
-from botocore.config import Config
+```ts
+import { StorageSettings } from './storage/config';
+import { StorageRegistry } from './storage/registry';
 
-env = os.environ
-
-# PostgreSQL (psycopg / asyncpg; cu SQLAlchemy async: postgresql+asyncpg://...)
-dsn = (f"postgresql://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}"
-       f"@{env['FILEGRID_PG_HOST']}:{env['FILEGRID_PG_PORT']}/{env['POSTGRES_DB']}")
-
-# S3: endpoint propriu și adresare path-style (la fel pentru aioboto3)
-s3 = boto3.client(
-    "s3",
-    endpoint_url=env["FILEGRID_S3_ENDPOINT"],
-    aws_access_key_id=env["S3_ACCESS_KEY"],
-    aws_secret_access_key=env["S3_SECRET_KEY"],
-    region_name="us-east-1",
-    config=Config(s3={"addressing_style": "path"}),
-)
-s3.head_bucket(Bucket=env["S3_BUCKET"])
-
-# FTP în mod pasiv (implicit în ftplib)
-ftp = ftplib.FTP(timeout=10)
-ftp.connect(env["FILEGRID_FTP_HOST"], int(env["FILEGRID_FTP_PORT"]))
-ftp.login(env["FTP_USER"], env["FTP_PASSWORD"])
-ftp.set_pasv(True)
+// POSTGRES_* + FILEGRID_PG_HOST/PORT (sau FILEGRID_PG_DSN), FILEGRID_S3_ENDPOINT + S3_*, FILEGRID_FTP_HOST/PORT + FTP_*
+const registry = StorageRegistry.fromSettings(StorageSettings.fromEnv(process.env));
+await registry.start();                          // schema blobstore + health monitor
+console.log(registry.status());                  // { s3: { up, latencyMs, circuit }, ftp: …, db: … }
 ```
 
-FTP pasiv în k3s: răspunsul PASV conține IP-ul podului `ftp-0`, dar ftplib (și curl, implicit) îl ignoră și deschide conexiunea de date către adresa de control, adică ClusterIP-ul Service-ului `ftp`, pe portul pasiv primit. De aceea Service-ul expune tot intervalul 21000-21019, iar StatefulSet-ul `ftp` rămâne la o singură replică. NetworkPolicy permite porturile 21 și 21000-21019 doar clienților de mai sus. pure-ftpd acceptă cel mult 10 sesiuni simultane (jumătate din porturile pasive), din care 8 de la același pod: țineți pool-ul de conexiuni FTP al unui proces sub 8.
+FTP pasiv în k3s: răspunsul PASV conține IP-ul podului `ftp-0`, dar clientul backend-ului (basic-ftp, care încearcă întâi EPSV; la fel ftplib și curl, implicit) deschide conexiunea de date către adresa de control, adică ClusterIP-ul Service-ului `ftp`, pe portul pasiv primit. De aceea Service-ul expune tot intervalul 21000-21019, iar StatefulSet-ul `ftp` rămâne la o singură replică. NetworkPolicy permite porturile 21 și 21000-21019 doar clienților de mai sus. pure-ftpd acceptă cel mult 10 sesiuni simultane (jumătate din porturile pasive), din care 8 de la același pod: țineți pool-ul de conexiuni FTP al unui proces sub 8.
 
 ## Contracte pentru P2/P3
 
@@ -126,36 +107,38 @@ Acestea sunt contractele pe care s-a construit partea P1 (infra, storage, securi
 - Categorii: `meter_readings`, `fault_records`, `connection_documents`, `drone_videos` (aceleași în politici, metrici, dashboard-uri și UI).
 - Storage-uri: `s3`, `ftp`, `db` (valorile câmpurilor primary/fallback din politici).
 
-**Storage (`backend/app/storage/`, async, pentru FastAPI)**
-```python
-from app.storage.registry import StorageRegistry
-from app.storage.base import verify_stream, StorageUnavailable, ObjectNotFound, IntegrityError
-from app.storage.metrics import use_category
+**Storage (`backend/src/storage/`, TypeScript, în procesul backend-ului)**
 
-registry = StorageRegistry.from_env()          # în lifespan: await registry.start() (pornește health monitor-ul)
-store = registry.get("s3")                      # ResilientStorage: circuit breaker + timeouts + metrici
-with use_category("fault_records"):
-    size, sha256 = await store.put_stream("fault_records/2026/abc.bin", chunks)   # chunks: async iterator de bytes
-    async for b in verify_stream(store.get_stream(key), sha256): ...             # IntegrityError la nepotrivire
+Portarea în TypeScript a adaptoarelor scrise inițial în Python (în istoricul git, înainte de eliminarea `backend/app/`): același contract, aceleași metrici `filegrid_storage_*`, aceleași variabile de mediu și aceeași schemă `blobstore`. Un singur proces Node, fără un al doilea runtime sau IPC.
+```ts
+import { verifyStream, StorageUnavailable, ObjectNotFound, IntegrityError } from './storage/base';
+import { withCategory } from './storage/metrics';
+
+const store = registry.get('s3');                 // ResilientStorage: circuit breaker + timeouts + metrici
+await withCategory('fault_records', async () => {
+  const { size, sha256 } = await store.putStream('fault_records/2026/abc.bin', chunks); // chunks: AsyncIterable<Uint8Array>
+  for await (const b of verifyStream(store.getStream(key), sha256)) { /* … */ }       // IntegrityError la nepotrivire
+});
 ```
-- Un storage căzut aruncă imediat `StorageUnavailable` (circuitul e deschis); celelalte categorii nu sunt afectate. Tratați-l ca 503 sau treceți pe storage-ul fallback din politică.
-- Upload-urile reluabile trebuie să fie stateless: bucățile (chunk-urile) se pun în storage partajat (de ex. `staging/{upload_id}/{n}`), niciodată pe discul podului.
-- Adaptorul DB folosește schema `blobstore`. Tabelele voastre și migrațiile (Alembic) stau în altă schemă.
-- Dependențele sunt în `backend/app/storage/requirements.txt`; includeți-le în pachetul backend-ului. Testele de integrare rulează cu `backend/app/storage/tests/run-in-cluster.sh` (job k8s cu limită de 256Mi).
+- Un storage căzut aruncă imediat `StorageUnavailable` (circuitul e deschis); celelalte categorii nu sunt afectate. Backend-ul trece pe storage-ul fallback din politică sau răspunde 503 `STORAGE_UNAVAILABLE`.
+- Upload-urile reluabile sunt stateless: părțile stau în storage-ul politicii (`staging/{uploadId}/{n}`), niciodată pe discul podului.
+- Adaptorul DB folosește schema `blobstore`. Tabelele backend-ului (migrațiile Kysely din `backend/src/database/migrations/`) stau în schema `public`.
+- Teste: `cd backend && npm test -- test/storage` (Postgres embedded, plus servere S3 și FTP în proces). Pe 14.11 adaptoarele au fost verificate și pe storage-urile reale din cluster (prin `kubectl port-forward`).
 
-**Criptare pentru documentele de racordare (`backend/app/crypto/`)**
-- `encrypt_stream(chunks, kek)` și `decrypt_stream(chunks, keyring)` sunt streaming AES-256-GCM, cu o cheie per fișier împachetată cu KEK-ul din `FILEGRID_KEK` / `FILEGRID_KEK_ID` (Secret `filegrid-app-secrets`).
-- Politica are `encryption: true/false`. În metadate păstrați două hash-uri: al fișierului original (cel verificat la download) și al octeților stocați (`put_stream` îl întoarce pe acesta).
+**Criptare pentru documentele de racordare (`backend/src/crypto/`)**
+- `encryptStream(chunks, kek)` și `decryptStream(chunks, keyring)` sunt streaming AES-256-GCM (formatul FGE1, compatibil octet cu octet cu implementarea Python inițială), cu o cheie per fișier împachetată cu KEK-ul din `FILEGRID_KEK` / `FILEGRID_KEK_ID` (Secret `filegrid-app-secrets`).
+- Politica are `encryptionAtRest`. În metadate se păstrează două hash-uri: al fișierului original (cel verificat la download) și al octeților stocați (cel întors de `putStream`).
 
 **Backend (P2)**
 - Imaginea `backend/Dockerfile` ascultă pe portul 8000 și rulează ca uid 10001.
-- Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. API-ul e servit sub `/api` (Ingress-ul nu taie prefixul) și expune `/metrics`.
+- Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. API-ul e servit sub `/api/v1` (Ingress-ul `/api` nu taie prefixul); `/metrics` e la rădăcină.
 - Env: Secret-urile `filegrid-storage-credentials` și `filegrid-app-secrets` (`JWT_SECRET`, `METER_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FILEGRID_KEK*`) plus `FILEGRID_PG_HOST`, `FILEGRID_S3_ENDPOINT`, `FILEGRID_FTP_HOST` (setate în `deploy/k8s/app/`).
 - Metrici așteptate de dashboard și alerte:
   - `filegrid_uploads_total{category,outcome}` și `filegrid_upload_duration_seconds{category,outcome}`; outcome `success`/`ok`/`duplicate` contează ca succes;
   - `filegrid_meter_readings_stored_total`, `filegrid_meter_readings_duplicates_total` (retry-uri deduplicate) și `filegrid_meter_readings_duplicate_stored_total` (trebuie să rămână 0).
 - Loguri JSON pe stdout cu `trace_id`, `category`, `storage`, `operation`, `file_id`. `trace_id` vine din header-ul `X-Trace-Id` (îl generați dacă lipsește) și se întoarce în răspuns.
-- Panoul demo: ServiceAccount-ul `filegrid-backend` poate scala StatefulSet-urile `postgres`/`s3`/`ftp` (0↔1) în `filegrid-storage` (`deploy/k8s/demo-rbac.yaml`), de exemplu cu clientul Python `kubernetes`.
+- Panoul demo: ServiceAccount-ul `filegrid-backend` poate scala StatefulSet-urile `postgres`/`s3`/`ftp` (0↔1) în `filegrid-storage` (`deploy/k8s/demo-rbac.yaml`); backend-ul apelează direct API-ul Kubernetes (`backend/src/demo/kube.client.ts`, doar `s3` și `ftp`, fiindcă Postgres ține și metadatele).
+- Contractul REST complet: [`docs/api.md`](docs/api.md).
 
 **Simulator (P2)**
 - Imaginea `simulator/Dockerfile` ascultă pe portul 8080 (`/metrics` și un endpoint de control pentru rata 10x) și rulează ca uid 10001.

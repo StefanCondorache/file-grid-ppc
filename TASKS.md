@@ -3,7 +3,7 @@
 Source of requirements: `docs/brief/FileGrid_PPC.pdf`.
 
 Stack:
-- **Backend:** Python FastAPI.
+- **Backend:** NestJS 12 (TypeScript, Node 26).
 - **Frontend:** React + Vite.
 - **Storage (already in `infra/`):** PostgreSQL, SeaweedFS (S3) and pure-ftpd (FTP).
 - **Observability:** Prometheus, Grafana and Loki.
@@ -17,14 +17,14 @@ Only edit your own folders. If you need a change in someone else's folder, ask t
 
 | Person | Role | Owns |
 |---|---|---|
-| **P1** | Infra, storage, security | `infra/`, `deploy/`, `Makefile`, `README.md`, `backend/app/storage/`, `backend/app/crypto/` |
+| **P1** | Infra, storage, security | `infra/`, `deploy/`, `Makefile`, `README.md`, `backend/src/storage/`, `backend/src/crypto/` |
 | **P2** | Backend API, data, simulator | `backend/` (except `storage/` and `crypto/`), `simulator/`, `docs/api.md` |
 | **P3** | Frontend | `frontend/` |
 
 Each person writes the Dockerfile for their own part. P1 wires the Dockerfiles into compose and k8s.
 
 **Contracts to agree in the first hour.** After that, change them only after telling the others:
-- `backend/app/storage/base.py` (P1 writes it, P2 uses it). It defines the storage adapter interface: `put_stream(key, chunks) -> (size, sha256)`, `get_stream(key)`, `delete(key)` and `health()`.
+- `backend/src/storage/base.ts` (P1 owns it, P2 uses it). It defines the storage adapter interface: `putStream(key, chunks) -> {size, sha256}`, `getStream(key)`, `delete(key)` and `health()`. It is the TypeScript port of the original Python `base.py`.
 - `docs/api.md` (P2 writes it, P3 uses it). It is the REST API below. P3 builds against mocks until the real endpoints exist.
 
 Draft API:
@@ -81,7 +81,7 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 **Rămas de făcut (oricine din echipă):**
 - [ ] Rulați `sudo make up` de două ori pe VPS după merge: a doua rulare nu trebuie să schimbe nimic. Apoi `make storage-isolation-check`.
 - [ ] Repetiție de chaos live: `make chaos-storage-stop S=s3`; categoriile pe FTP/DB trebuie să meargă în continuare; apoi `make chaos-storage-start S=s3`. Netem a fost testat doar pe un pod de unică folosință.
-- [ ] Testele de integrare ale adaptoarelor, în cluster: `backend/app/storage/tests/run-in-cluster.sh`. Ultimele commit-uri pe storage (FTP keep-alive, curățenie de teste) nu au mai avut review independent.
+- [x] ~~Testele de integrare ale adaptoarelor, în cluster: `backend/app/storage/tests/run-in-cluster.sh`.~~ Înlocuit: adaptoarele Python au fost portate în TypeScript (`backend/src/storage/`) și verificate pe storage-urile din cluster (vezi „P2 status”). Fix-ul FTP keep-alive (b66395d) e inclus în portare; review independent făcut pe codul TypeScript.
 - [ ] Ultimul re-review pentru fix-urile k8s (pin k3s/Helm, timeout Traefik, ordinea storage → TLS în `make up`) a fost oprit înainte de final: o trecere rapidă prin `git show fd79ace eb23ac0`.
 - [ ] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`.
 - [ ] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice.
@@ -129,6 +129,10 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
 - [ ] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS.
 - [ ] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it.
 - [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
+- [ ] Known limits from the code review (minor, left as they are):
+  - S3 down: a part upload gets `503` (the client retries) instead of the fallback until the circuit opens (~10 s: 5 failures or 2 failed health probes). FTP and DB fall back at once.
+  - A DB storage pool full of slow transfers (default 8 clients, `FILEGRID_PG_POOL_MAX`) is counted as an outage and can open the `db` circuit.
+  - A download client that stalls for more than 30 s on a large S3 file can count as an S3 failure.
 - [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`.
 
 ## P3: Frontend

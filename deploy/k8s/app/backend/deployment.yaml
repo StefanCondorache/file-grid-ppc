@@ -1,4 +1,4 @@
-# FastAPI backend. Stateless (upload sessions live in Postgres), so capacity grows by adding replicas:
+# NestJS backend (backend/). Stateless (upload sessions live in Postgres), so capacity grows by adding replicas:
 # the HPA (hpa.yaml) owns spec.replicas, which is deliberately absent here so re-applying never resets it.
 # filegrid.io/storage-client=true is the label the filegrid-storage NetworkPolicies admit.
 apiVersion: apps/v1
