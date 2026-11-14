@@ -1,0 +1,24 @@
+# /api -> backend (no prefix stripping: the backend serves its routes under /api). Traefik prefers the longer
+# PathPrefix, so this wins over "/" (frontend or placeholder). It reuses the TLS secret but carries no
+# cert-manager annotation: the certificate is owned by the Ingress that serves "/" (filegrid-frontend or
+# placeholder), so there is exactly one Certificate for the host.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: filegrid-api
+  namespace: filegrid
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ppc.filegrid.cc.cd]
+      secretName: ppc-filegrid-tls
+  rules:
+    - host: ppc.filegrid.cc.cd
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: filegrid-backend
+                port: {number: 8000}

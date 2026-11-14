@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: filegrid-frontend
+  namespace: filegrid
+spec:
+  type: ClusterIP
+  selector: {app: filegrid-frontend}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

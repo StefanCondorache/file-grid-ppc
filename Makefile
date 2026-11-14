@@ -16,6 +16,8 @@ up:
 	./scripts/host-bootstrap.sh
 	$(MAKE) --no-print-directory k8s-tls-up
 	$(MAKE) --no-print-directory k8s-storage-up
+	@if [ -f mk/observability.mk ]; then $(MAKE) --no-print-directory obs-up; else echo "mk/observability.mk absent; skipping obs-up"; fi
+	$(MAKE) --no-print-directory app-up
 	$(MAKE) --no-print-directory status
 
 # Starea pe scurt: poduri, certificat, unde raspund aplicatia si storage-urile
