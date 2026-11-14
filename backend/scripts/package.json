@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "Operator scripts run directly by Node 26 (TypeScript types stripped): ESM, no dependencies.",
+  "type": "module"
+}
