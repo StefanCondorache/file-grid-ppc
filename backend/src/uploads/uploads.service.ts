@@ -1,14 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Principal } from '../auth/auth.types';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
-import { AppError } from '../common/app-error';
+import { AppError, failedStorage } from '../common/app-error';
 import { UPLOAD_CAPABILITY, can } from '../common/domain';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import type { Keyring } from '../crypto/keys';
 import { DB, type Db } from '../database/database';
 import { maskCnp, maskName, sealPii } from '../files/pii';
 import { KEYRING, ObjectStoreService } from '../object-store/object-store.service';
-import { currentTraceId, span } from '../observability/trace-context';
+import { OperationsService } from '../observability/operations.service';
+import { annotate, currentTraceId, span } from '../observability/trace-context';
 import { PoliciesService } from '../policies/policies.service';
 import { METADATA_KIND, type CreateUpload } from './upload.schemas';
 import { type SessionRow, expectedPartSize, sessionView, statusView } from './upload.views';
@@ -18,6 +19,9 @@ export const stagingKey = (uploadId: string, part: number): string => `staging/$
 export function uploadNotFound(): AppError {
   return new AppError(404, 'UPLOAD_NOT_FOUND', 'Încărcarea nu există sau nu vă aparține.');
 }
+
+/** Parts dropped per sweep of abandoned uploads (the next sweep takes the rest). */
+const SWEEP_BATCH = 500;
 
 /** Passes the request body through and stops it once it exceeds `limit` bytes. */
 async function* limited(
@@ -48,6 +52,7 @@ export class UploadsService {
     private readonly policies: PoliciesService,
     private readonly store: ObjectStoreService,
     private readonly bulkhead: BulkheadService,
+    private readonly operations: OperationsService,
   ) {}
 
   async create(
@@ -141,6 +146,10 @@ export class UploadsService {
     return statusView(session, parts);
   }
 
+  /**
+   * PUT /uploads/{id}/parts/{n}. Every part is an operation of its own (`upload.part`) with its own
+   * trace: the answer carries its traceId, so the chunk grid can open the trace of one part.
+   */
   async receivePart(
     principal: Principal,
     uploadId: string,
@@ -149,7 +158,44 @@ export class UploadsService {
     declaredLength: number | undefined,
     declaredSha256: string | undefined,
   ) {
-    const session = await this.expireIfDue(await this.owned(principal, uploadId));
+    const owned = await this.owned(principal, uploadId);
+    annotate({ uploadId, partNumber: part });
+    try {
+      const session = await this.expireIfDue(owned);
+      const { view, storage } = await this.storePart(
+        session,
+        part,
+        body,
+        declaredLength,
+        declaredSha256,
+      );
+      await this.operations.record({
+        operation: 'upload.part',
+        category: session.category,
+        storage,
+        sizeBytes: view.size,
+        status: 'ok',
+      });
+      return { ...view, traceId: currentTraceId() ?? null };
+    } catch (error) {
+      await this.operations.record({
+        operation: 'upload.part',
+        category: owned.category,
+        storage: failedStorage(error),
+        status: 'error',
+      });
+      throw error;
+    }
+  }
+
+  private async storePart(
+    session: SessionRow,
+    part: number,
+    body: AsyncIterable<Uint8Array>,
+    declaredLength: number | undefined,
+    declaredSha256: string | undefined,
+  ) {
+    const uploadId = session.id;
     this.requireOpen(session);
     if (part < 1 || part > session.part_count) {
       throw new AppError(
@@ -174,11 +220,19 @@ export class UploadsService {
       .where('part_number', '=', part)
       .executeTakeFirst();
     if (previous && declaredSha256 !== undefined && previous.sha256 === declaredSha256) {
+      // Read (and drop) the body before answering: an answer while the client is still sending
+      // makes the proxy cut the stream, so a retry over HTTP/2 would fail again (TASKS.md, 1 GB proof).
+      for await (const _chunk of limited(body, expected)) {
+        // discarded: the stored part is already this one
+      }
       return {
-        partNumber: part,
-        size: previous.size_bytes,
-        sha256: previous.sha256,
-        alreadyReceived: true,
+        storage: previous.storage,
+        view: {
+          partNumber: part,
+          size: previous.size_bytes,
+          sha256: previous.sha256,
+          alreadyReceived: true,
+        },
       };
     }
     const policy = await this.policies.get(session.category);
@@ -237,10 +291,13 @@ export class UploadsService {
       await this.store.delete(session.category, previous.storage, key);
     }
     return {
-      partNumber: part,
-      size: written.plain.size,
-      sha256: written.plain.sha256,
-      alreadyReceived: false,
+      storage: written.storage,
+      view: {
+        partNumber: part,
+        size: written.plain.size,
+        sha256: written.plain.sha256,
+        alreadyReceived: false,
+      },
     };
   }
 
@@ -258,6 +315,46 @@ export class UploadsService {
   }
 
   /** Best-effort removal of the staged parts (after completion or abort). */
+  /**
+   * Abandoned uploads (a closed tab, a client that gave up): expires the open sessions past their
+   * expiry, then drops the staged parts of expired and aborted sessions, a batch at a time. A part's
+   * row goes only once its object is deleted, so a storage that is down keeps it for the next
+   * sweep. Safe on every replica at once: the expiry is one UPDATE and deleting is idempotent.
+   * Returns the number of parts dropped.
+   */
+  async sweepExpired(): Promise<number> {
+    await this.db
+      .updateTable('upload_sessions')
+      .set({ status: 'expired', updated_at: new Date() })
+      .where('status', '=', 'open')
+      .where('expires_at', '<', new Date())
+      .execute();
+    const parts = await this.db
+      .selectFrom('upload_parts')
+      .innerJoin('upload_sessions', 'upload_sessions.id', 'upload_parts.upload_id')
+      .select([
+        'upload_parts.upload_id',
+        'upload_parts.part_number',
+        'upload_parts.storage',
+        'upload_parts.storage_key',
+        'upload_sessions.category',
+      ])
+      .where('upload_sessions.status', 'in', ['expired', 'aborted'])
+      .limit(SWEEP_BATCH)
+      .execute();
+    let dropped = 0;
+    for (const part of parts) {
+      if (!(await this.store.delete(part.category, part.storage, part.storage_key))) continue;
+      await this.db
+        .deleteFrom('upload_parts')
+        .where('upload_id', '=', part.upload_id)
+        .where('part_number', '=', part.part_number)
+        .execute();
+      dropped += 1;
+    }
+    return dropped;
+  }
+
   async dropStaging(session: SessionRow): Promise<void> {
     const parts = await this.parts(session.id);
     await Promise.all(
