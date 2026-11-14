@@ -1,5 +1,5 @@
 import { Controller, Get, Module } from '@nestjs/common';
-import { Authenticated } from '../auth/auth.decorators';
+import { Authenticated, NoSessionRefresh } from '../auth/auth.decorators';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
 import { CATEGORIES, STORAGES } from '../common/domain';
 import { ObjectStoreService } from '../object-store/object-store.service';
@@ -14,6 +14,7 @@ export class MonitoringController {
 
   @Get('storage-health')
   @Authenticated()
+  @NoSessionRefresh()
   storageHealth() {
     const status = this.store.status();
     return {
@@ -32,6 +33,7 @@ export class MonitoringController {
 
   @Get('metrics/bulkhead')
   @Authenticated('view_observability')
+  @NoSessionRefresh()
   bulkheadState() {
     const snapshot = this.bulkhead.snapshot();
     return {

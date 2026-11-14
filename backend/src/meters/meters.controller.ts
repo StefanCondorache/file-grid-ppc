@@ -7,6 +7,7 @@ import {
   DemoOnly,
   MeterAuthenticated,
   MeterKeyId,
+  NoSessionRefresh,
 } from '../auth/auth.decorators';
 import type { Principal } from '../auth/auth.types';
 import { ZodPipe } from '../common/zod.pipe';
@@ -57,6 +58,7 @@ export class MetersController {
 
   @Get('meters/counters')
   @Authenticated('view_meters')
+  @NoSessionRefresh()
   async counters() {
     const status = await this.simulator.status().catch(() => null);
     const lost =

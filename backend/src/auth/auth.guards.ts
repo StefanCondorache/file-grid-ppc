@@ -19,6 +19,7 @@ const BEARER = /^Bearer\s+(\S+)$/i;
 const sha256 = (value: string | Buffer): Buffer => createHash('sha256').update(value).digest();
 
 export const REQUIRED_CAPABILITIES = 'filegrid:capabilities';
+export const NO_SESSION_REFRESH = 'filegrid:no-session-refresh';
 export const RequireCapabilities = (
   ...capabilities: Capability[]
 ): MethodDecorator & ClassDecorator => SetMetadata(REQUIRED_CAPABILITIES, capabilities);
@@ -36,8 +37,9 @@ export function sessionToken(
 }
 
 /**
- * Requires a valid session, puts the principal on the request, slides the idle window, and checks
- * the capabilities named by @RequireCapabilities against the active role.
+ * Requires a valid session, puts the principal on the request, slides the idle window (unless the
+ * route is marked @NoSessionRefresh) and checks the capabilities named by @RequireCapabilities
+ * against the active role.
  */
 @Injectable()
 export class SessionGuard implements CanActivate {
@@ -52,7 +54,14 @@ export class SessionGuard implements CanActivate {
     const request = http.getRequest<AuthRequest>();
     const presented = sessionToken(request, this.config);
     if (!presented) throw unauthenticated();
-    const { principal, refreshed } = await this.auth.verify(presented.token, presented.viaCookie);
+    const background =
+      this.reflector.getAllAndOverride<boolean | undefined>(NO_SESSION_REFRESH, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? false;
+    const { principal, refreshed } = await this.auth.verify(presented.token, presented.viaCookie, {
+      slide: !background,
+    });
     if (refreshed) {
       setSessionCookie(
         http.getResponse<Response>(),

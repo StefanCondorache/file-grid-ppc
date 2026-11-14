@@ -17,7 +17,7 @@ import { ROLES } from '../common/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import { DB, type Db } from '../database/database';
-import { Authenticated, CurrentPrincipal } from './auth.decorators';
+import { Authenticated, CurrentPrincipal, NoSessionRefresh } from './auth.decorators';
 import { DemoModeGuard, SessionGuard, sessionToken } from './auth.guards';
 import { AuthService, type IssuedSession, unauthenticated } from './auth.service';
 import type { AuthRequest, MeResponse, Principal } from './auth.types';
@@ -72,6 +72,7 @@ export class AuthController {
 
   @Get('me')
   @Authenticated()
+  @NoSessionRefresh()
   me(@CurrentPrincipal() principal: Principal): MeResponse {
     return this.auth.me(principal);
   }

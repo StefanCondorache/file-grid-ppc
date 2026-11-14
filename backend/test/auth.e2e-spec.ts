@@ -155,10 +155,51 @@ describe('auth', () => {
     expect(response.status).toBe(401);
   });
 
-  it('slides the idle window forward on use', async () => {
+  it('slides the idle window forward on real activity', async () => {
     const stale = craftToken({ idle: nowS() + 300, exp: nowS() + 3600 });
 
+    const activity = await request(app.getHttpServer())
+      .get('/api/v1/policies')
+      .set({ Cookie: `__Host-fg_session=${stale}` });
+    const refreshed = sessionCookieFrom(activity);
+    const after = await me({ Cookie: refreshed });
+
+    expect(activity.status).toBe(200);
+    expect(refreshed).not.toBe(`__Host-fg_session=${stale}`);
+    expect(Date.parse(after.body.idleExpiresAt) - Date.now()).toBeGreaterThan(29 * 60_000);
+  });
+
+  it.each(['/api/v1/auth/me', '/api/v1/storage-health', '/api/v1/meters/counters'])(
+    'does not extend the session on the background request GET %s',
+    async (path) => {
+      const idle = nowS() + 300;
+      const stale = craftToken({ idle, exp: nowS() + 3600 });
+
+      const response = await request(app.getHttpServer())
+        .get(path)
+        .set({ Cookie: `__Host-fg_session=${stale}` });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['set-cookie']).toBeUndefined();
+    },
+  );
+
+  it('reports the unchanged idle expiry from GET /auth/me', async () => {
+    const idle = nowS() + 300;
+    const stale = craftToken({ idle, exp: nowS() + 3600 });
+
     const response = await me({ Cookie: `__Host-fg_session=${stale}` });
+
+    expect(response.status).toBe(200);
+    expect(Date.parse(response.body.idleExpiresAt)).toBe(idle * 1000);
+  });
+
+  it('extends the session on POST /auth/refresh', async () => {
+    const stale = craftToken({ idle: nowS() + 300, exp: nowS() + 3600 });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set(browser(`__Host-fg_session=${stale}`));
 
     expect(response.status).toBe(200);
     expect(sessionCookieFrom(response)).not.toBe(`__Host-fg_session=${stale}`);
