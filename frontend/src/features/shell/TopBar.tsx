@@ -8,6 +8,7 @@ import { StorageHealthStrip } from '@/features/health/StorageHealthStrip';
 import type { Me } from '@/lib/api/types';
 import { useT } from '@/lib/i18n';
 import { LivePauseSwitch } from './LivePauseSwitch';
+import { LiveStatusPill } from './LiveStatusPill';
 import { titleFor } from './nav';
 import { RoleSlot } from './RoleSlot';
 
@@ -19,6 +20,7 @@ export function TopBar({ me, onLogout }: { me: Me; onLogout?: () => void }) {
       <h1 className="text-[22px] font-bold tracking-tight">{titleFor(pathname)}</h1>
       <span className="flex-1" />
       <StorageHealthStrip />
+      <LiveStatusPill />
       <LivePauseSwitch />
       {me.demoMode && (
         <span className="hidden h-[30px] items-center gap-1.5 rounded-chip border-[1.5px] border-info px-2.5 text-xs font-bold tracking-wide text-info-ink uppercase md:inline-flex">

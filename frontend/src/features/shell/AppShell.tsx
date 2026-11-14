@@ -6,6 +6,7 @@ import { UploadTray } from '@/features/upload/UploadTray';
 import type { Me } from '@/lib/api/types';
 import { useT } from '@/lib/i18n';
 import { Footer } from './Footer';
+import { LiveBridge } from './LiveBridge';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 
@@ -27,6 +28,7 @@ export function AppShell({ me, children, onLogout }: { me: Me; children: ReactNo
         <Footer />
       </div>
       <UploadTray />
+      <LiveBridge />
     </div>
   );
 }
