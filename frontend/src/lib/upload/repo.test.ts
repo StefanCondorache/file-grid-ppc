@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { persistableHandle, safeMetadata, toPersistable, type PersistInput } from './pii';
-import { bitsetHas, bitsetNew, bitsetSet, createRepo } from './repo';
+import { bitsetClear, bitsetHas, bitsetNew, bitsetSet, createRepo } from './repo';
 
 let n = 0;
 const freshRepo = () => createRepo(`filegrid-uploads-test-${++n}`);
@@ -48,6 +48,13 @@ describe('bitset', () => {
     expect(bitsetHas(b, 10)).toBe(true);
     expect(bitsetHas(b, 1)).toBe(false);
     expect(b.length).toBe(2);
+  });
+
+  it('clears a bit without mutating the input', () => {
+    const a = bitsetSet(bitsetSet(bitsetNew(9), 2), 9);
+    const b = bitsetClear(a, 9);
+    expect([bitsetHas(a, 9), bitsetHas(b, 9), bitsetHas(b, 2)]).toEqual([true, false, true]);
+    expect(bitsetClear(bitsetNew(0), 5)).toEqual(new Uint8Array(0));
   });
 });
 

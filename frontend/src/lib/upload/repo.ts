@@ -19,6 +19,13 @@ export function bitsetSet(bits: Uint8Array, n: number): Uint8Array {
   return next;
 }
 
+export function bitsetClear(bits: Uint8Array, n: number): Uint8Array {
+  const i = n - 1;
+  const next = new Uint8Array(bits);
+  if (i >> 3 < next.length) next[i >> 3] = (next[i >> 3] ?? 0) & ~(1 << (i & 7));
+  return next;
+}
+
 interface UploadDb extends DBSchema {
   uploads: { key: string; value: PersistedUpload; indexes: { byUser: string } };
   handles: { key: string; value: { localId: string; handle: unknown } };
