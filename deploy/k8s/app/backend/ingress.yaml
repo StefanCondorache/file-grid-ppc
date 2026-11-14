@@ -7,6 +7,9 @@ kind: Ingress
 metadata:
   name: filegrid-api
   namespace: filegrid
+  annotations:
+    # HSTS, nosniff, Referrer-Policy, X-Frame-Options (deploy/k8s/app/base/security-headers.yaml)
+    traefik.ingress.kubernetes.io/router.middlewares: filegrid-security-headers@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:

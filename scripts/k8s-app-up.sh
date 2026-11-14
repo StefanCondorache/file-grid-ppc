@@ -6,7 +6,8 @@
 #
 # "/" routing: while the frontend runs, Ingress filegrid-frontend serves "/" and owns the TLS certificate and the
 # placeholder (deploy/k8s/placeholder.yaml) is deleted; without a frontend the placeholder is (re)applied and owns
-# them again. /api (Ingress filegrid-api) is independent of that switch.
+# them again. /api (Ingress filegrid-api) is independent of that switch. This script is the only owner of the
+# placeholder (make k8s-tls-up does not apply it), so a repeated `make up` never re-creates it next to the frontend.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -50,10 +51,19 @@ for c in backend frontend simulator; do
     [ "$DOWN" -eq 1 ] || echo "skip filegrid-$c: image filegrid-$c:$t not in k3s (no $c/Dockerfile built)"
   fi
 done
+# Safety: a missing image must never take down a running app. If no component image matches the tag but the app is
+# deployed, stop here; removing the app is only done on purpose with --down (make app-down).
+if [ "$DOWN" -eq 0 ] && [ "${#present[@]}" -eq 0 ] \
+  && kubectl -n "$NS" get deploy filegrid-backend filegrid-frontend >/dev/null 2>&1; then
+  echo "no filegrid-* image with the requested tag, but the app is running; refusing to replace it (use APP_TAG=<built tag> or make app-down)" >&2
+  exit 1
+fi
 
 # Points ingress-shim at the Ingress that now serves "/": when the previous owner Ingress was deleted, its
 # Certificate is garbage collected; touching the new owner makes cert-manager recreate the Certificate, which
-# adopts the existing (still valid) secret instead of requesting a new one.
+# adopts the existing (still valid) secret instead of requesting a new one, so that case is waited for.
+# A first issuance (no secret yet: new machine) needs DNS -> this machine and ports 80/443 and may never complete
+# on a test machine; it is not waited for (make status / make tls-status show it).
 cert_owner() {
   local ing=$1 owner
   owner=$(kubectl -n "$NS" get certificate "$CERT" -o jsonpath='{.metadata.ownerReferences[0].name}' 2>/dev/null || true)
@@ -64,7 +74,11 @@ cert_owner() {
     kubectl -n "$NS" get certificate "$CERT" >/dev/null 2>&1 && break
     sleep 2
   done
-  kubectl -n "$NS" wait --for=condition=Ready "certificate/$CERT" --timeout=180s
+  if kubectl -n "$NS" get secret "$CERT" >/dev/null 2>&1; then
+    kubectl -n "$NS" wait --for=condition=Ready "certificate/$CERT" --timeout=180s
+  else
+    echo "certificate $CERT requested for the first time (needs DNS and ports 80/443; see make tls-status)"
+  fi
 }
 
 is_present() { local x; for x in "${present[@]}"; do [ "$x" = "$1" ] && return 0; done; return 1; }

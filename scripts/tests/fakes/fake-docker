@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake docker for scripts/tests: records the call; `docker save` writes nothing.
+printf 'docker %s\n' "$*" >> "$FAKE_STATE/calls"

@@ -9,6 +9,8 @@ type Row = Record<string, unknown>;
 const ANNOUNCE_WINDOW_MS = 5_000;
 const INVALIDATE_EVERY_MS = 1_000;
 const POLL_MS = 3_000;
+/** `file.created` carries the real category id (`fault_records`); the short id `fault` is still accepted. */
+const FAULT_CATEGORIES: ReadonlySet<unknown> = new Set(['fault_records', 'fault']);
 
 /** Applies stream events to the TanStack cache (FA-8: events are snapshots or hints; REST is the source). */
 export function createBridge(qc: QueryClient, deps: Deps) {
@@ -82,7 +84,7 @@ export function createBridge(qc: QueryClient, deps: Deps) {
         return;
       case 'file.created':
         invalidateFilesThrottled();
-        if (d.category === 'fault') queueFaultAnnouncement(d);
+        if (FAULT_CATEGORIES.has(d.category)) queueFaultAnnouncement(d);
         return;
       case 'file.integrity':
         invalidate(qk.files.detail(String(d.fileId)));

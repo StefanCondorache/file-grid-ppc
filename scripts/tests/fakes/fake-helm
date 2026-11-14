@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Fake helm for scripts/tests. Every call is appended to $FAKE_STATE/calls.
+#   helm [-n NS] list --deployed -f '^REL$' -o json  -> [{"chart": <contents of $FAKE_STATE/helm/REL>}] or []
+#   helm upgrade --install REL REPO/CHART --version V ... -> writes CHART-V to $FAKE_STATE/helm/REL;
+#                                                             fails (status 1) if $FAKE_STATE/helm-fail exists
+#   anything else: no output, status 0
+set -euo pipefail
+printf '%s\n' "$*" >> "$FAKE_STATE/calls"
+mkdir -p "$FAKE_STATE/helm"
+args=()
+while [ $# -gt 0 ]; do
+  case $1 in -n|--namespace) shift 2 ;; *) args+=("$1"); shift ;; esac
+done
+case ${args[0]:-} in
+  list)
+    rel=""
+    for ((i = 0; i < ${#args[@]}; i++)); do [ "${args[$i]}" = -f ] && rel=${args[$((i + 1))]}; done
+    rel=${rel#^}; rel=${rel%$}
+    if [ -f "$FAKE_STATE/helm/$rel" ]; then jq -n --arg c "$(cat "$FAKE_STATE/helm/$rel")" '[{chart: $c}]'; else echo '[]'; fi ;;
+  upgrade)
+    [ ! -f "$FAKE_STATE/helm-fail" ] || { echo "Error: UPGRADE FAILED (fake)" >&2; exit 1; }
+    rel=${args[2]} chart=${args[3]#*/} version=""
+    for ((i = 0; i < ${#args[@]}; i++)); do [ "${args[$i]}" = --version ] && version=${args[$((i + 1))]}; done
+    echo "$chart-$version" > "$FAKE_STATE/helm/$rel"
+    echo "Release \"$rel\" has been upgraded. (fake)" ;;
+esac

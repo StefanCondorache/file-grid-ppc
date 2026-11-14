@@ -67,6 +67,44 @@ describe('loadConfig', () => {
     expect(() => loadConfig(env)).toThrow(/ADMIN_PASSWORD/);
   });
 
+  it('turns passwordless login on only together with demo mode', () => {
+    const effective = (env: NodeJS.ProcessEnv) => {
+      const config = loadConfig({ ...BASE, ...env });
+      return [config.passwordlessLogin, config.passwordlessLoginRequested];
+    };
+
+    expect(effective({})).toEqual([false, false]);
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'true' })).toEqual([true, true]);
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'true', FILEGRID_DEMO_MODE: 'false' })).toEqual(
+      [false, true],
+    );
+    expect(effective({ FILEGRID_PASSWORDLESS_LOGIN: 'false' })).toEqual([false, false]);
+    expect(() => loadConfig({ ...BASE, FILEGRID_PASSWORDLESS_LOGIN: 'maybe' })).toThrow(
+      /FILEGRID_PASSWORDLESS_LOGIN/,
+    );
+  });
+
+  it('trusts X-Forwarded-For only from the cluster pod and service CIDRs by default', () => {
+    expect(loadConfig(BASE).trustedProxyCidrs).toEqual(['10.42.0.0/16', '10.43.0.0/16']);
+  });
+
+  it('reads TRUSTED_PROXY_CIDRS as a list, empty meaning no proxy is trusted', () => {
+    expect(
+      loadConfig({ ...BASE, TRUSTED_PROXY_CIDRS: ' 10.42.0.0/16, 192.168.1.10 ,fd00::/8 ' })
+        .trustedProxyCidrs,
+    ).toEqual(['10.42.0.0/16', '192.168.1.10', 'fd00::/8']);
+    expect(loadConfig({ ...BASE, TRUSTED_PROXY_CIDRS: '' }).trustedProxyCidrs).toEqual([]);
+  });
+
+  it.each(['10.42.0.0/33', 'not-an-ip', '10.42.0.0/16,loopback', '::1/129'])(
+    'rejects an invalid TRUSTED_PROXY_CIDRS entry (%p)',
+    (value) => {
+      expect(() => loadConfig({ ...BASE, TRUSTED_PROXY_CIDRS: value })).toThrow(
+        /TRUSTED_PROXY_CIDRS/,
+      );
+    },
+  );
+
   it('parses boolean switches', () => {
     const config = loadConfig({ ...BASE, FILEGRID_DEMO_MODE: 'false', COOKIE_SECURE: '0' });
 

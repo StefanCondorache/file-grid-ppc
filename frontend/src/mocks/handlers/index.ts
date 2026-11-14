@@ -3,21 +3,28 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import { API_BASE } from '@/lib/api/base';
 import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
+import { auditHandlers } from './audit';
 import { actingRoleHandlers, authHandlers } from './auth';
+import { fileHandlers } from './files';
+import { policyHandlers } from './policies';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
+import { statisticsHandlers } from './statistics';
+import { monitoringHandlers } from './monitoring';
+import { demoHandlers } from './demo';
+import { meterHandlers } from './meters';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
   auth: [...authHandlers],
-  policies: [],
+  policies: [...policyHandlers],
   uploads: [...uploadHandlers],
-  files: [],
-  audit: [],
-  meters: [],
-  monitoring: [],
-  statistics: [],
-  demo: [...actingRoleHandlers],
+  files: [...fileHandlers],
+  audit: [...auditHandlers],
+  meters: [...meterHandlers],
+  monitoring: [...monitoringHandlers],
+  statistics: [...statisticsHandlers],
+  demo: [...actingRoleHandlers, ...demoHandlers],
   stream: createStreamHandlers(),
 };
 

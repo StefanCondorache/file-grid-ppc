@@ -1,17 +1,14 @@
-/** What auth and the shell need from the upload engine. No-op until the engine (slice 6b) registers itself. */
+import { uploadEngine } from './engine';
+
+/** What auth and the shell need from the upload engine. */
 export interface UploadControl {
   pauseAll(reason: 'session' | 'logout'): void;
   resumeAll(ownerUserId: string): void;
   restoreAndResume(userId: string): Promise<void>;
 }
 
-const noop: UploadControl = {
-  pauseAll: () => {},
-  resumeAll: () => {},
-  restoreAndResume: async () => {},
-};
-
-let current: UploadControl = noop;
+// The real engine (slice 6b), built lazily on first use; tests swap it with setUploadControl.
+let current: UploadControl = uploadEngine;
 
 export function getUploadControl(): UploadControl {
   return current;

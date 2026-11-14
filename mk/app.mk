@@ -6,6 +6,14 @@
 #   make app-up APP_TAG=x           deploy already imported images filegrid-*:x (skips nothing else)
 .PHONY: app-secrets app-images app-up app-status app-down
 
+# One image tag per make run: app-images and k8s-app-up.sh must agree even if HEAD moves while images build
+# (a commit made during `make up` once made app-up look for images that were never built and swap the live app
+# for the placeholder).
+ifeq ($(origin APP_TAG),undefined)
+APP_TAG := $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
+endif
+export APP_TAG
+
 # Secret filegrid-app-secrets (KEK, JWT secret, meter API key, admin password), generated once, never printed
 app-secrets:
 	./scripts/k8s-app-secrets.sh

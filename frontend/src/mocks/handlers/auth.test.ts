@@ -1,16 +1,18 @@
 import { setupServer } from 'msw/node';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { api, unwrap } from '@/lib/api/client';
 import type { ApiError } from '@/lib/api/errors';
 import type { Me } from '@/lib/api/types';
 import { db } from '../db';
 import { buildHandlers } from './index';
 import { SEED_PASSWORD } from '../seed/auth';
+import { setMockSettings } from '../session';
 
 const server = setupServer();
 beforeAll(async () => { server.use(...(await buildHandlers(['auth', 'demo']))); server.listen({ onUnhandledRequest: 'error' }); });
 afterAll(() => server.close());
 beforeEach(() => db.reset());
+afterEach(() => setMockSettings(null));
 
 const login = (username: string, password = SEED_PASSWORD) => unwrap(api.POST('/auth/login', { body: { username, password } }));
 
@@ -45,6 +47,41 @@ describe('auth mocks', () => {
     await login('admin');
     await unwrap(api.POST('/demo/acting-role', { body: { role: 'teren' } }));
     expect(db.list<{ action: string; actingAs: string }>('audit').filter((e) => e.action === 'role_switch')).toHaveLength(1);
+  });
+
+  it('login-options defaults to passwordless off, and then a missing password is a 422 like the backend', async () => {
+    expect(await unwrap(api.GET('/auth/login-options'))).toEqual({ passwordless: false });
+    const e = await unwrap(api.POST('/auth/login', { body: { username: 'auditor' } })).catch((x: ApiError) => x);
+    expect([(e as ApiError).status, (e as ApiError).code]).toEqual([422, 'VALIDATION_ERROR']);
+    expect((e as ApiError).fieldErrors).toEqual([expect.objectContaining({ field: 'password' })]);
+  });
+
+  describe('passwordless knob (fg.mock.passwordless, like FILEGRID_PASSWORDLESS_LOGIN)', () => {
+    beforeEach(() => setMockSettings({ passwordless: true }));
+
+    it('login-options says so and every role logs in without a password', async () => {
+      expect(await unwrap(api.GET('/auth/login-options'))).toEqual({ passwordless: true });
+      for (const username of ['teren', 'dispecerat', 'racordari', 'auditor', 'admin']) {
+        const me = await unwrap(api.POST('/auth/login', { body: { username } }));
+        expect(me.realUser.username).toBe(username);
+      }
+    });
+
+    it('still rejects an unknown username and audits passwordless logins', async () => {
+      const e = await unwrap(api.POST('/auth/login', { body: { username: 'ghost' } })).catch((x: ApiError) => x);
+      expect([(e as ApiError).status, (e as ApiError).code]).toEqual([401, 'INVALID_CREDENTIALS']);
+      await unwrap(api.POST('/auth/login', { body: { username: 'auditor' } }));
+      expect(db.list<{ action: string; demo: boolean; details?: string }>('audit').filter((x) => x.action === 'login')).toEqual([
+        expect.objectContaining({ demo: true, details: 'passwordless' }),
+      ]);
+    });
+
+    it('is ignored when demo mode is off', async () => {
+      setMockSettings({ passwordless: true, demoMode: false });
+      expect(await unwrap(api.GET('/auth/login-options'))).toEqual({ passwordless: false });
+      const e = await unwrap(api.POST('/auth/login', { body: { username: 'auditor' } })).catch((x: ApiError) => x);
+      expect([(e as ApiError).status, (e as ApiError).code]).toEqual([422, 'VALIDATION_ERROR']);
+    });
   });
 
   it('a non-admin cannot switch roles', async () => {

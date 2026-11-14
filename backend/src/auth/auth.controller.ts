@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Inject,
   Post,
@@ -13,13 +14,19 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
+import { clientIpOf } from '../common/client-ip';
 import { ROLES } from '../common/domain';
-import { ZodPipe } from '../common/zod.pipe';
+import { ZodPipe, parseOrThrow } from '../common/zod.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import { DB, type Db } from '../database/database';
 import { Authenticated, CurrentPrincipal, NoSessionRefresh } from './auth.decorators';
 import { DemoModeGuard, SessionGuard, sessionToken } from './auth.guards';
-import { AuthService, type IssuedSession, unauthenticated } from './auth.service';
+import {
+  AuthService,
+  type IssuedSession,
+  type LoginOptions,
+  unauthenticated,
+} from './auth.service';
 import type { AuthRequest, MeResponse, Principal } from './auth.types';
 import { clearSessionCookie, setSessionCookie } from './session-cookie';
 
@@ -27,7 +34,11 @@ const loginSchema = z.object({
   username: z.string().trim().min(1).max(100),
   password: z.string().min(1).max(200),
 });
-type LoginBody = z.infer<typeof loginSchema>;
+/** Passwordless login (demo only, FILEGRID_PASSWORDLESS_LOGIN): a password may be sent but is ignored. */
+const passwordlessLoginSchema = loginSchema.extend({
+  password: z.string().max(200).optional(),
+});
+type LoginBody = z.infer<typeof passwordlessLoginSchema>;
 
 const actingRoleSchema = z.object({
   role: z.enum(ROLES),
@@ -44,14 +55,24 @@ export class AuthController {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /** Public: tells the login page whether to ask for a password. */
+  @Get('login-options')
+  @Header('Cache-Control', 'public, max-age=5')
+  loginOptions(): LoginOptions {
+    return this.auth.loginOptions();
+  }
+
   @Post('login')
   @HttpCode(200)
   async login(
-    @Body(new ZodPipe(loginSchema)) body: LoginBody,
+    @Body() rawBody: unknown,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<MeResponse> {
-    const session = await this.auth.login(body.username, body.password, request.ip ?? 'unknown');
+    const schema = this.config.passwordlessLogin ? passwordlessLoginSchema : loginSchema;
+    const body: LoginBody = parseOrThrow(schema, rawBody);
+    const clientIp = clientIpOf(request) ?? 'unknown';
+    const session = await this.auth.login(body.username, body.password, clientIp);
     return this.respond(response, session);
   }
 

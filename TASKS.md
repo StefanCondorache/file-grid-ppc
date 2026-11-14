@@ -63,19 +63,19 @@ Draft API:
 7. **VPS deploy on k3s.** Storages are ClusterIP only, with no outside access. The app is served over HTTPS through Traefik and scales through replicas, with no code change.
 8. **Chaos scripts for the demo:** stop a storage, and degrade the network with `tc netem` (latency and packet loss).
 
-### Stare P1 (14.11.2026, 13:50)
+### Stare P1 (14.11.2026, 13:50; hardening după verificarea live: unit în `feat/handoff` și deployat)
 
 Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Contracte pentru P2/P3”.
 
 | # | Stare |
 |---|---|
-| 1 | ✅ Adaptoare async S3/FTP/DB (memorie constantă, SHA-256) în `backend/app/storage/`; 164 de teste unitare trec |
-| 2 | ✅ Criptare AES-256-GCM pe stream în `backend/app/crypto/` (cheia din Secret-ul `filegrid-app-secrets`) |
+| 1 | ✅ Adaptoare async S3/FTP/DB (memorie constantă, SHA-256), portate în TypeScript în `backend/src/storage/` |
+| 2 | ✅ Criptare AES-256-GCM pe stream în `backend/src/crypto/` (cheia din Secret-ul `filegrid-app-secrets`) |
 | 3 | ✅ Circuit breaker, health monitor și metrici per storage |
-| 4 | ✅ `sudo make up` pornește k3s, HTTPS, storage, observabilitatea și aplicația (pentru fiecare folder cu `Dockerfile`) |
-| 5 | ✅ Prometheus, Grafana la `/grafana` (dashboard `filegrid-overview`; parola cu `make grafana-password`), Loki + Alloy |
-| 6 | ✅ 7 reguli de alertă; fără webhook (notificările se activează din Secret-ul `monitoring/alertmanager-config`) |
-| 7 | ✅ Storage doar ClusterIP + NetworkPolicy (`make storage-isolation-check`); manifestele aplicației sunt în `deploy/k8s/app/` |
+| 4 | ✅ `sudo make up` pornește k3s, HTTPS, storage, observabilitatea și aplicația (pentru fiecare folder cu `Dockerfile`). A doua rulare: `helm` sărit pentru release-urile neschimbate (checksum în `monitoring/obs-helm-checksums`), imagini cu același digest (`--provenance=false`), placeholder-ul gestionat doar de `make app-up`, `make status` cu fiecare host o dată. Parola conturilor demo separată (`DEMO_USERS_PASSWORD`, adăugată fără rotirea celorlalte chei) |
+| 5 | ✅ Prometheus, Grafana la `/grafana` (dashboard `filegrid-overview`; parola cu `make grafana-password`), Loki + Alloy. Grafana: cookie `Secure`/`SameSite=Strict`, `/metrics` nepublic, fără phone-home, versiune ascunsă; limite ridicate (Grafana 256Mi, sidecar 160Mi, Alloy 192Mi) |
+| 6 | ✅ 12 reguli de alertă: 7 de business (`MeterReadingsLost` pe gauge-ul `filegrid_meter_readings_lost`, ca „Pierdute” din dashboard) + 5 de infrastructură (`TargetDown`, `PodCrashLooping`, `ContainerMemoryNearLimit`, `NodeMemoryHigh`, `NodeDiskHigh`; node-exporter fără rețeaua gazdei); `make obs-rules-test` (promtool + teste unitare). Fără webhook (notificările se activează din Secret-ul `monitoring/alertmanager-config`) |
+| 7 | ✅ Storage doar ClusterIP + NetworkPolicy (`make storage-isolation-check`); blackbox-exporter doar de la podul Prometheus server; manifestele aplicației sunt în `deploy/k8s/app/` (preStop 5 s + 30 s grație pe backend/simulator). HTTPS: HSTS, nosniff, Referrer-Policy, X-Frame-Options pe toate Ingress-urile; IP-ul real al clientului (`externalTrafficPolicy: Local`, X-Forwarded-* crezute doar din CIDR-ul podurilor). Criptarea Secret-elor k3s at rest: **oprită** până la `sudo make k3s-secrets-encrypt` (pregătită, nerulată) |
 | 8 | ✅ `make chaos-storage-stop/start S=…`, `make chaos-netem-on/off` (doar în rețeaua podului), RBAC pentru panoul demo |
 
 **Rămas de făcut (oricine din echipă):**
@@ -86,6 +86,8 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 - [x] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`. **Făcut 14.11:** limite backend 384Mi (heap V8 192 MB), simulator 128Mi, frontend ridicat la 256Mi (cererea P3). Măsurat: backend ~170-180Mi, simulator ~40-50Mi, toate podurile ~1,35 GiB, ~1,2 GiB disponibili pe gazdă.
 - [x] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice. **Confirmat** (vezi „P2 status” și `docs/api.md`); Prometheus scrapează backend-ul (fix Content-Type `a96d1fa`), iar `MeterReadingsLost` arată 0.
 - [ ] Opțional: webhook Discord/Telegram pentru alerte (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
+- [ ] Deploy `p1/hardening` (împreună cu `p2/demo-fixes`, care adaugă gauge-ul `filegrid_meter_readings_lost` și `TRUSTED_PROXY_CIDRS` în backend): `sudo make up` de două ori; la a doua rulare toate release-urile helm trebuie să spună `skipping helm upgrade`. Apoi verificați header-ele (`curl -sI https://<DOMAIN>/`, `/api/v1/...`, `/grafana/login`), `/grafana/metrics` → 302, IP-ul real în auditul unui login și `make storage-isolation-check`.
+- [ ] Decizie: `sudo make k3s-secrets-encrypt` (criptarea Secret-elor în datastore-ul k3s; repornește k3s o dată, ~1 minut fără API). Până atunci Secret-ele stau necriptate pe discul VPS-ului.
 
 ## P2: Backend API, data, simulator
 
@@ -397,10 +399,11 @@ Goal: close every open item above (P1, P2, P3), in this order. Everything below 
   - Frontend slice 6b, tasks 6b.1-6b.8 (8 commits, up to `fab434a`): state machine, backoff, chunk plan and policy pre-validation, SHA-256 in a worker, IndexedDB store with the PII allow-list, network monitor, the upload API port on the **real** contract (`frontend/src/mocks/handlers/uploads.ts` follows `docs/api.md`), and the parallel part scheduler. Typecheck and lint are clean and 243 unit tests pass. These are libraries; no screen uses them yet.
 - Not merged (branch `feat/frontend-6b-upload` on `origin`, last commit `5fa4926` "wip:"): 6b.9 engine facade, progress and store. The unit tests pass (264), but `tsc` fails at `frontend/src/lib/upload/engine.ts:435` (`UploadMetadata` is not assignable to `Readonly<Record<string, unknown>>` when the metadata is persisted).
 - Not deployed: the VPS still runs backend `68972a4` and simulator `91a34b9`. The merged backend needs a redeploy; migration `0002` runs by itself when the container starts.
+- Branch `p2/demo-fixes` (verification fixes, not merged or deployed yet): S2 period ids stable while a storm runs; boot waits up to 90 s for the database (`/readyz` 503 `starting`) and migrates in-process; SIGTERM drains requests before the DB pool closes; `X-Forwarded-For` trusted only from `TRUSTED_PROXY_CIDRS` (audit records `clientIp`, migration `0003`); gauge `filegrid_meter_readings_lost`; failure counters exported at 0; `nosniff`/`no-referrer`/`no-store` headers; simulator logs `trace_id`.
 
 **Next, in order**
 1. Backend leftovers:
-   - write `docs/api.md` sections for `/stream` (event names and payloads), `/audit-events`, `/guarantees` (with the `GUARANTEE_*` thresholds), `/alerts`, `/metrics/matrix`, the bulkhead series, `Range`, and the session rule for background GETs;
+   - write `docs/api.md` sections for `/metrics/matrix`, the bulkhead series, `Range`, the `/stream` payloads and the session rule for background GETs (`/stream` event names, `/audit-events`, `/guarantees` and `/alerts` are documented since branch `p2/demo-fixes`);
    - add `/api/docs-json` (a static OpenAPI document of the real API, plus a test that every Nest route is in it);
    - redeploy the backend on the VPS (backend image only: `docker build -t filegrid-backend:<sha> backend`, import it into k3s, then `BACKEND_TAG=<sha> SIMULATOR_TAG=91a34b9 FRONTEND_TAG=none ./scripts/k8s-app-up.sh`).
 2. Finish 6b on `feat/frontend-6b-upload`: fix the type error in 6b.9, then 6b.10 (resume after reload), 6b.11 (upload screen with the chunk grid), 6b.12 (tray and announcements) and 6b.13 (slice e2e). Merge it into `main`.
@@ -414,3 +417,30 @@ Goal: close every open item above (P1, P2, P3), in this order. Everything below 
 - P1: alert webhook (Discord or Telegram). The main dev will do it; the URL goes only into the `monitoring/alertmanager-config` Secret.
 
 **How to resume:** `git fetch origin`; the unfinished branch is `origin/feat/frontend-6b-upload`. The VPS runs backend `68972a4` and simulator `91a34b9` (`kubectl -n filegrid get pods`), and `/` still serves the placeholder.
+
+## Stare după preluare (14.11.2026, seara) — branch `feat/handoff`, deployat pe VPS
+
+Tot ce urmează e în `feat/handoff` (pe GitHub) și rulează pe https://ppc.filegrid.cc.cd. Ghidul de lucru în paralel (reguli de branch-uri și PR-uri) a fost trimis separat.
+
+**Făcut și deployat**
+- Login **fără parolă** (temporar, pentru demo): alegi rolul și intri. Comutatorul e `FILEGRID_PASSWORDLESS_LOGIN` în `deploy/k8s/app/backend/deployment.yaml`; pune `"false"` și redeploy după demo (oricine poate intra și ca admin cât e pornit).
+- 6b upload: motorul (6b.9), reluare după reload (6b.10), ecranul cu grila de bucăți (6b.11), tava de încărcări (6b.12).
+- 6c fișiere: tabel și filtre, avarii live, citiri contoare, detaliu fișier, trasare, lanțul de custodie, **descărcare cu verificare SHA-256** (6c.8), dezvăluire date personale doar pentru auditor (6c.9).
+- 6d politici: listă, editare cu diff și confirmare, conflict 409.
+- 6e garanții de business, banda de sănătate storage, alerte, matricea categorie × storage, graficul bulkhead, pauza „Actualizări live”.
+- 6f statistici S1/S2/S3 cu interpretări (inclusiv harta și anomaliile).
+- 6g camera de control demo (`/demo`, doar admin): furtună ×10, ritm normal/vârf, oprire/pornire S3 și FTP, corupere fișier, resetare; contoare live (`/meters`).
+- 6h.1 jurnalul de audit (`/audit`).
+- Infra/backend (V1/V2): HSTS și headere de securitate, Grafana securizat, parolă separată pentru conturile demo, IP-ul real al clientului (Traefik nu mai crede `X-Forwarded-For`), alertă „citiri pierdute” corectă (gauge `filegrid_meter_readings_lost`), alerte de infrastructură, `make up` idempotent fără placeholder, oprire grațioasă (0 erori 5xx la rollout), perioada S2 curentă, retry la pornire.
+- Verificat live: furtuna ×10 (100 citiri/s, ~5 min) cu 0 citiri pierdute, 0 erori 5xx, nicio alertă falsă; a doua rulare `make up` nu repornește nimic.
+
+**Rămas de făcut**
+- [ ] Testare manuală în browser a ecranelor noi (s-au construit în mod rapid, fără review per task): upload, fișiere + detaliu + descărcare, politici, audit, `/demo`, `/meters`, `/observability`, statistici.
+- [ ] Revizia finală pe tot branch-ul (nu s-a făcut din lipsă de timp) și PR-ul `feat/handoff` → `main`.
+- [ ] Teste Playwright e2e nescrise: 6b.13, 6c.10, 6d.4, 6e.7, 6f.6 (început, necomis), 6g.4; apoi 6h.0 (integrare) și 6h.2–6h.6.
+- [ ] 6c.8 parțial: lipsesc „verifică fără a salva” și salvarea în flux pentru fișiere > 64 MiB (acum le verifică serverul); „Restaurează din rezervă” se bazează pe câmpul `fallbackAvailable`, care nu e în `docs/api.md`.
+- [ ] Furtuna din `/demo` e doar pe citiri de contor: backend-ul acceptă doar `meter_readings` la `POST /demo/storms`.
+- [ ] La 100 citiri/s backend-ul stă la ~39% CPU, deci HPA nu scalează în demo; pentru momentul „scalare” trebuie o furtună mai mare sau un prag mai mic.
+- [ ] Sarcini libere din ghid: dovada 1 GB pe backend-ul NestJS, pași de criptare/audit în trasări + trasări filtrate pe rol, webhook pentru alerte, scriptul demo-ului și slide-urile, testul pe o mașină curată. Pregătite dar nepornite: documentația API + `/api/v1/docs-json` (`p2/api-docs`) și seed-ul de date demo (`p2/demo-seed`).
+- [ ] Criptarea Secret-urilor k3s: `make k3s-secrets-encrypt` e gata, dar repornește k3s (1–2 min), deci se rulează doar cu acordul echipei.
+- [ ] Minore: logout fără revocare pe server, CSP cu `unsafe-inline`, worker-ul MSW în imaginea de producție, prima operație FTP lentă (~2 s), `filegrid_storage_errors_total` neinițializat, `make up` afișează `configured` la ValidatingAdmissionPolicy deși nu se schimbă.

@@ -9,6 +9,7 @@ import type { Request, Response } from 'express';
 import type { Principal } from '../auth/auth.types';
 import { AppError, retryAfter } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/config';
+import { Lifecycle } from '../lifecycle/lifecycle';
 import { storageHealthItems } from '../monitoring/storage-health';
 import { ObjectStoreService } from '../object-store/object-store.service';
 import { EventBus } from './event-bus.service';
@@ -36,6 +37,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StreamService.name);
   private readonly subscriptions = new Set<Subscription>();
   private unsubscribe: () => void = () => undefined;
+  private unsubscribeStopping: () => void = () => undefined;
   private pingTimer: NodeJS.Timeout | undefined;
   private healthTimer: NodeJS.Timeout | undefined;
   private lastHealth = '';
@@ -44,10 +46,14 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly bus: EventBus,
     private readonly store: ObjectStoreService,
+    private readonly lifecycle: Lifecycle,
   ) {}
 
   onModuleInit(): void {
     this.unsubscribe = this.bus.subscribe((event) => this.dispatch(event));
+    // Streams never end on their own: close them when shutdown starts, or they would hold the
+    // drain until its timeout. EventSource reconnects, to a replica that is still ready.
+    this.unsubscribeStopping = this.lifecycle.onStopping(() => this.closeAll());
     this.pingTimer = setInterval(() => this.ping(), this.config.stream.pingMs);
     this.pingTimer.unref();
     this.healthTimer = setInterval(() => this.watchHealth(), HEALTH_WATCH_MS);
@@ -56,8 +62,13 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.unsubscribe();
+    this.unsubscribeStopping();
     clearInterval(this.pingTimer);
     clearInterval(this.healthTimer);
+    this.closeAll();
+  }
+
+  private closeAll(): void {
     // close() removes the subscription; deleting the current element while iterating a Set is safe.
     for (const subscription of this.subscriptions) subscription.client.close();
   }
@@ -108,6 +119,9 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     request.once('close', () => client.close());
     client.start();
     client.send(this.pingEvent());
+    // Opened during the shutdown drain (a reused connection): end it now; EventSource retries
+    // after `retry` ms and reaches a replica that is still ready.
+    if (this.lifecycle.state === 'stopping') client.close();
   }
 
   private dispatch(event: StreamEvent): void {

@@ -177,6 +177,26 @@ describe('sender rejections', () => {
   }
 });
 
+describe('sender logs', () => {
+  it('logs the trace id as trace_id, the field name the backend uses, on every attempt', async () => {
+    const { log, lines } = memoryLogger();
+    const { queue, sender, enqueue } = setup({ log });
+    backend.script.push({ status: 503, headers: { 'Retry-After': '0' } });
+    enqueue(5);
+    sender.flush();
+    await waitFor(() => queue.depth === 0);
+
+    const sent = backend.requests.map((r) => String(r.headers['x-trace-id']));
+    const entries = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const retry = entries.find((e) => e.message === 'backend did not accept meter batch, will retry');
+    const acked = entries.find((e) => e.message === 'meter batch acknowledged');
+    assert.equal(retry?.trace_id, sent[0]);
+    assert.equal(acked?.trace_id, sent[1]);
+    assert.equal(acked?.stored, 5, 'the acknowledgement counts are still logged');
+    assert.ok(entries.every((e) => !('traceId' in e)), 'no camelCase traceId field');
+  });
+});
+
 describe('sender counters', () => {
   it('counts sent once per unique reading and acked once per id, even when an ack is lost', async () => {
     const { queue, metrics, sender, enqueue } = setup();

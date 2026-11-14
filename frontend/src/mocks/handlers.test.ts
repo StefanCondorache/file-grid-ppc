@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { apiUrl } from '@/lib/api/base';
 import { pathGroup } from './groups';
-import { buildHandlers } from './handlers';
+import { buildHandlers, groupHandlers } from './handlers';
 
 describe('pathGroup', () => {
   it('maps every path root', () => {
@@ -22,13 +22,25 @@ describe('buildHandlers', () => {
   const marker = http.get(apiUrl('/statistics/periods'), () => HttpResponse.json({ data: [], marker: true }));
   const server = setupServer();
   beforeAll(async () => {
-    server.use(...(await buildHandlers('all', { statistics: [marker] })));
+    // Only the marker is hand-written in `statistics` here, so the group's other proposal paths must not fall back.
+    // `audit` is emptied too (hand-written since 6h.1) so /audit-events below really comes from the baseline.
+    const written = groupHandlers.statistics;
+    const writtenAudit = groupHandlers.audit;
+    groupHandlers.statistics = [];
+    groupHandlers.audit = [];
+    try {
+      server.use(...(await buildHandlers('all', { statistics: [marker] })));
+    } finally {
+      groupHandlers.statistics = written;
+      groupHandlers.audit = writtenAudit;
+    }
     server.listen({ onUnhandledRequest: 'error' });
   });
   afterAll(() => server.close());
 
   it('serves every proposal path from the baseline', async () => {
-    const res = await fetch(new URL(apiUrl('/guarantees'), location.origin));
+    // The audit group is emptied in beforeAll, so this path is answered by the OpenAPI baseline.
+    const res = await fetch(new URL(apiUrl('/audit-events'), location.origin));
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty('data');
   });

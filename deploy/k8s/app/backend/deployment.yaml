@@ -28,6 +28,10 @@ spec:
       automountServiceAccountToken: true
       # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
       enableServiceLinks: false
+      # Graceful shutdown (rollouts, HPA scale-down): preStop waits 5 s while the endpoint is removed from the
+      # Service and Traefik, so no new request reaches a stopping pod; then SIGTERM, and the backend drains in-flight
+      # requests and closes the DB pool. 30 s in total before SIGKILL.
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -37,12 +41,21 @@ spec:
         - name: backend
           image: filegrid-backend
           imagePullPolicy: Never
+          lifecycle:
+            preStop:
+              sleep: {seconds: 5}   # kubelet's own sleep action: no shell or sleep binary needed in the image
           ports:
             - {name: http, containerPort: 8000}
           envFrom:
             - secretRef: {name: filegrid-storage-credentials}
             - secretRef: {name: filegrid-app-secrets}
           env:
+            # Password of the per-role demo accounts, separate from ADMIN_PASSWORD (scripts/k8s-app-secrets.sh adds
+            # it). Already in envFrom; named here without `optional` so a Secret lacking the key blocks the pod
+            # instead of letting the backend fall back to ADMIN_PASSWORD.
+            - name: DEMO_USERS_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: filegrid-app-secrets, key: DEMO_USERS_PASSWORD}
             - {name: FILEGRID_PG_HOST, value: postgres.filegrid-storage.svc.cluster.local}
             - {name: FILEGRID_PG_PORT, value: "5432"}
             - {name: FILEGRID_S3_ENDPOINT, value: "http://s3.filegrid-storage.svc.cluster.local:8333"}
@@ -53,6 +66,13 @@ spec:
             # FTP_MAX_CLIENTS (deploy/k8s/storage/ftp.yaml; the image default 5 is too low, raised at merge), and
             # 4 x 2 concurrent transfers fit the passive port range.
             - {name: FILEGRID_FTP_MAX_CONNECTIONS, value: "2"}
+            # Temporar, pentru demo: autentificare fără parolă (doar alegerea rolului), activă doar cu
+            # FILEGRID_DEMO_MODE=true. Pune "false" ca parola să fie cerută din nou (fără nicio schimbare de cod).
+            - {name: FILEGRID_PASSWORDLESS_LOGIN, value: "true"}
+            # Client IP: X-Forwarded-For is honoured only when the TCP peer is in these CIDRs (k3s pods, services),
+            # i.e. Traefik, which keeps the real source IP (deploy/k8s/traefik-config.yaml). request.ip feeds the
+            # login rate limiter and the audit trail. Same as the backend default; set here to pin the contract.
+            - {name: TRUSTED_PROXY_CIDRS, value: "10.42.0.0/16,10.43.0.0/16"}
           # /readyz must stay 200 when a single storage is down (circuit breaker handles it), otherwise
           # one dead storage would pull every backend out of the Service.
           readinessProbe:

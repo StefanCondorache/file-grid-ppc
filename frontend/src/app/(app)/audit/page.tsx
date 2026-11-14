@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ComingSoon';
+import { AuditScreen } from '@/features/audit/AuditScreen';
 
 export const metadata: Metadata = { title: 'Jurnal de audit · FileGrid' };
 
 export default function Page() {
-  return <ComingSoon title="Jurnal de audit" />;
+  return <AuditScreen />;
 }

@@ -2,13 +2,19 @@ import type { Me, Role, UserRef } from '@/lib/api/types';
 import { db } from './db';
 import { CAPABILITIES, SEED_USERS } from './seed/auth';
 
-/** Rehearsal knobs in localStorage['fg.mock'] (mocks only). */
-export function mockSettings(): { sessionTtlMs?: number; idleTtlMs?: number; demoMode?: boolean } {
+/** Rehearsal knobs in localStorage['fg.mock'] (mocks only). `passwordless` mirrors FILEGRID_PASSWORDLESS_LOGIN (default off). */
+export function mockSettings(): { sessionTtlMs?: number; idleTtlMs?: number; demoMode?: boolean; passwordless?: boolean } {
   try {
     return JSON.parse(globalThis.localStorage?.getItem('fg.mock') ?? '{}') as ReturnType<typeof mockSettings>;
   } catch {
     return {};
   }
+}
+
+/** Sets the rehearsal knobs (null clears them); used by tests that need another mock mode. */
+export function setMockSettings(settings: ReturnType<typeof mockSettings> | null): void {
+  if (settings === null) globalThis.localStorage?.removeItem('fg.mock');
+  else globalThis.localStorage?.setItem('fg.mock', JSON.stringify(settings));
 }
 
 type Session = { id: 'current'; realUserId: string; activeRole: Role; createdAt: number; lastSeenAt: number };

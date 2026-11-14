@@ -53,7 +53,7 @@ describe('stream-to-cache bridge', () => {
 
   it('coalesces fault announcements during a storm', () => {
     const { deps, bridge } = setup();
-    for (let i = 0; i < 10; i++) bridge.apply(ev('file.created', { fileId: `f${i}`, category: 'fault', zone: 'dobrogea', substation: 'PT 4' }, i));
+    for (let i = 0; i < 10; i++) bridge.apply(ev('file.created', { fileId: `f${i}`, category: 'fault_records', zone: 'dobrogea', substation: 'PT 4' }, i));
     vi.advanceTimersByTime(5_000);
     expect(deps.announce).toHaveBeenCalledTimes(1);
     expect(deps.announce).toHaveBeenCalledWith('10 avarii noi');
@@ -61,9 +61,22 @@ describe('stream-to-cache bridge', () => {
 
   it('announces a single new fault with its place', () => {
     const { deps, bridge } = setup();
-    bridge.apply(ev('file.created', { fileId: 'f1', category: 'fault', zone: 'dobrogea', substation: 'PT Medgidia 4' }));
+    // The backend's upload-assembler.ts payload carries the real category id.
+    bridge.apply(ev('file.created', { fileId: 'f1', category: 'fault_records', zone: 'dobrogea', substation: 'PT Medgidia 4' }));
     vi.advanceTimersByTime(5_000);
     expect(deps.announce).toHaveBeenCalledWith('Avarie nouă: Dobrogea, PT Medgidia 4');
+  });
+
+  it('also announces faults under the short id, and never other categories', () => {
+    const { deps, bridge } = setup();
+    bridge.apply(ev('file.created', { fileId: 'm1', category: 'meter_readings', zone: 'banat' }, 1));
+    bridge.apply(ev('file.created', { fileId: 'd1', category: 'drone_videos', zone: 'banat' }, 2));
+    vi.advanceTimersByTime(5_000);
+    expect(deps.announce).not.toHaveBeenCalled();
+    bridge.apply(ev('file.created', { fileId: 'f1', category: 'fault', zone: 'banat', substation: 'PT Reșița 21' }, 3));
+    vi.advanceTimersByTime(5_000);
+    expect(deps.announce).toHaveBeenCalledTimes(1);
+    expect(deps.announce).toHaveBeenCalledWith('Avarie nouă: Banat, PT Reșița 21');
   });
 
   it('resyncs every stream-fed key on open', () => {

@@ -23,7 +23,11 @@ export class Trace {
   readonly startedAt = performance.now();
   readonly spans: SpanRecord[] = [];
 
-  constructor(readonly traceId: string) {}
+  constructor(
+    readonly traceId: string,
+    /** The client of the HTTP request (src/common/client-ip.ts); null for background work. */
+    readonly clientIp: string | null = null,
+  ) {}
 
   elapsedMs(): number {
     return performance.now() - this.startedAt;
@@ -49,9 +53,18 @@ export function currentTraceId(): string | undefined {
   return storage.getStore()?.traceId;
 }
 
+/** The client IP of the current HTTP request, if any. */
+export function currentClientIp(): string | null {
+  return storage.getStore()?.clientIp ?? null;
+}
+
 /** Run `fn` with a fresh trace as the current one (nested calls restore the outer trace). */
-export function runWithTrace<T>(traceId: string, fn: (trace: Trace) => T): T {
-  const trace = new Trace(traceId);
+export function runWithTrace<T>(
+  traceId: string,
+  fn: (trace: Trace) => T,
+  clientIp: string | null = null,
+): T {
+  const trace = new Trace(traceId, clientIp);
   return storage.run(trace, () => fn(trace));
 }
 

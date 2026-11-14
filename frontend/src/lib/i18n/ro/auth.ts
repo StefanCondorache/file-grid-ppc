@@ -9,6 +9,7 @@ export const auth = {
   submit: 'Intră în cont',
   submitting: 'Se verifică…',
   passwordRequired: 'Introdu parola.',
+  passwordlessNote: 'Mod demo: autentificare fără parolă.',
   expired: 'Sesiunea a expirat. Intră din nou în cont.',
   secureNote: 'Conexiune securizată (HTTPS). Fiecare autentificare apare în jurnalul de audit.',
   activeRole: (label: string) => `Rol activ: ${label}`,

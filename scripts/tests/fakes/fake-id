@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake id for scripts/tests: the scripts that require root see uid 0.
+[ "${1:-}" = -u ] && { echo 0; exit 0; }
+exec /usr/bin/id "$@"

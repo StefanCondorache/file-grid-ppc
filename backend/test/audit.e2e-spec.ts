@@ -73,6 +73,7 @@ describe('GET /audit-events', () => {
       reason: null,
       details: null,
       traceId: 'trace-audit-1',
+      clientIp: null,
     });
     const times = response.body.data.map((event: { at: string }) => Date.parse(event.at));
     expect(times).toEqual([...times].sort((x, y) => y - x));
