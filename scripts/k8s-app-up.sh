@@ -51,6 +51,13 @@ for c in backend frontend simulator; do
     [ "$DOWN" -eq 1 ] || echo "skip filegrid-$c: image filegrid-$c:$t not in k3s (no $c/Dockerfile built)"
   fi
 done
+# Safety: a missing image must never take down a running app. If no component image matches the tag but the app is
+# deployed, stop here; removing the app is only done on purpose with --down (make app-down).
+if [ "$DOWN" -eq 0 ] && [ "${#present[@]}" -eq 0 ] \
+  && kubectl -n "$NS" get deploy filegrid-backend filegrid-frontend >/dev/null 2>&1; then
+  echo "no filegrid-* image with the requested tag, but the app is running; refusing to replace it (use APP_TAG=<built tag> or make app-down)" >&2
+  exit 1
+fi
 
 # Points ingress-shim at the Ingress that now serves "/": when the previous owner Ingress was deleted, its
 # Certificate is garbage collected; touching the new owner makes cert-manager recreate the Certificate, which
