@@ -28,10 +28,14 @@ export class DemoService {
   ) {}
 
   async status() {
-    const [simulator, storages] = await Promise.all([
-      this.simulator.status().catch(() => null),
-      Promise.resolve(this.store.status()),
-    ]);
+    const simulator = await this.simulator.status().catch(() => null);
+    // Without the probe `detail`: it can name the bucket or a host, and no body may (docs/api.md).
+    const storages = Object.fromEntries(
+      Object.entries(this.store.status()).map(([name, { detail: _detail, ...state }]) => [
+        name,
+        state,
+      ]),
+    );
     return {
       demoMode: this.config.demoMode,
       simulator,

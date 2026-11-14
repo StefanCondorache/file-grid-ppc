@@ -80,6 +80,21 @@ describe('policies', () => {
     expect(read.body).toEqual(response.body);
   });
 
+  it('shows the policy of every version in the GET /policies shape, the seeded first one too', async () => {
+    const before = await request(app.getHttpServer())
+      .get('/api/v1/policies/fault_records')
+      .set(browser(admin));
+    const saved = await put(admin, 'fault_records', update());
+
+    const versions = await request(app.getHttpServer())
+      .get('/api/v1/policies/fault_records/versions')
+      .set(browser(admin));
+
+    const [second, first] = versions.body.data;
+    expect(second.policy).toEqual({ ...saved.body, updatedAt: second.changedAt });
+    expect(first.policy).toEqual({ ...before.body, updatedAt: first.changedAt });
+  });
+
   it('records each version with the changed fields and audits the change', async () => {
     await put(admin, 'fault_records', update());
 
