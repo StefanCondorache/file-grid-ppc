@@ -10,6 +10,8 @@ import { filtersToParams } from './url';
 const OUTCOME_TONE: Record<AuditOutcome, Tone> = { success: 'ok', failure: 'crit', denied: 'warn' };
 const th = 'border-b border-border bg-surface-2 px-3 py-2 text-left font-semibold text-ink-2';
 const td = 'border-b border-border px-3 py-2 align-top';
+// 24 px minimum target (WCAG 2.5.8): links in a cell are stacked, never side by side.
+const link = 'inline-flex min-h-6 items-center text-link underline';
 
 /** Audit rows: cine / ce / când / motiv / rezultat / ID urmărire. Never shows personal data values. */
 export function AuditTable({ events }: { events: AuditRow[] }) {
@@ -47,11 +49,11 @@ export function AuditTable({ events }: { events: AuditRow[] }) {
                 <td className={td}>
                   <div className="font-semibold text-ink">{t.action[e.action] ?? e.action}</div>
                   {e.fileId && (
-                    <div className="flex flex-wrap gap-x-2">
-                      <Link href={`/files/${encodeURIComponent(e.fileId)}`} className="text-link underline">
+                    <div className="flex flex-col items-start gap-1">
+                      <Link href={`/files/${encodeURIComponent(e.fileId)}`} className={link}>
                         {e.fileDisplayName ?? e.fileId}
                       </Link>
-                      <Link href={`/audit?${filtersToParams({ fileId: e.fileId })}`} className="text-link underline">
+                      <Link href={`/audit?${filtersToParams({ fileId: e.fileId })}`} className={link}>
                         {t.onlyThisFile}
                       </Link>
                     </div>
@@ -67,7 +69,7 @@ export function AuditTable({ events }: { events: AuditRow[] }) {
                   <StatusChip tone={OUTCOME_TONE[outcome]} label={t.outcome[outcome]} />
                 </td>
                 <td className={td}>
-                  <Link href={`/traces/${encodeURIComponent(e.traceId)}`} className="font-mono text-link underline">
+                  <Link href={`/traces/${encodeURIComponent(e.traceId)}`} className={`${link} font-mono`}>
                     {e.traceId}
                   </Link>
                 </td>

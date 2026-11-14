@@ -44,10 +44,8 @@ export function AuditScreen({ me }: { me: Me }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-[22px] font-bold">{t.audit.title}</h1>
-        <p className="text-ink-2">{t.audit.intro}</p>
-      </header>
+      {/* The shell's top bar already renders the page title as the h1. */}
+      <p className="text-ink-2">{t.audit.intro}</p>
       <AuditFilters value={filters} onApply={(f) => router.replace(href({ ...f, page: 1 }))} />
       {query.isPending ? (
         <p role="status" className="text-ink-2">
