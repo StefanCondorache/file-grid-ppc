@@ -3,10 +3,20 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import { API_BASE } from '@/lib/api/base';
 import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
+import { actingRoleHandlers, authHandlers } from './auth';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
-  auth: [], policies: [], uploads: [], files: [], audit: [], meters: [], monitoring: [], statistics: [], demo: [], stream: [],
+  auth: [...authHandlers],
+  policies: [],
+  uploads: [],
+  files: [],
+  audit: [],
+  meters: [],
+  monitoring: [],
+  statistics: [],
+  demo: [...actingRoleHandlers],
+  stream: [],
 };
 
 function relativePath(handler: RequestHandler): string | null {

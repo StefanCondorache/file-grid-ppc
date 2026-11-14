@@ -53,6 +53,12 @@ export function createDb(storage: KV | null = typeof window !== 'undefined' ? wi
       save();
       return hit;
     },
+    remove<T = Row>(name: string, pred: (row: T) => boolean): number {
+      const before = api.list<T>(name).length;
+      state[name] = api.list<T>(name).filter((r) => !pred(r)) as unknown as Row[];
+      save();
+      return before - state[name]!.length;
+    },
     reset() { state = fresh(); save(); },
 
     audit: { append: (e: Row) => api.insert('audit', { id: `a-${state.audit?.length ?? 0}-${Date.now()}`, at: now(), ...e }) },
