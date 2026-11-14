@@ -127,4 +127,12 @@ export const monitoring = {
     interpretation: (worst: string) => `Cea mai lentă categorie acum: ${worst}. Celelalte categorii își păstrează latența.`,
     interpretationNone: 'Nicio operație în interval.',
   },
+  /** "Actualizări live" pause in the top bar (A11Y-14, WCAG 2.2.2). */
+  livePause: {
+    label: 'Actualizări live',
+    on: 'pornite',
+    off: 'în pauză',
+    announceOn: 'Actualizări live pornite; se aplică ultimele date.',
+    announceOff: 'Actualizări live în pauză; valorile rămân înghețate.',
+  },
 } as const;
