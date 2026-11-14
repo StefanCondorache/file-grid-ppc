@@ -12,7 +12,9 @@
     "lint": "eslint . && node scripts/check-diacritics.mjs && node scripts/check-colors.mjs",
     "e2e": "playwright test",
     "gen:api": "node scripts/gen-api.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test"
+    "verify": "npm run typecheck && npm run lint && npm run test",
+    "image:real": "docker build -t filegrid-frontend:real .",
+    "image:fullmock": "docker build --build-arg NEXT_PUBLIC_API_MOCKS=1 --build-arg FILEGRID_ALLOW_MOCKS=1 -t filegrid-frontend:fullmock ."
   },
   "dependencies": {
     "@hookform/resolvers": "7.0.6",
