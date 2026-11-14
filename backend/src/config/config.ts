@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 /**
@@ -14,6 +15,28 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 const bool = z
   .enum(['true', 'false', '1', '0', 'yes', 'no'])
   .transform((value) => ['true', '1', 'yes'].includes(value));
+
+/** `a.b.c.d`, `a.b.c.d/n` (n <= 32), an IPv6 address or `x::y/n` (n <= 128). */
+function isAddressOrCidr(entry: string): boolean {
+  const [address, prefix, extra] = entry.split('/');
+  const family = isIP(address ?? '');
+  if (family === 0 || extra !== undefined) return false;
+  if (prefix === undefined) return true;
+  const bits = Number(prefix);
+  return /^\d{1,3}$/.test(prefix) && bits <= (family === 4 ? 32 : 128);
+}
+
+const cidrList = z
+  .string()
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  )
+  .refine((entries) => entries.every(isAddressOrCidr), {
+    message: 'must be a comma-separated list of IP addresses or CIDR ranges',
+  });
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(8000),
@@ -39,6 +62,8 @@ const envSchema = z.object({
   METER_API_KEY: z.string({ error: 'is required' }).min(16, 'must be at least 16 characters'),
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(1).default(10),
   LOGIN_WINDOW_S: z.coerce.number().int().min(1).default(300),
+  // Peers whose X-Forwarded-For is believed (Traefik runs in the pod CIDR). Everyone else's is ignored.
+  TRUSTED_PROXY_CIDRS: cidrList.default(['10.42.0.0/16', '10.43.0.0/16']),
   FILEGRID_DEMO_MODE: bool.default(true),
   // Password of the per-role demo accounts (teren, dispecerat, racordari, auditor); default ADMIN_PASSWORD.
   DEMO_USERS_PASSWORD: z.string().min(8, 'must be at least 8 characters').optional(),
@@ -81,6 +106,8 @@ export interface AppConfig {
   readonly meterApiKey: string;
   readonly loginMaxFailures: number;
   readonly loginWindowS: number;
+  /** Express `trust proxy`: X-Forwarded-For is used only when the TCP peer is in one of these. */
+  readonly trustedProxyCidrs: readonly string[];
   readonly demoMode: boolean;
   readonly demoUsersPassword: string;
   readonly simulatorUrl: string;
@@ -173,6 +200,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     meterApiKey: e.METER_API_KEY,
     loginMaxFailures: e.LOGIN_MAX_FAILURES,
     loginWindowS: e.LOGIN_WINDOW_S,
+    trustedProxyCidrs: e.TRUSTED_PROXY_CIDRS,
     demoMode: e.FILEGRID_DEMO_MODE,
     demoUsersPassword: e.DEMO_USERS_PASSWORD ?? e.ADMIN_PASSWORD,
     simulatorUrl: e.SIMULATOR_URL,

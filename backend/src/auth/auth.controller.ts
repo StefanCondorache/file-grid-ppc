@@ -13,6 +13,7 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
+import { clientIpOf } from '../common/client-ip';
 import { ROLES } from '../common/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/config';
@@ -51,7 +52,8 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<MeResponse> {
-    const session = await this.auth.login(body.username, body.password, request.ip ?? 'unknown');
+    const clientIp = clientIpOf(request) ?? 'unknown';
+    const session = await this.auth.login(body.username, body.password, clientIp);
     return this.respond(response, session);
   }
 

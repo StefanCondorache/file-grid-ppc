@@ -1,6 +1,7 @@
 import { AsyncResource } from 'node:async_hooks';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { Logger } from 'pino';
+import { clientIpOf } from '../common/client-ip';
 import { type Trace, isValidTraceId, newTraceId, runWithTrace } from './trace-context';
 
 const TRACE_HEADER = 'X-Trace-Id';
@@ -37,7 +38,7 @@ export function traceMiddleware(logger: Logger): RequestHandler {
     const incoming = request.headers['x-trace-id'];
     const traceId = isValidTraceId(incoming) ? incoming : newTraceId();
     response.setHeader(TRACE_HEADER, traceId);
-    runWithTrace(traceId, (trace) => {
+    const run = (trace: Trace): void => {
       const path = request.originalUrl.split('?')[0] ?? request.originalUrl;
       // AsyncResource.bind keeps the trace current inside the event callbacks.
       response.once(
@@ -55,6 +56,7 @@ export function traceMiddleware(logger: Logger): RequestHandler {
         }),
       );
       next();
-    });
+    };
+    runWithTrace(traceId, run, clientIpOf(request));
   };
 }

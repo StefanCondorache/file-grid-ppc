@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import { errorBody } from './common/app-error';
 import { csrfMiddleware } from './common/csrf.middleware';
 import { ErrorEnvelopeFilter } from './common/error.filter';
+import { APP_CONFIG, type AppConfig } from './config/config';
 import { Lifecycle } from './lifecycle/lifecycle';
 import { NestPinoLogger, ROOT_LOGGER } from './observability/logger';
 import { traceMiddleware } from './observability/trace.middleware';
@@ -19,8 +20,10 @@ export function configureApp(app: NestExpressApplication): void {
   app.disable('x-powered-by');
   // First: every request counts as in flight until its response closes (graceful shutdown).
   app.use(app.get(Lifecycle).middleware());
-  // Behind Traefik in the cluster: trust X-Forwarded-* only from private networks.
-  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+  // Behind Traefik (pod CIDR, externalTrafficPolicy: Local): request.ip is the client from
+  // X-Forwarded-For only when the TCP peer is in TRUSTED_PROXY_CIDRS; otherwise the peer itself.
+  const { trustedProxyCidrs } = app.get<AppConfig>(APP_CONFIG);
+  app.set('trust proxy', trustedProxyCidrs.length > 0 ? [...trustedProxyCidrs] : false);
   app.use(traceMiddleware(logger));
   // With a global prefix Nest's JSON 404 covers only /api/v1/*; answer everything else here.
   app.use((request: Request, response: Response, next: NextFunction) => {

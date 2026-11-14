@@ -15,6 +15,11 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   - Categories: `meter_readings`, `fault_records`, `connection_documents`, `drone_videos`.
   - Storages: `s3`, `ftp`, `db`.
   - Zones: `muntenia`, `banat`, `dobrogea`.
+- **Client IP:** the login rate limiter and the audit trail use the client's IP. Behind Traefik that is
+  the address in `X-Forwarded-For`, which the backend believes only when the TCP peer is in
+  `TRUSTED_PROXY_CIDRS` (default `10.42.0.0/16,10.43.0.0/16`, the k3s pod and service CIDRs; Traefik keeps
+  the client source IP with `externalTrafficPolicy: Local`). From any other peer the header is ignored and
+  the peer address is used, so a client cannot choose its own IP.
 - **Trace ID:** every response carries `X-Trace-Id`. A valid incoming value (`[A-Za-z0-9-]{1,64}`) is
   reused; otherwise the backend generates one. `GET /traces/{traceId}` shows the steps of that operation.
 - **Errors:** one body for every error: `{ code, message, traceId, fieldErrors?, ...extras }`.
@@ -31,7 +36,7 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. Errors: `401 INVALID_CREDENTIALS`, `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
+| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. Errors: `401 INVALID_CREDENTIALS`, `429 RATE_LIMITED` (10 failures per 5 min per client IP and username) |
 | `POST /auth/logout` | session | `204`, expires the cookie |
 | `GET /auth/me` | session | `Me` |
 | `POST /auth/refresh` | session | `200 Me`, with a new idle window |
@@ -199,6 +204,16 @@ All of these need `view_statistics`.
 | `GET /healthz`, `GET /readyz` | probes | `/healthz` is 200 while the process lives. `/readyz` answers `{ status, database }`: **200** `ready`, or `degraded` when a storage or the DB is down after the start, as the README requires. It answers **503** (with `Retry-After`) only while `starting` (the database has not been reached, migrated and seeded yet) and while `stopping` (SIGTERM, see below) |
 | `GET /metrics` | Prometheus | Text exposition |
 
+## Audit, guarantees, alerts and the live stream
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /audit-events?action=&actor=&fileId=&from=&to=&page=&pageSize=` | `view_audit` | `{ data: AuditEvent[], meta }`, newest first. `AuditEvent`: `{ id, at, actor: { id, username, displayName, role }, actingAs, demo, action, outcome, category, fileId, fileDisplayName, reason, details, traceId, clientIp }`. `clientIp` is the client of the audited request (see Basics), `null` for background work and for rows written before it was recorded |
+| `GET /guarantees` | session | `{ data: [{ category, state: ok\|at_risk\|violated, causeCode, causeFacts, metrics: [{ key, value, unit, threshold, comparator }], updatedAt }] }`, the four business guarantees with the `GUARANTEE_*` thresholds |
+| `GET /alerts?state=active\|resolved\|all&page=&pageSize=` | session | `{ data: [{ id, category, state, raisedAt, resolvedAt, causeCode, causeFacts, traceId, acknowledgedAt, acknowledgedBy }], meta }`. The leader replica evaluates the guarantees every `GUARANTEE_EVAL_INTERVAL_S` and records the transitions |
+| `POST /alerts/{id}/acknowledge` | session | The alert, acknowledged (idempotent, audited as `alert_ack`) |
+| `GET /stream` | session | Server-Sent Events: `meters.counters`, `guarantees.status`, `alert.raised`, `alert.updated`, `storage.health`, `policy.updated`, `simulator.status`, `demo.storm` and a `ping`, filtered by the active role. Streams end when the session does and when the replica shuts down; `EventSource` reconnects |
+
 ## Demo controls (demo mode only: 404 when `FILEGRID_DEMO_MODE=false`; admin, audited)
 
 | Method & path | Notes |
@@ -256,9 +271,8 @@ node.
 - **Identifiers:** category and storage ids are the team identifiers from the README (`fault_records`,
   `s3`, ...), not `fault` or `S3`. The UI shows the labels (S3, FTP, PostgreSQL). The metadata `kind`
   values stay `fault`, `connection` and `drone`.
-- **Not implemented yet:** `GET /api/docs-json` (Swagger), `GET /stream` (SSE), `GET /audit-events`,
-  `GET /guarantees`, `GET /alerts`, `GET /metrics/matrix` and `Range` downloads. Use polling until SSE
-  exists.
+- **Not implemented yet:** `GET /api/docs-json` (Swagger). The live stream, the audit trail, guarantees,
+  alerts, `GET /metrics/matrix` and single-range downloads (`206`, `If-Range`, `416`) are implemented.
 - **Extra endpoints:** `maxConcurrency` on policies and `POST /demo/storages/{storage}/{action}`.
 
 ## Answers to `docs/api/HANDOFF-backend.md`
@@ -270,7 +284,7 @@ node.
    on the pod's disk.
 4. **Errors and traces:** the error shape and `X-Trace-Id` are on every response. Traces come from the
    operations log.
-5. **SSE:** not done yet (see above).
+5. **SSE:** `GET /stream`, cross-replica through Postgres LISTEN/NOTIFY (see [Audit, guarantees, alerts and the live stream](#audit-guarantees-alerts-and-the-live-stream)).
 6. **Storage outage:** writes go to the policy fallback. If the fallback is down too, the answer is
    `503 STORAGE_UNAVAILABLE` with `storage` and `Retry-After`.
 7. **Corruption:** any storage can be corrupted in place (S3 object, FTP file, DB row).
@@ -295,6 +309,7 @@ The variables come from the k3s Secrets `filegrid-storage-credentials` and `file
 Optional:
 - `FILEGRID_DB_BOOT_TIMEOUT_S` (default 90) and `FILEGRID_SHUTDOWN_DRAIN_S` (default 20), see
   [Start and shutdown](#start-and-shutdown)
+- `TRUSTED_PROXY_CIDRS` (default `10.42.0.0/16,10.43.0.0/16`; empty = trust no proxy), see Basics
 - `FILEGRID_DEMO_MODE` (default `true`)
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)
