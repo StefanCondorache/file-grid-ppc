@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { Announcer } from '@/components/a11y/Announcer';
+import { MockBootstrap } from './MockBootstrap';
 import './globals.css';
 
 const figtree = localFont({
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="ro" className={figtree.variable}>
       <body>
-        {children}
+        <MockBootstrap>{children}</MockBootstrap>
         <Announcer />
       </body>
     </html>
