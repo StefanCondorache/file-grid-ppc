@@ -18,7 +18,7 @@ class FakeES {
 
 const last = () => FakeES.instances[FakeES.instances.length - 1]!;
 
-function start(checkSession = async () => 'ok' as const) {
+function start(checkSession: () => Promise<'ok' | 'expired'> = async () => 'ok') {
   const calls = { open: 0, statuses: [] as unknown[], expired: 0, events: [] as unknown[] };
   const handle = connectStream({
     url: '/api/v1/stream',
