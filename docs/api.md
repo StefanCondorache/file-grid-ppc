@@ -119,8 +119,9 @@ Seed policies:
 2. **`PUT /uploads/{id}/parts/{n}`**, with `n` starting at 1. The raw `application/octet-stream` body is
    streamed to storage and never parsed. It takes an optional `X-Part-SHA256` header.
    - Size: every part is `chunkSize`, except the last one.
-   - Answer: `200 { partNumber, size, sha256, alreadyReceived }`. Sending a part again with the same
-     hash is free and returns `alreadyReceived: true`.
+   - Answer: `200 { partNumber, size, sha256, alreadyReceived, traceId }`. Sending a part again with the
+     same hash is free and returns `alreadyReceived: true`. Every part is an operation of its own
+     (`upload.part`, also when it is refused): `traceId` (the same as `X-Trace-Id`) opens its trace.
    - Errors: `422 PART_CHECKSUM_MISMATCH`, `PART_SIZE_MISMATCH`, `PART_NUMBER_OUT_OF_RANGE`,
      `413 PART_TOO_LARGE`, `409 UPLOAD_NOT_OPEN` or `UPLOAD_COMPLETED`, and
      `503 STORAGE_UNAVAILABLE` or `CATEGORY_BUSY` (retry after `Retry-After`).
@@ -211,9 +212,30 @@ All of these need `view_statistics`.
 |---|---|---|
 | `GET /storage-health` | session | `{ data: [{ storage, status: ok|degraded|down, latencyMs, lastCheckAt, circuitState }] }`, from the health monitor (every 5 s) |
 | `GET /metrics/bulkhead` | `view_observability` | `{ data: [{ category, active, queued }] }` for this replica |
-| `GET /traces/{traceId}` | session | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, name, startOffsetMs, durationMs, status, storage, errorCode }] }` |
+| `GET /traces/{traceId}` | view capability of the operation's category | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, parentSpanId, name, startOffsetMs, durationMs, status, storage, errorCode, attributes }] }`. A role that may not see the category gets the same `404 NOT_FOUND` as for an unknown id (like `GET /files/{id}`). See "Trace spans" below |
 | `GET /healthz`, `GET /readyz` | probes | `/healthz` is 200 while the process lives. `/readyz` answers `{ status, database }`: **200** `ready`, or `degraded` when a storage or the DB is down after the start, as the README requires. It answers **503** (with `Retry-After`) only while `starting` (the database has not been reached, migrated and seeded yet) and while `stopping` (SIGTERM, see below) |
 | `GET /metrics` | Prometheus | Text exposition |
+
+### Trace spans
+
+`operation` is `upload.part`, `upload.complete`, `file.download`, `file.verify` or `meter.batch`. The first
+span is always `api` (spanId `1`, `startOffsetMs` 0, the whole request; its `attributes` hold `method`,
+`path` without the query string, and `uploadId`/`partNumber` for uploads). Every other span is its child
+(`parentSpanId: "1"`), in the order the steps finished:
+
+| Span | When | `attributes` |
+|---|---|---|
+| `policy` | upload create and complete | |
+| `encryption` | the policy encrypts at rest (`connection_documents`) | `algorithm` (`AES-256-GCM`), `keyId`, `sizeBytes`. It is interleaved with `storage.put` (chunk by chunk), so it starts with it and its `durationMs` is the time spent in the cipher |
+| `storage.put`, `storage.get` | every write or read | `storage`, `category`, `encrypted`, `sizeBytes` |
+| `hash.verify` | `POST /files/{id}/verification` | `storage`, `category` |
+| `audit` | the audit record of the operation (upload, download, verify) | `action`, `outcome` |
+| `confirm` | the DB transaction that makes an upload visible (it contains `audit`) | |
+
+The trace of a connection document's upload thus reads `api → policy → encryption → storage.put → audit →
+confirm`, each with its duration. Only these allow-listed attributes are stored: no metadata, no personal
+data, no query strings. A download is recorded once its bytes are sent, so its trace can appear a few
+milliseconds after the response ends.
 
 ## Audit, guarantees, alerts and the live stream
 
