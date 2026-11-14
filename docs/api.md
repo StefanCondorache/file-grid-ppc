@@ -172,7 +172,8 @@ How the server handles an upload:
 - **Download headers:** `Content-Disposition: attachment` with a sanitised `filename*`, `nosniff`,
   `X-File-SHA256` and an `ETag` taken from the hash.
 - **Integrity on download:** files up to 8 MiB are verified completely before the first byte is sent, so
-  corruption answers `409 FILE_CORRUPT` with both hashes. Larger files are streamed, and the connection is
+  corruption answers `409 FILE_CORRUPT` with both hashes and `fallbackAvailable: false` (each file is stored
+  once, on the primary or on the fallback, so there is no second copy to restore from). Larger files are streamed, and the connection is
   cut (never ended cleanly) if the hash turns out wrong. In both cases the file is marked `corrupt`.
 - **Byte ranges (`Range: bytes=a-b`, `bytes=a-`, `bytes=-n`):** a single range of a plain file answers
   `206` with `Content-Range: bytes a-b/size` and only those bytes (`Accept-Ranges: bytes`). `416
