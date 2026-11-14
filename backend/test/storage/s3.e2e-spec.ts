@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
+import { type Server, createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import S3rver from 's3rver';
@@ -25,6 +27,7 @@ async function collect(stream: AsyncIterable<Buffer>): Promise<Buffer> {
 describe('S3Storage against an S3-compatible server', () => {
   let server: S3rver;
   let storage: S3Storage;
+  let endpoint: string;
 
   beforeAll(async () => {
     server = new S3rver({
@@ -35,6 +38,7 @@ describe('S3Storage against an S3-compatible server', () => {
       configureBuckets: [{ name: 'filegrid', configs: [] }],
     });
     const address = await server.run();
+    endpoint = `http://127.0.0.1:${address.port}`;
     storage = new S3Storage(
       new S3Settings({
         endpoint: `http://127.0.0.1:${address.port}`,
@@ -90,6 +94,58 @@ describe('S3Storage against an S3-compatible server', () => {
     for await (const _chunk of storage.getStream('t/early.bin')) break;
 
     expect((await storage.health()).ok).toBe(true);
+  });
+
+  it('waits for a slow consumer: the read timeout runs only while waiting on S3', async () => {
+    const data = randomBytes(8 * MiB);
+    const patient = new S3Storage(
+      new S3Settings({
+        endpoint,
+        accessKey: 'S3RVER',
+        secretKey: 'S3RVER',
+        bucket: 'filegrid',
+        readTimeoutMs: 300,
+      }),
+    );
+    try {
+      await patient.putStream('t/slow-consumer.bin', chunksOf(data));
+      const reading = patient.getStream('t/slow-consumer.bin')[Symbol.asyncIterator]();
+      const first = await reading.next();
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // the client holds the chunk
+
+      const rest = await collect({ [Symbol.asyncIterator]: () => reading });
+
+      expect(sha256(Buffer.concat([first.value as Buffer, rest]))).toBe(sha256(data));
+    } finally {
+      await patient.close();
+    }
+  });
+
+  it('still times out when S3 itself stops sending', async () => {
+    const stalled: Server = createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Length': '1000' });
+      response.write(Buffer.alloc(10));
+    });
+    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', resolve));
+    const { port } = stalled.address() as AddressInfo;
+    const s3 = new S3Storage(
+      new S3Settings({
+        endpoint: `http://127.0.0.1:${port}`,
+        accessKey: 'x',
+        secretKey: 'y',
+        bucket: 'filegrid',
+        readTimeoutMs: 300,
+      }),
+    );
+    try {
+      const started = Date.now();
+      await expect(collect(s3.getStream('t/stalled.bin'))).rejects.toThrow(StorageUnavailable);
+      expect(Date.now() - started).toBeLessThan(3000);
+    } finally {
+      await s3.close();
+      stalled.closeAllConnections();
+      await new Promise((resolve) => stalled.close(resolve));
+    }
   });
 
   it('fails fast with StorageUnavailable when the endpoint is down', async () => {

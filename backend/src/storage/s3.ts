@@ -29,7 +29,8 @@ import type { StorageLogger } from './resilience';
  * upload is aborted, so no orphan parts are left behind.
  *
  * Read: the GetObject body is streamed as the socket delivers it (blocks of at most 64 KiB); the
- * HTTP connection is destroyed when the iterator is closed early.
+ * HTTP connection is destroyed when the iterator is closed early. The read timeout covers only the
+ * wait for the next block from S3, never the time the consumer holds a block (slow client).
  *
  * Retries: none per request (a dead endpoint must fail fast; the circuit breaker handles it),
  * except multipart parts, which are already in memory: re-sent up to PART_ATTEMPTS times (0.25 s,
@@ -346,14 +347,38 @@ export class S3Storage implements StorageAdapter {
     } catch (error) {
       throw translate(error, key);
     }
+    // The socket inactivity timeout would also fire while the consumer holds a chunk (a slow
+    // download client: the paused socket shows no activity). Replace it with a timer that runs only
+    // while this read waits for the next chunk from S3.
+    response.setTimeout(0);
+    const chunks = response[Symbol.asyncIterator]();
     let finished = false;
     try {
-      for await (const chunk of response) yield chunk as Buffer;
+      while (true) {
+        const step = await this.nextChunk(response, chunks);
+        if (step.done) break;
+        yield step.value as Buffer;
+      }
       finished = true;
     } catch (error) {
       throw translate(error, key);
     } finally {
       if (!finished) response.destroy();
+    }
+  }
+
+  private async nextChunk(
+    response: IncomingMessage,
+    chunks: AsyncIterator<unknown>,
+  ): Promise<IteratorResult<unknown>> {
+    const timer = setTimeout(
+      () => response.destroy(new ReadTimeoutError('s3: no data from the server in time')),
+      this.settings.readTimeoutMs,
+    );
+    try {
+      return await chunks.next();
+    } finally {
+      clearTimeout(timer);
     }
   }
 
