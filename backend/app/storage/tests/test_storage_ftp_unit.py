@@ -1,13 +1,14 @@
-"""Unit test: FTP health keeps one logged-in connection and survives logins slower than the probe timeout."""
+"""Unit tests for the FTP adapter: health connection handling and control-channel resync after an abort."""
 
 from __future__ import annotations
 
 import asyncio
 
+import aioftp
 import pytest
 
 from app.storage.config import FtpSettings
-from app.storage.ftp import FtpStorage
+from app.storage.ftp import FtpStorage, _resync_after_abort
 from app.storage.resilience import BreakerState, CircuitBreaker, ResilientStorage
 
 
@@ -58,3 +59,45 @@ async def test_slow_login_is_not_restarted_by_every_probe(monkeypatch) -> None: 
     assert rs.breaker.state is BreakerState.CLOSED
     await rs.aclose()
     assert logins[1].closed
+
+
+class ReplyScript:
+    """Fake control channel: each read returns the next scripted reply code."""
+
+    def __init__(self, replies: list[str], hang: bool = False) -> None:
+        self.replies = replies
+        self.hang = hang
+        self.sent: list[str | None] = []
+
+    async def command(self, cmd: str | None, expected: str) -> None:
+        self.sent.append(cmd)
+        if not self.replies:
+            if self.hang:
+                await asyncio.sleep(3600)
+            raise ConnectionResetError
+        code = self.replies.pop(0)
+        if code != expected:
+            raise aioftp.StatusCodeError(aioftp.Code(expected), aioftp.Code(code), ["stale"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "replies,in_sync",
+    [
+        (["200"], True),  # no reply was pending: NOOP answered directly
+        (["426", "200"], True),  # one stale transfer reply, then the NOOP's 200
+        (["451", "226", "200"], True),  # two stale replies
+        (["426", "226", "226", "200"], False),  # more than expected: do not trust the channel
+        (["550"], False),  # then the channel breaks
+    ],
+)
+async def test_resync_after_abort(replies: list[str], in_sync: bool) -> None:
+    script = ReplyScript(list(replies))
+    assert await _resync_after_abort(script) is in_sync
+    assert script.sent[0] == "NOOP" and all(c is None for c in script.sent[1:])
+
+
+@pytest.mark.asyncio
+async def test_resync_gives_up_after_timeout(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr("app.storage.ftp.RESYNC_TIMEOUT_S", 0.05)
+    assert await _resync_after_abort(ReplyScript([], hang=True)) is False
