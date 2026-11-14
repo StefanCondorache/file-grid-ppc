@@ -79,18 +79,20 @@ export class AuthService {
 
   /**
    * Verifies a session token: HS256 signature, iss, aud, absolute and idle expiry, role.
-   * Returns a refreshed token when the idle window should move forward (cookie sessions).
+   * Returns a refreshed token when the idle window should move forward (cookie sessions), unless
+   * `slide` is false: background requests (polling, the live stream) must not keep a session alive.
    */
   async verify(
     token: string,
     viaCookie: boolean,
+    { slide = true }: { slide?: boolean } = {},
   ): Promise<{ principal: Principal; refreshed?: IssuedSession }> {
     const claims = await this.decode(token);
     const now = nowS();
     if (viaCookie && claims.idle <= now) throw unauthenticated();
     const principal = this.toPrincipal(claims, viaCookie);
     const idleTarget = Math.min(claims.exp, now + this.config.sessionIdleMinutes * 60);
-    if (viaCookie && idleTarget - claims.idle >= IDLE_REFRESH_STEP_S) {
+    if (slide && viaCookie && idleTarget - claims.idle >= IDLE_REFRESH_STEP_S) {
       const refreshed = await this.issue({ ...claims, idle: idleTarget });
       return { principal: refreshed.principal, refreshed };
     }

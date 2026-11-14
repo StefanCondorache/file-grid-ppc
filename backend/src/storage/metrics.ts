@@ -14,7 +14,8 @@ import { Counter, Gauge, Histogram, register } from 'prom-client';
  *   while streaming.
  * `filegrid_storage_errors_total` (counter): storage, operation, category, error_type. One per
  *   failed or rejected operation. error_type is CircuitOpen, IdleTimeout, Timeout, ObjectNotFound,
- *   IntegrityError, InvalidKey, SourceError (the caller's input failed), HealthCheckFailed, or the
+ *   IntegrityError, InvalidKey, StorageBusy (no free pooled connection), SourceError (the caller's
+ *   input failed), HealthCheckFailed, or the
  *   underlying error (a Node error code such as ECONNREFUSED, else the error class name).
  *   Health probes use category "system".
  * `filegrid_storage_up` (gauge): storage. 1 if the last health probe succeeded, else 0.

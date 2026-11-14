@@ -29,6 +29,7 @@ import {
 } from './constants';
 
 const DATA_TABLES = [
+  'alerts',
   'operations',
   'audit_log',
   'meter_readings',
@@ -104,10 +105,14 @@ export function memoryStorages() {
   return {
     registry,
     adapter: (name: StorageName): MemoryStorage => adapters[STORAGE_NAMES.indexOf(name)],
-    /** Empty every storage, make it healthy and close the breakers again. */
-    reset: (): void => {
+    /**
+     * Empty every storage, make it healthy, close the breakers again and re-probe, so no storage
+     * is still remembered as down by the health monitor (writes would skip it).
+     */
+    reset: async (): Promise<void> => {
       for (const adapter of adapters) adapter.clear();
       for (const name of STORAGE_NAMES) registry.get(name).breaker.recordSuccess(true);
+      await registry.monitor.checkOnce();
     },
   };
 }

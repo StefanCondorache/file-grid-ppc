@@ -118,7 +118,7 @@ describe('uploads, downloads and files', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    storages.reset();
+    await storages.reset();
     admin = await loginCookie(app);
   });
 
@@ -225,6 +225,34 @@ describe('uploads, downloads and files', () => {
     expect((await complete(admin, uploadId, file, 2)).body.verdict).toBe('match');
   });
 
+  it('counts a resume when the uploader asks for the status of a started upload', async () => {
+    const file = bytes(5000);
+    const created = await create(admin, {
+      category: 'fault_records',
+      fileName: 'reluat.pdf',
+      fileSize: file.length,
+      mimeType: 'application/pdf',
+      metadata: FAULT_METADATA,
+    });
+    const { uploadId } = created.body;
+    const status = () => request(server()).get(`/api/v1/uploads/${uploadId}`).set(browser(admin));
+
+    await status(); // nothing received yet: not a resume
+    await putPart(admin, uploadId, 1, file);
+    await status();
+    const db = testDb();
+    try {
+      const row = await db
+        .selectFrom('upload_sessions')
+        .select('resume_count')
+        .where('id', '=', uploadId)
+        .executeTakeFirstOrThrow();
+      expect(row.resume_count).toBe(1);
+    } finally {
+      await db.destroy();
+    }
+  });
+
   it('returns the same session for a repeated Idempotency-Key', async () => {
     const body = {
       category: 'fault_records',
@@ -287,6 +315,35 @@ describe('uploads, downloads and files', () => {
     expect(done.body).toMatchObject({ verdict: 'match', storage: 'db', usedFallback: true });
   });
 
+  it('logs a failed completion against the storage that refused it', async () => {
+    const file = bytes(5000);
+    const created = await create(admin, {
+      category: 'fault_records',
+      fileName: 'refuzat.pdf',
+      fileSize: file.length,
+      mimeType: 'application/pdf',
+      metadata: FAULT_METADATA,
+    });
+    await putPart(admin, created.body.uploadId, 1, file);
+    storages.adapter('s3').setAvailable(false);
+    storages.adapter('db').setAvailable(false);
+
+    const done = await complete(admin, created.body.uploadId, file, 1);
+
+    expect(done.status).toBe(503);
+    const db = testDb();
+    try {
+      const row = await db
+        .selectFrom('operations')
+        .select(['status', 'storage'])
+        .where('operation', '=', 'upload.complete')
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({ status: 'error', storage: 's3' });
+    } finally {
+      await db.destroy();
+    }
+  });
+
   it('encrypts connection documents at rest, masks personal data and reveals it only to the auditor', async () => {
     const file = Buffer.from('%PDF-1.7 cerere Ion Popescu CNP 1960101123456 '.repeat(50));
 
@@ -330,6 +387,78 @@ describe('uploads, downloads and files', () => {
 
     const content = await download(admin, done.body.fileId);
     expect((content.body as Buffer).equals(file)).toBe(true);
+  });
+
+  describe('Range downloads', () => {
+    const file = bytes(10_000, 11);
+    const ranged = (cookie: string, fileId: string, range: string) =>
+      binary(
+        request(server())
+          .get(`/api/v1/files/${fileId}/content`)
+          .set({ ...browser(cookie), Range: range }),
+      );
+
+    it('answers 206 with Content-Range for a single byte range of a plain file', async () => {
+      const done = await upload(admin, 'fault_records', file, FAULT_METADATA);
+
+      const middle = await ranged(admin, done.body.fileId, 'bytes=100-199');
+      const suffix = await ranged(admin, done.body.fileId, 'bytes=-50');
+      const open = await ranged(admin, done.body.fileId, 'bytes=9990-');
+      const clamped = await ranged(admin, done.body.fileId, 'bytes=9000-20000');
+      const whole = await download(admin, done.body.fileId);
+
+      expect(middle.status).toBe(206);
+      expect(middle.headers['content-range']).toBe('bytes 100-199/10000');
+      expect(middle.headers['content-length']).toBe('100');
+      expect(middle.headers['accept-ranges']).toBe('bytes');
+      expect(middle.headers['x-file-sha256']).toBe(sha256(file));
+      expect((middle.body as Buffer).equals(file.subarray(100, 200))).toBe(true);
+      expect((suffix.body as Buffer).equals(file.subarray(9950))).toBe(true);
+      expect((open.body as Buffer).equals(file.subarray(9990))).toBe(true);
+      expect(clamped.headers['content-range']).toBe('bytes 9000-9999/10000');
+      expect(whole.status).toBe(200);
+      expect(whole.headers['accept-ranges']).toBe('bytes');
+    });
+
+    it.each(['bytes=20000-', 'bytes=500-100', 'bytes=abc', 'bytes=-0'])(
+      'answers 416 RANGE_NOT_SATISFIABLE for %s',
+      async (range) => {
+        const done = await upload(admin, 'fault_records', file, FAULT_METADATA);
+
+        const response = await request(server())
+          .get(`/api/v1/files/${done.body.fileId}/content`)
+          .set({ ...browser(admin), Range: range });
+
+        expect(response.status).toBe(416);
+        expect(response.body.code).toBe('RANGE_NOT_SATISFIABLE');
+        expect(response.headers['content-range']).toBe('bytes */10000');
+      },
+    );
+
+    it('serves the whole file for several ranges or a stale If-Range', async () => {
+      const done = await upload(admin, 'fault_records', file, FAULT_METADATA);
+
+      const several = await ranged(admin, done.body.fileId, 'bytes=0-1,5-6');
+      const stale = await binary(
+        request(server())
+          .get(`/api/v1/files/${done.body.fileId}/content`)
+          .set({ ...browser(admin), Range: 'bytes=0-9', 'If-Range': '"not-the-etag"' }),
+      );
+
+      expect(several.status).toBe(200);
+      expect(stale.status).toBe(200);
+      expect((stale.body as Buffer).equals(file)).toBe(true);
+    });
+
+    it('ignores Range for encrypted files: the whole file, verified', async () => {
+      const done = await upload(admin, 'connection_documents', file, CONNECTION_METADATA);
+
+      const response = await ranged(admin, done.body.fileId, 'bytes=0-9');
+
+      expect(response.status).toBe(200);
+      expect(response.headers['accept-ranges']).toBe('none');
+      expect((response.body as Buffer).equals(file)).toBe(true);
+    });
   });
 
   it('detects a corrupted file on download and marks it corrupt', async () => {

@@ -6,6 +6,7 @@ import { createDatabase } from '../src/database/database';
 import { resetDatabase, testConfig, testDb } from './helpers';
 
 const EXPECTED_TABLES = [
+  'alerts',
   'audit_log',
   'files',
   'meter_batches',
@@ -146,6 +147,24 @@ describe('metadata schema (migration 0001)', () => {
     ],
   ])('enforces %#: %s', async (statement, constraint) => {
     await expect(sql.raw(statement).execute(db)).rejects.toThrow(constraint);
+  });
+
+  it('keeps at most one open alert per category (migration 0002)', async () => {
+    const open = {
+      category: 'fault_records' as const,
+      state: 'violated' as const,
+      cause_code: 'X',
+    };
+    await db
+      .insertInto('alerts')
+      .values({ ...open, state: 'resolved', resolved_at: new Date() })
+      .execute();
+    await db.insertInto('alerts').values(open).execute();
+
+    await expect(db.insertInto('alerts').values(open).execute()).rejects.toThrow(
+      /uq_alerts_open_category/,
+    );
+    await db.deleteFrom('alerts').execute();
   });
 
   it('rejects a malformed sha256 on files', async () => {

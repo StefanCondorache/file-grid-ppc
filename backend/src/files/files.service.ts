@@ -6,6 +6,7 @@ import { AppError } from '../common/app-error';
 import { CATEGORIES, type Category, VIEW_CAPABILITY, can } from '../common/domain';
 import type { Keyring } from '../crypto/keys';
 import { DB, type Db } from '../database/database';
+import { EventBus } from '../events/event-bus.service';
 import type { FilesTable } from '../database/schema';
 import {
   KEYRING,
@@ -92,6 +93,7 @@ export class FilesService {
     private readonly store: ObjectStoreService,
     private readonly audit: AuditService,
     private readonly operations: OperationsService,
+    private readonly events: EventBus,
   ) {}
 
   async search(principal: Principal, query: FileQuery) {
@@ -162,14 +164,13 @@ export class FilesService {
     }
     if (corrupt) await this.markCorrupt(row, principal.username);
     else {
+      const integrity = row.integrity === 'verified' ? 'verified' : 'server_verified';
       await this.db
         .updateTable('files')
-        .set({
-          integrity: row.integrity === 'verified' ? 'verified' : 'server_verified',
-          last_verified_at: new Date(),
-        })
+        .set({ integrity, last_verified_at: new Date() })
         .where('id', '=', row.id)
         .execute();
+      this.announceIntegrity(row, integrity);
     }
     await this.audit.record(this.db, {
       actor: principal.username,
@@ -211,6 +212,15 @@ export class FilesService {
       fileId: row.id,
       details: `stored hash mismatch on ${row.storage}`,
     });
+    this.announceIntegrity(row, 'corrupt');
+  }
+
+  private announceIntegrity(row: FileRow, state: 'verified' | 'server_verified' | 'corrupt'): void {
+    this.events.publish(
+      'file.integrity',
+      { fileId: row.id, category: row.category, state, traceId: currentTraceId() ?? null },
+      { capability: VIEW_CAPABILITY[row.category] },
+    );
   }
 
   async custody(principal: Principal, fileId: string) {

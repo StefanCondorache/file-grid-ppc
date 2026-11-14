@@ -202,6 +202,8 @@ export interface DbSettingsInit {
   poolMax?: number;
   chunkSize?: number;
   connectTimeoutMs?: number;
+  /** How long an operation waits for a free pooled connection before it gives up as busy. */
+  acquireTimeoutMs?: number;
 }
 
 export class DbSettings extends SecretSettings {
@@ -209,6 +211,7 @@ export class DbSettings extends SecretSettings {
   readonly poolMax: number;
   readonly chunkSize: number;
   readonly connectTimeoutMs: number;
+  readonly acquireTimeoutMs: number;
 
   constructor(init: DbSettingsInit) {
     super();
@@ -216,6 +219,7 @@ export class DbSettings extends SecretSettings {
     this.poolMax = Math.max(1, init.poolMax ?? 8);
     this.chunkSize = init.chunkSize ?? MiB;
     this.connectTimeoutMs = init.connectTimeoutMs ?? 3000;
+    this.acquireTimeoutMs = init.acquireTimeoutMs ?? 10_000;
   }
 
   static fromEnv(env: Env = process.env): DbSettings {

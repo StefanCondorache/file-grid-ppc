@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { AppError, retryAfter } from '../common/app-error';
+import { AppError, categoryBusy, retryAfter } from '../common/app-error';
 import type { Category, StorageName } from '../common/domain';
 import { decryptStream, encryptStream } from '../crypto/envelope';
 import type { Keyring } from '../crypto/keys';
@@ -8,6 +8,7 @@ import {
   HashingStream,
   ObjectNotFound,
   type PutResult,
+  StorageBusy,
   StorageUnavailable,
   verifyStream,
 } from '../storage/base';
@@ -49,6 +50,27 @@ export function storageUnavailable(storage: StorageName): AppError {
   );
 }
 
+/** A storage without a free connection (StorageBusy) is overload: 503 CATEGORY_BUSY + Retry-After. */
+async function busyAsCategoryBusy<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof StorageBusy) throw categoryBusy();
+    throw error;
+  }
+}
+
+async function* busyAsCategoryBusyStream(
+  chunks: AsyncIterable<Buffer>,
+): AsyncGenerator<Buffer, void, undefined> {
+  try {
+    yield* chunks;
+  } catch (error) {
+    if (error instanceof StorageBusy) throw categoryBusy();
+    throw error;
+  }
+}
+
 /**
  * The backend's only door to the storages. Applies a category's placement (primary, then fallback
  * when the primary is unavailable), encrypts and decrypts (FGE1, src/crypto), records spans and the
@@ -73,12 +95,23 @@ export class ObjectStoreService {
     placement: Placement,
     source: () => AsyncIterable<Uint8Array>,
   ): Promise<WriteResult> {
-    const targets = [placement.primary, ...(placement.fallback ? [placement.fallback] : [])];
+    return busyAsCategoryBusy(() => this.writeWithFallback(category, key, placement, source));
+  }
+
+  private async writeWithFallback(
+    category: Category,
+    key: string,
+    placement: Placement,
+    source: () => AsyncIterable<Uint8Array>,
+  ): Promise<WriteResult> {
+    const targets = this.skipsPrimary(placement)
+      ? [placement.fallback as StorageName]
+      : [placement.primary, ...(placement.fallback ? [placement.fallback] : [])];
     let lastError: unknown;
-    for (const [index, storage] of targets.entries()) {
+    for (const storage of targets) {
       try {
         const result = await this.writeTo(category, storage, key, placement.encrypted, source);
-        return { ...result, storage, usedFallback: index > 0 };
+        return { ...result, storage, usedFallback: storage !== placement.primary };
       } catch (error) {
         if (!(error instanceof StorageUnavailable)) throw error;
         lastError = error;
@@ -97,9 +130,11 @@ export class ObjectStoreService {
   }
 
   /**
-   * Writes the caller's one-shot stream (an HTTP body). It falls back only when the primary failed
-   * before reading a single byte of it (circuit open, connection refused): then the untouched body
-   * can go to the fallback. A failure mid-stream surfaces as 503 and the client resends the part.
+   * Writes the caller's one-shot stream (an HTTP body). A primary the health monitor or the circuit
+   * breaker already knows to be down is skipped, so the body goes to the fallback at once. Otherwise
+   * it falls back only when the primary failed before reading a single byte of it (connection
+   * refused): then the untouched body can go to the fallback. A failure mid-stream surfaces as 503
+   * and the client resends the part.
    */
   async writeOnce(
     category: Category,
@@ -107,6 +142,25 @@ export class ObjectStoreService {
     placement: Placement,
     body: AsyncIterable<Uint8Array>,
   ): Promise<WriteResult> {
+    return busyAsCategoryBusy(() => this.writeBody(category, key, placement, body));
+  }
+
+  private async writeBody(
+    category: Category,
+    key: string,
+    placement: Placement,
+    body: AsyncIterable<Uint8Array>,
+  ): Promise<WriteResult> {
+    if (this.skipsPrimary(placement)) {
+      const fallback = placement.fallback as StorageName;
+      try {
+        const result = await this.writeTo(category, fallback, key, placement.encrypted, () => body);
+        return { ...result, storage: fallback, usedFallback: true };
+      } catch (error) {
+        if (error instanceof StorageUnavailable) throw storageUnavailable(fallback);
+        throw error;
+      }
+    }
     const iterator = body[Symbol.asyncIterator]();
     let touched = false;
     const tracked: AsyncIterable<Uint8Array> = {
@@ -159,13 +213,23 @@ export class ObjectStoreService {
     const stored = withCategory(category, () =>
       this.registry.get(object.storage).getStream(object.key, { signal }),
     );
-    const verified = verifyStream(stored, object.storedSha256);
+    const verified = verifyStream(busyAsCategoryBusyStream(stored), object.storedSha256);
     return object.encrypted ? decryptStream(verified, this.requireKeyring()) : verified;
   }
 
-  /** The raw stored bytes (ciphertext for encrypted objects), unverified: for demo corruption. */
-  readRaw(category: Category, storage: StorageName, key: string): AsyncIterable<Buffer> {
-    return withCategory(category, () => this.registry.get(storage).getStream(key));
+  /**
+   * The raw stored bytes (ciphertext for encrypted objects), unverified: for staged parts, demo
+   * corruption and byte-range downloads of plain files.
+   */
+  readRaw(
+    category: Category,
+    storage: StorageName,
+    key: string,
+    signal?: AbortSignal,
+  ): AsyncIterable<Buffer> {
+    return busyAsCategoryBusyStream(
+      withCategory(category, () => this.registry.get(storage).getStream(key, { signal })),
+    );
   }
 
   /** Replaces the raw bytes under a key (demo: corrupt a stored file in place). */
@@ -202,6 +266,21 @@ export class ObjectStoreService {
 
   status() {
     return this.registry.status();
+  }
+
+  /** Down for the last health probe, or its circuit is open. */
+  private knownDown(storage: StorageName): boolean {
+    const status = this.registry.status()[storage];
+    return status.up === false || status.circuit === 'open';
+  }
+
+  /** Write straight to the fallback: the primary is known down and the fallback is not. */
+  private skipsPrimary(placement: Placement): boolean {
+    return (
+      placement.fallback !== null &&
+      this.knownDown(placement.primary) &&
+      !this.knownDown(placement.fallback)
+    );
   }
 
   private async writeTo(
