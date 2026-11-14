@@ -136,7 +136,11 @@ function memoryRepo(): UploadRepo & { records: Map<string, PersistedUpload> } {
       records.delete(id);
       handles.delete(id);
     },
-    purgeOlderThan: async () => 0,
+    purgeOlderThan: async (ms) => {
+      const stale = [...records.values()].filter((r) => r.updatedAt < Date.now() - ms);
+      stale.forEach((r) => records.delete(r.localId));
+      return stale.length;
+    },
     putHandle: async (id, h) => void handles.set(id, h),
     getHandle: async (id) => handles.get(id),
   };
@@ -317,5 +321,27 @@ describe('upload engine facade', () => {
     await engine.restoreAndResume('u1');
     await vi.advanceTimersByTimeAsync(5000);
     expect(item(id).state).toBe('verified');
+  });
+
+  it('only upload activity keeps a record alive: a paused, restored upload is purged after 24 h', async () => {
+    const HOUR = 60 * 60 * 1000;
+    const server = fakeServer({ latencyMs: 1000 });
+    const repo = memoryRepo();
+    const first = setup(server, repo);
+    await first.engine.restore('u1');
+    const id = first.engine.enqueue({ file: testFile('A'), category: 'drone_videos', metadata: drone });
+    await vi.advanceTimersByTimeAsync(1500); // parts 1 and 2 confirmed
+    const lastActivity = repo.records.get(id)!.updatedAt;
+    first.engine.pauseAll('logout');
+
+    await vi.advanceTimersByTimeAsync(12 * HOUR);
+    await setup(server, repo).engine.restore('u1'); // shown again as needs_file: not activity
+    expect(item(id).state).toBe('needs_file');
+    expect(repo.records.get(id)!.updatedAt).toBe(lastActivity);
+
+    await vi.advanceTimersByTimeAsync(13 * HOUR); // the server dropped the session after 24 h without parts
+    await setup(server, repo).engine.restore('u1');
+    expect(repo.records.has(id)).toBe(false);
+    expect(useUploadStore.getState().items[id]).toBeUndefined();
   });
 });

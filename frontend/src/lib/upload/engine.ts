@@ -257,9 +257,14 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
 
   // ---- persistence -----------------------------------------------------------------------------------------
 
-  function persist(job: Job): void {
+  /**
+   * Saves the record. `activity` (session created, hashes done, a part confirmed) refreshes its age: the server drops
+   * a session after 24 h without parts, so a pause, a failure or a restore must not keep a dead record alive.
+   */
+  function persist(job: Job, activity = false): void {
     if (!job.rec) return;
-    job.rec = { ...job.rec, state: job.state, pauseReason: job.pauseReason, failReason: job.failReason, updatedAt: clock.now() };
+    const updatedAt = activity ? clock.now() : job.rec.updatedAt;
+    job.rec = { ...job.rec, state: job.state, pauseReason: job.pauseReason, failReason: job.failReason, updatedAt };
     // Best effort: the server stays the source of truth for received parts (GET /uploads/{id}); a lost write only
     // costs a re-check after a reload, so it must never stop the upload.
     repo.put(job.rec).catch(noop);
@@ -495,7 +500,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
         // POST /uploads is authoritative and frozen for the life of the upload (§5, beat 7).
         policy: rec.policy && { ...rec.policy, version: s.policyVersion, chunkSize: s.chunkSize, maxParallel: s.maxParallel, maxFileSize: s.maxFileSize },
       };
-      persist(job);
+      persist(job, true);
       changed(job);
     }
     const rec = job.rec;
@@ -518,7 +523,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       guard(job, g);
       if (out.partHashes.length !== rec.partCount) throw new Failure('unknown', undefined, new Error('Part hashes do not match the session'));
       job.rec = { ...job.rec, fileSha256: out.sha256, partSha256: out.partHashes };
-      persist(job);
+      persist(job, true);
     }
     fire(job, { type: 'HASH_DONE' });
   }
@@ -556,7 +561,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
         job.error = undefined;
         job.reconciles = 0;
         job.rec = { ...job.rec!, confirmed: bitsetSet(job.rec!.confirmed, s.n) };
-        persist(job);
+        persist(job, true);
         if (job.state === 'connection_lost') fire(job, { type: 'PART_OK' });
         else changed(job);
         return;
