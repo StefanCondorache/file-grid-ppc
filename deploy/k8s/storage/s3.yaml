@@ -27,6 +27,7 @@ spec:
         app.kubernetes.io/name: s3
         app.kubernetes.io/part-of: filegrid-storage
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -43,7 +44,14 @@ spec:
             - -s3
             - -s3.port=8333
             - -master.volumeSizeLimitMB=256
-            - -volume.max=0   # 0 = auto: limit follows free disk
+            # 80 volumes x 256 MB = 20 GiB, the PVC size (local-path does not enforce PVC sizes itself)
+            - -volume.max=80
+            # Memory: buffers in flight on the volume server (4 MB chunks) and for S3 GETs are capped. The S3
+            # and filer upload caps stay off: they count a whole request body, so one large single PUT would
+            # hold back every other upload until it finished. Same flags in infra/docker-compose.yml.
+            - -volume.concurrentUploadLimitMB=128
+            - -volume.concurrentDownloadLimitMB=128
+            - -s3.readerCacheSizeMB=64
           ports:
             - {name: s3, containerPort: 8333}
           env:
@@ -51,6 +59,9 @@ spec:
               valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: S3_ACCESS_KEY}}
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom: {secretKeyRef: {name: filegrid-storage-credentials, key: S3_SECRET_KEY}}
+            # Go GC target below the 768Mi limit (about 78%), so the heap is collected before the OOM killer acts
+            - name: GOMEMLIMIT
+              value: 600MiB
           readinessProbe:
             # master reports the cluster up, and the S3 gateway answers (anonymous => 403, so no -f on it)
             exec:
@@ -73,18 +84,24 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            requests: {cpu: 25m, memory: 128Mi}
-            limits: {memory: 512Mi}
+            requests: {cpu: 25m, memory: 256Mi}
+            limits: {memory: 768Mi}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: data, mountPath: /data}
+  # Written out with the API server's defaults (apiVersion, kind, volumeMode, status): the list is atomic,
+  # so without them every `kubectl apply` re-sends it and reports "configured" although nothing changes.
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
         storageClassName: local-path
+        volumeMode: Filesystem
         resources:
           requests: {storage: 20Gi}
+      status: {phase: Pending}

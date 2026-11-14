@@ -1,0 +1,13 @@
+# Where the storages answer, for the app pods (envFrom: configMapRef). Not secret, so not in Secret
+# filegrid-storage-credentials, whose key set stays fixed. Same keys as infra/.env.example (laptop values there).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filegrid-storage-endpoints
+  namespace: filegrid
+data:
+  FILEGRID_PG_HOST: postgres.filegrid-storage.svc.cluster.local
+  FILEGRID_PG_PORT: "5432"
+  FILEGRID_S3_ENDPOINT: http://s3.filegrid-storage.svc.cluster.local:8333
+  FILEGRID_FTP_HOST: ftp.filegrid-storage.svc.cluster.local
+  FILEGRID_FTP_PORT: "21"

@@ -1,5 +1,6 @@
 # One-shot: creates bucket "filegrid" idempotently through the authenticated S3 API, then exits 0.
-# Not in kustomization.yaml: applied by `make k8s-storage-up` after deleting any previous run (immutable template).
+# Not in kustomization.yaml: scripts/k8s-s3-init.sh (run by `make k8s-storage-up`) applies it only when it has not
+# completed, unchanged, on the current S3 volume, and then deletes the old run first (a Job template is immutable).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -14,6 +15,7 @@ spec:
         app.kubernetes.io/part-of: filegrid-storage
     spec:
       restartPolicy: OnFailure
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

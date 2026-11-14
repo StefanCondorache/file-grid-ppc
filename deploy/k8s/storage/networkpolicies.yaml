@@ -63,7 +63,9 @@ spec:
       ports:
         - {protocol: TCP, port: 8333}
 ---
-# FTP control port 21 plus the passive data range (clients connect straight to the pod IP, PUBLICHOST=podIP).
+# FTP control port 21 plus the passive data range 21000-21019. Default clients (ftplib, curl) open the data
+# connection to the Service ClusterIP on the passive port, which kube-proxy forwards to this pod; clients that
+# trust the PASV address (PUBLICHOST = pod IP) reach the pod directly. Both arrive here as pod-to-pod traffic.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -84,4 +86,4 @@ spec:
               filegrid.io/storage-client: "true"
       ports:
         - {protocol: TCP, port: 21}
-        - {protocol: TCP, port: 21000, endPort: 21009}
+        - {protocol: TCP, port: 21000, endPort: 21019}

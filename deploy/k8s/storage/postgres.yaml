@@ -25,6 +25,7 @@ spec:
         app.kubernetes.io/name: postgres
         app.kubernetes.io/part-of: filegrid-storage
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 70      # postgres user of the alpine image
@@ -66,11 +67,17 @@ spec:
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
+  # Written out with the API server's defaults (apiVersion, kind, volumeMode, status): the list is atomic,
+  # so without them every `kubectl apply` re-sends it and reports "configured" although nothing changes.
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
         storageClassName: local-path
+        volumeMode: Filesystem
         resources:
           requests: {storage: 5Gi}
+      status: {phase: Pending}

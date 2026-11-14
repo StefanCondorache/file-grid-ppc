@@ -33,10 +33,15 @@ services:
       - -s3
       - -s3.port=8333
       - -master.volumeSizeLimitMB=256
-      - -volume.max=0   # 0 = auto: limit follows free disk
+      - -volume.max=80   # 80 x 256 MB = 20 GiB, as the k3s PVC
+      # Memory caps, same as deploy/k8s/storage/s3.yaml (see the comment there)
+      - -volume.concurrentUploadLimitMB=128
+      - -volume.concurrentDownloadLimitMB=128
+      - -s3.readerCacheSizeMB=64
     environment:
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?set in infra/.env}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?set in infra/.env}
+      GOMEMLIMIT: 600MiB   # k3s runs it with a 768Mi limit
     volumes:
       - s3data:/data
     ports:
@@ -83,12 +88,16 @@ services:
       FTP_USER_HOME: /home/ftpuser
       # Address advertised in PASV replies: loopback, so clients on the host work
       PUBLICHOST: 127.0.0.1
-      ADDED_FLAGS: "-p 21000:21009 -E"
+      # Same as deploy/k8s/storage/ftp.yaml: 10 sessions (pure-ftpd allows at most half the passive range),
+      # 8 per client IP, passive 21000-21019, no reverse DNS lookup
+      FTP_MAX_CLIENTS: "10"
+      FTP_MAX_CONNECTIONS: "8"
+      ADDED_FLAGS: "-p 21000:21019 -E -H"
     volumes:
       - ftpdata:/home/ftpuser
     ports:
       - "127.0.0.1:21:21"
-      - "127.0.0.1:21000-21009:21000-21009"
+      - "127.0.0.1:21000-21019:21000-21019"
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/21"]
       interval: 5s
