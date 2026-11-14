@@ -31,11 +31,19 @@ function reload(engine: UploadEngine, repo: Repo): void {
 
 const sentSince = (server: ReturnType<typeof fakeServer>, from: number) => server.calls.slice(from).map((c) => c.partNumber).sort();
 
+/** Transient user activation: the call runs inside a click (jsdom has no navigator.userActivation). */
+function inClick(): void {
+  Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true, hasBeenActive: true } });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   useUploadStore.setState({ items: {} });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  delete (navigator as { userActivation?: unknown }).userActivation;
+});
 
 describe('resume after reload', () => {
   it('a granted handle resumes with no click and sends only the parts the server is missing', async () => {
@@ -93,6 +101,34 @@ describe('resume after reload', () => {
     expect(item(gone)).toMatchObject({ state: 'needs_file', reopenable: false });
     expect(server.calls.length).toBe(sent);
     expect(server.api.status).not.toHaveBeenCalled();
+  });
+
+  it('one click gives a reopenable upload its file back; a refusal leaves only the re-select', async () => {
+    const server = fakeServer({ latencyMs: 1000 });
+    const repo = memoryRepo();
+    const fileB = testFile('B', 'inspectie-linia-8.mp4');
+    const lapsed = fakeHandle(fileA(), 'prompt'); // Chrome did not keep "Allow on every visit"
+    const refused = { ...fakeHandle(fileB, 'prompt'), requestPermission: vi.fn(async (): Promise<PermissionState> => 'denied') };
+    const before = setup(server, repo);
+    await before.engine.restore('u1');
+    const id = before.engine.enqueue({ file: await lapsed.getFile(), category: 'drone_videos', metadata: drone, handle: lapsed });
+    const other = before.engine.enqueue({ file: fileB, category: 'drone_videos', metadata: drone, handle: refused });
+    await vi.advanceTimersByTimeAsync(1500);
+    reload(before.engine, repo);
+    const after = setup(server, repo);
+    await after.engine.restore('u1');
+    expect(item(id)).toMatchObject({ state: 'needs_file', reopenable: true });
+    const sent = server.calls.length;
+
+    inClick(); // "Continuă încărcarea" on the row
+    await after.engine.grantFileAccess(id);
+    await after.engine.grantFileAccess(other);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(lapsed.requestPermission).toHaveBeenCalledWith({ mode: 'read' });
+    expect(item(id).state).toBe('verified');
+    expect(sentSince(server, sent)).toEqual([3, 4]);
+    expect(item(other)).toMatchObject({ state: 'needs_file', reopenable: false });
   });
 
   it('a pause the user chose survives the reload: the file is not reopened on its own', async () => {

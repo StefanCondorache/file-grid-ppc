@@ -53,6 +53,11 @@ export interface UploadEngine extends UploadControl {
   cancel(id: string): Promise<void>;
   /** Gives a restored upload its file back after checking it is the same one (upload-engine.md §8.4). */
   reattach(id: string, file: File): Promise<void>;
+  /**
+   * A `reopenable` upload's one-click path: call it from the click handler, before any other await, so Chrome may
+   * ask for read access to the stored file handle. A refusal leaves only the re-select (`reattach`).
+   */
+  grantFileAccess(id: string): Promise<void>;
   pauseAll(reason: 'session' | 'logout'): void;
   resumeAll(ownerUserId: string): void;
   /** Shows the uploads of `userId` (and only theirs, BA-65) from IndexedDB; call on (app) mount. */
@@ -869,6 +874,21 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       await attach(job, file);
     },
 
+    async grantFileAccess(id) {
+      const job = jobs.get(id);
+      if (!job?.rec || !job.handle || job.state !== 'needs_file') return;
+      const g = job.gen;
+      const file = await reopen(job.handle);
+      if (!live(job, g) || job.state !== 'needs_file') return;
+      if (file === 'needs_permission') return; // the prompt was dismissed: the button stays
+      if (file === null) {
+        job.handle = null; // refused, moved or deleted: only a re-select brings it back
+        changed(job, true);
+        return;
+      }
+      await attach(job, file);
+    },
+
     pauseAll(reason) {
       for (const job of jobs.values()) if (RUNNING.includes(job.state)) pauseJob(job, reason);
     },
@@ -953,6 +973,7 @@ export const uploadEngine: UploadEngine = {
   resume: (id) => real().resume(id),
   cancel: (id) => real().cancel(id),
   reattach: (id, file) => real().reattach(id, file),
+  grantFileAccess: (id) => real().grantFileAccess(id),
   pauseAll: (reason) => real().pauseAll(reason),
   resumeAll: (ownerUserId) => real().resumeAll(ownerUserId),
   restore: (userId) => real().restore(userId),
