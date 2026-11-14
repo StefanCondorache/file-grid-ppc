@@ -63,19 +63,19 @@ Draft API:
 7. **VPS deploy on k3s.** Storages are ClusterIP only, with no outside access. The app is served over HTTPS through Traefik and scales through replicas, with no code change.
 8. **Chaos scripts for the demo:** stop a storage, and degrade the network with `tc netem` (latency and packet loss).
 
-### Stare P1 (14.11.2026, 13:50)
+### Stare P1 (14.11.2026, 13:50; hardening după verificarea live: branch `p1/hardening`, încă nedeployat)
 
 Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Contracte pentru P2/P3”.
 
 | # | Stare |
 |---|---|
-| 1 | ✅ Adaptoare async S3/FTP/DB (memorie constantă, SHA-256) în `backend/app/storage/`; 164 de teste unitare trec |
-| 2 | ✅ Criptare AES-256-GCM pe stream în `backend/app/crypto/` (cheia din Secret-ul `filegrid-app-secrets`) |
+| 1 | ✅ Adaptoare async S3/FTP/DB (memorie constantă, SHA-256), portate în TypeScript în `backend/src/storage/` |
+| 2 | ✅ Criptare AES-256-GCM pe stream în `backend/src/crypto/` (cheia din Secret-ul `filegrid-app-secrets`) |
 | 3 | ✅ Circuit breaker, health monitor și metrici per storage |
-| 4 | ✅ `sudo make up` pornește k3s, HTTPS, storage, observabilitatea și aplicația (pentru fiecare folder cu `Dockerfile`) |
-| 5 | ✅ Prometheus, Grafana la `/grafana` (dashboard `filegrid-overview`; parola cu `make grafana-password`), Loki + Alloy |
-| 6 | ✅ 7 reguli de alertă; fără webhook (notificările se activează din Secret-ul `monitoring/alertmanager-config`) |
-| 7 | ✅ Storage doar ClusterIP + NetworkPolicy (`make storage-isolation-check`); manifestele aplicației sunt în `deploy/k8s/app/` |
+| 4 | ✅ `sudo make up` pornește k3s, HTTPS, storage, observabilitatea și aplicația (pentru fiecare folder cu `Dockerfile`). A doua rulare: `helm` sărit pentru release-urile neschimbate (checksum în `monitoring/obs-helm-checksums`), imagini cu același digest (`--provenance=false`), placeholder-ul gestionat doar de `make app-up`, `make status` cu fiecare host o dată. Parola conturilor demo separată (`DEMO_USERS_PASSWORD`, adăugată fără rotirea celorlalte chei) |
+| 5 | ✅ Prometheus, Grafana la `/grafana` (dashboard `filegrid-overview`; parola cu `make grafana-password`), Loki + Alloy. Grafana: cookie `Secure`/`SameSite=Strict`, `/metrics` nepublic, fără phone-home, versiune ascunsă; limite ridicate (Grafana 256Mi, sidecar 160Mi, Alloy 192Mi) |
+| 6 | ✅ 12 reguli de alertă: 7 de business (`MeterReadingsLost` pe gauge-ul `filegrid_meter_readings_lost`, ca „Pierdute” din dashboard) + 5 de infrastructură (`TargetDown`, `PodCrashLooping`, `ContainerMemoryNearLimit`, `NodeMemoryHigh`, `NodeDiskHigh`; node-exporter fără rețeaua gazdei); `make obs-rules-test` (promtool + teste unitare). Fără webhook (notificările se activează din Secret-ul `monitoring/alertmanager-config`) |
+| 7 | ✅ Storage doar ClusterIP + NetworkPolicy (`make storage-isolation-check`); blackbox-exporter doar de la podul Prometheus server; manifestele aplicației sunt în `deploy/k8s/app/` (preStop 5 s + 30 s grație pe backend/simulator). HTTPS: HSTS, nosniff, Referrer-Policy, X-Frame-Options pe toate Ingress-urile; IP-ul real al clientului (`externalTrafficPolicy: Local`, X-Forwarded-* crezute doar din CIDR-ul podurilor). Criptarea Secret-elor k3s at rest: **oprită** până la `sudo make k3s-secrets-encrypt` (pregătită, nerulată) |
 | 8 | ✅ `make chaos-storage-stop/start S=…`, `make chaos-netem-on/off` (doar în rețeaua podului), RBAC pentru panoul demo |
 
 **Rămas de făcut (oricine din echipă):**
@@ -86,6 +86,8 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 - [x] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`. **Făcut 14.11:** limite backend 384Mi (heap V8 192 MB), simulator 128Mi, frontend ridicat la 256Mi (cererea P3). Măsurat: backend ~170-180Mi, simulator ~40-50Mi, toate podurile ~1,35 GiB, ~1,2 GiB disponibili pe gazdă.
 - [x] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice. **Confirmat** (vezi „P2 status” și `docs/api.md`); Prometheus scrapează backend-ul (fix Content-Type `a96d1fa`), iar `MeterReadingsLost` arată 0.
 - [ ] Opțional: webhook Discord/Telegram pentru alerte (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
+- [ ] Deploy `p1/hardening` (împreună cu `p2/demo-fixes`, care adaugă gauge-ul `filegrid_meter_readings_lost` și `TRUSTED_PROXY_CIDRS` în backend): `sudo make up` de două ori; la a doua rulare toate release-urile helm trebuie să spună `skipping helm upgrade`. Apoi verificați header-ele (`curl -sI https://<DOMAIN>/`, `/api/v1/...`, `/grafana/login`), `/grafana/metrics` → 302, IP-ul real în auditul unui login și `make storage-isolation-check`.
+- [ ] Decizie: `sudo make k3s-secrets-encrypt` (criptarea Secret-elor în datastore-ul k3s; repornește k3s o dată, ~1 minut fără API). Până atunci Secret-ele stau necriptate pe discul VPS-ului.
 
 ## P2: Backend API, data, simulator
 

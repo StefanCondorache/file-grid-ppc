@@ -2,7 +2,7 @@
 
 Platformă care rutează fișierele încărcate către FTP, S3 sau baza de date, în funcție de categoria datelor. Cerințele: [docs/brief/FileGrid_PPC.pdf](docs/brief/FileGrid_PPC.pdf). Împărțirea pe echipă: [TASKS.md](TASKS.md).
 
-> Stare: rulează platforma (k3s + HTTPS), storage-urile și observabilitatea. Backend-ul (NestJS, `backend/`) și simulatorul de contoare (`simulator/`) au `Dockerfile`, deci `make up` le construiește și le pornește; frontend-ul (`frontend/`) nu are încă imagine, iar pe `/` rămâne pagina placeholder.
+> Stare: rulează platforma (k3s + HTTPS), storage-urile și observabilitatea. Backend-ul (NestJS, `backend/`), simulatorul de contoare (`simulator/`) și frontend-ul (`frontend/`) au `Dockerfile`, deci `make up` le construiește și le pornește; pagina placeholder servește `/` doar cât timp nu există imaginea frontend-ului.
 
 ## Arhitectură
 
@@ -33,7 +33,7 @@ git clone <url-repo> file-grid-ppc && cd file-grid-ppc
 sudo make up
 ```
 
-`make up` instalează doar ce lipsește: `curl`, `openssl`, `jq`, `ca-certificates` (apt), k3s `v1.37.2+k3s1` (versiunea testată; o instalare nouă pornește cu `--flannel-backend=host-gw` și `--secrets-encryption`; altă versiune: `sudo make up K3S_VERSION=...`, ultima din canal: `K3S_CHANNEL=stable`; un k3s existent nu e reinstalat), Helm `v3.22.1` (scriptul de instalare luat de la același tag). Apoi pornește storage-urile (`make k8s-storage-up`), cert-manager, Traefik (redirect HTTP→HTTPS, limite) și placeholder-ul (`make k8s-tls-up`) și afișează starea (`make status`). Comanda e idempotentă: la a doua rulare `kubectl` raportează `unchanged` și nu repornește nimic. Parolele sunt generate o singură dată în Secret-ul Kubernetes `filegrid-storage-credentials` și nu ajung niciodată în git.
+`make up` instalează doar ce lipsește: `curl`, `openssl`, `jq`, `ca-certificates` (apt), k3s `v1.37.2+k3s1` (versiunea testată; o instalare nouă pornește cu `--flannel-backend=host-gw` și `--secrets-encryption`; altă versiune: `sudo make up K3S_VERSION=...`, ultima din canal: `K3S_CHANNEL=stable`; un k3s existent nu e reinstalat), Helm `v3.22.1` (scriptul de instalare luat de la același tag). Apoi pornește storage-urile (`make k8s-storage-up`), cert-manager și Traefik (redirect HTTP→HTTPS, IP-ul real al clientului, limite; `make k8s-tls-up`), observabilitatea (`make obs-up`), aplicația (`make app-up`, care decide singură ce servește `/`: frontend-ul sau, fără imaginea lui, placeholder-ul) și afișează starea (`make status`, fiecare host o dată). Comanda e idempotentă: la a doua rulare `kubectl` raportează `unchanged`, `helm` nu mai rulează pentru release-urile de observabilitate neschimbate (checksum-ul chart + valori e salvat în ConfigMap-ul `monitoring/obs-helm-checksums`; `OBS_HELM_FORCE=1 make obs-up` forțează), imaginile reconstruite din aceleași surse păstrează digest-ul (`docker build --provenance=false`), placeholder-ul nu mai e recreat lângă frontend și nu repornește nimic. Parolele și cheile sunt generate o singură dată în Secret-urile Kubernetes `filegrid-storage-credentials`, `filegrid-app-secrets` (inclusiv `DEMO_USERS_PASSWORD`, parola conturilor demo, separată de cea de admin) și `monitoring/grafana-admin`, fără rotire la re-rulare, și nu ajung niciodată în git.
 
 **Criptarea Secret-elor în datastore-ul k3s (at rest) e oprită până rulați `sudo make k3s-secrets-encrypt`.** k3s-ul de pe VPS a fost instalat fără `--secrets-encryption`, iar `make up` nu reinstalează și nu repornește un k3s existent, deci acolo Secret-ele (parolele storage-urilor, KEK-ul, parola Grafana) stau necriptate în `/var/lib/rancher/k3s/server/db/` (fișier accesibil doar lui root). Ținta, rulată o singură dată, la alegere: pune `secrets-encryption: true` în `/etc/rancher/k3s/config.yaml`, repornește k3s (API-ul lipsește ~1 minut, podurile merg mai departe), rescrie toate Secret-ele cu cheia AES-CBC a k3s și verifică (`k3s secrets-encrypt status` + rândurile din datastore); e idempotentă, a doua rulare doar verifică. Reviziile vechi ale unui Secret dispar din datastore la următoarea compactare kine (minute). Doar un k3s instalat de la zero de `make up` pornește cu criptarea activă. `make up` afișează starea (`Secrets encryption at rest: on/OFF`); manual: `sudo k3s secrets-encrypt status`.
 
@@ -41,12 +41,14 @@ Comenzi utile (ca root, kubeconfig-ul k3s are mod 600; `make` folosește `KUBECO
 
 ```bash
 make status                    # poduri, certificat, adrese
+make scripts-test              # testele scripturilor și ale țintelor make (fără cluster)
+make obs-rules-test            # promtool check + teste unitare pentru alerte, înainte de deploy (fără cluster)
 make storage-isolation-check   # demo: doar podul etichetat din filegrid ajunge la storage-uri
 make tls-status                # certificatul Let's Encrypt
 make tls-retry                 # re-declanșează emiterea după ce DNS-ul indică mașina
 ```
 
-Alt domeniu: `sudo make up DOMAIN=exemplu.ro` (se substituie în Ingress la aplicare; înregistrarea DNS A trebuie să indice mașina). `DOMAIN` nu e salvat: dați-l la fiecare rulare (`make up`, `make k8s-tls-up`), altfel Ingress-ul revine la `ppc.filegrid.cc.cd`; pentru o schimbare permanentă modificați valoarea implicită din `Makefile`.
+Alt domeniu: `sudo make up DOMAIN=exemplu.ro` (se substituie în Ingress la aplicare; înregistrarea DNS A trebuie să indice mașina). `DOMAIN` nu e salvat: dați-l la fiecare rulare (`make up`, `make app-up`, `make obs-up`), altfel Ingress-ul revine la `ppc.filegrid.cc.cd`; pentru o schimbare permanentă modificați valoarea implicită din `Makefile`.
 
 ### Laptop (dezvoltare, Docker Compose)
 
@@ -134,10 +136,12 @@ await withCategory('fault_records', async () => {
 **Backend (P2)**
 - Imaginea `backend/Dockerfile` ascultă pe portul 8000 și rulează ca uid 10001.
 - Rute: `/healthz` (procesul trăiește) și `/readyz`, care **nu** trebuie să pice când un singur storage e jos. API-ul e servit sub `/api/v1` (Ingress-ul `/api` nu taie prefixul); `/metrics` e la rădăcină.
-- Env: Secret-urile `filegrid-storage-credentials` și `filegrid-app-secrets` (`JWT_SECRET`, `METER_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FILEGRID_KEK*`) plus `FILEGRID_PG_HOST`, `FILEGRID_S3_ENDPOINT`, `FILEGRID_FTP_HOST` (setate în `deploy/k8s/app/`).
+- Env: Secret-urile `filegrid-storage-credentials` și `filegrid-app-secrets` (`JWT_SECRET`, `METER_API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `DEMO_USERS_PASSWORD`, `FILEGRID_KEK*`) plus `FILEGRID_PG_HOST`, `FILEGRID_S3_ENDPOINT`, `FILEGRID_FTP_HOST`, `TRUSTED_PROXY_CIDRS` (setate în `deploy/k8s/app/`).
+- Oprire: `preStop` așteaptă 5 s (endpoint-ul iese din Service și din Traefik), apoi SIGTERM; `terminationGracePeriodSeconds` 30 (backend și simulator). Backend-ul trebuie să termine cererile în curs în acest timp.
 - Metrici așteptate de dashboard și alerte:
   - `filegrid_uploads_total{category,outcome}` și `filegrid_upload_duration_seconds{category,outcome}`; outcome `success`/`ok`/`duplicate` contează ca succes;
-  - `filegrid_meter_readings_stored_total`, `filegrid_meter_readings_duplicates_total` (retry-uri deduplicate) și `filegrid_meter_readings_duplicate_stored_total` (trebuie să rămână 0).
+  - `filegrid_meter_readings_stored_total`, `filegrid_meter_readings_duplicates_total` (retry-uri deduplicate) și `filegrid_meter_readings_duplicate_stored_total` (trebuie să rămână 0);
+  - gauge-ul `filegrid_meter_readings_lost` (fără etichete): citirile pierdute, calculate de același evaluator și cu aceeași definiție ca `GET /api/v1/guarantees` pentru `meter_readings` (0 când nu s-a pierdut nimic). Alerta `MeterReadingsLost` (> 0 timp de 2 minute) și statistica „Pierdute” din dashboard folosesc doar acest gauge.
 - Loguri JSON pe stdout cu `trace_id`, `category`, `storage`, `operation`, `file_id`. `trace_id` vine din header-ul `X-Trace-Id` (îl generați dacă lipsește) și se întoarce în răspuns.
 - IP-ul clientului: Traefik păstrează IP-ul sursă real (Service cu `externalTrafficPolicy: Local`) și îl pune în `X-Forwarded-For`; X-Forwarded-* venite din Internet sunt șterse (Traefik crede aceste header-e doar de la CIDR-ul podurilor, `10.42.0.0/16`). Backend-ul crede `X-Forwarded-For` doar când conexiunea vine din CIDR-urile clusterului (`TRUSTED_PROXY_CIDRS`, implicit `10.42.0.0/16,10.43.0.0/16`, setat și în `deploy/k8s/app/backend/deployment.yaml`), deci `request.ip` e IP-ul real pentru limitarea încercărilor de login și pentru audit.
 - Panoul demo: ServiceAccount-ul `filegrid-backend` poate scala StatefulSet-urile `postgres`/`s3`/`ftp` (0↔1) în `filegrid-storage` (`deploy/k8s/demo-rbac.yaml`); backend-ul apelează direct API-ul Kubernetes (`backend/src/demo/kube.client.ts`, doar `s3` și `ftp`, fiindcă Postgres ține și metadatele).
@@ -154,8 +158,8 @@ await withCategory('fault_records', async () => {
 
 **Pornire și demo (P1)**
 - `sudo make up`: k3s, HTTPS, storage-urile, observabilitatea, apoi aplicația. Construiește și importă imaginile pentru fiecare folder care are un `Dockerfile`; fără imagine de frontend rămâne placeholder-ul.
-- `make grafana-password`: parola de admin Grafana.
-- Alertele se văd în Grafana/Alertmanager. Pentru notificări Discord/Telegram se editează Secret-ul `monitoring/alertmanager-config` (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
+- `make grafana-password`: parola de admin Grafana. Parola conturilor demo (teren, dispecerat, racordari, auditor): `kubectl -n filegrid get secret filegrid-app-secrets -o jsonpath='{.data.DEMO_USERS_PASSWORD}' | base64 -d`.
+- Alertele se văd în Grafana/Alertmanager: cele de business (storage căzut, circuit deschis, citiri pierdute sau duplicate, fault records lente sau eșuate, video eșuate) și cele de infrastructură (`TargetDown`, `PodCrashLooping`, `ContainerMemoryNearLimit`, `NodeMemoryHigh`, `NodeDiskHigh`; node-exporter rulează fără rețeaua gazdei, doar cu colectoarele de memorie și disc). Pentru notificări Discord/Telegram se editează Secret-ul `monitoring/alertmanager-config` (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
 - Chaos:
   - `make chaos-storage-stop S=s3` / `make chaos-storage-start S=s3`;
   - `sudo make chaos-netem-on NS=filegrid POD=<pod> DELAY=300ms LOSS=5%` (doar în rețeaua podului, nu pe interfețele VPS-ului) / `chaos-netem-off`;
@@ -165,10 +169,13 @@ await withCategory('fault_records', async () => {
 
 - cert-manager obține certificatul Let's Encrypt (HTTP-01 prin Traefik); Traefik redirecționează permanent HTTP la HTTPS.
 - Traefik citește o cerere (cu tot corpul) cel mult 15 minute (`readTimeout` 900s; implicit ar fi 60s). Încărcările mari se trimit în bucăți de 1-5 MB, ca fiecare cerere să încapă în acest timp și pe o legătură lentă.
+- Header-e de securitate pe toate răspunsurile de pe host (aplicația, `/api`, `/grafana`, placeholder-ul), puse de Traefik prin Middleware-ul `security-headers` (namespace-urile `filegrid` și `monitoring`): `Strict-Transport-Security: max-age=31536000` (fără `includeSubDomains` și fără `preload`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`. Un header cu același nume trimis de aplicație e înlocuit de valoarea Traefik.
+- Grafana: cookie-ul de sesiune e `Secure` și `SameSite=Strict`; `/grafana/metrics` nu mai e public (metricile interne ale Grafana sunt oprite, Prometheus nu le citea); fără statistici și verificări de versiune către grafana.com; versiunea nu apare pentru cine nu e logat (subsol, `/api/health`).
+- NetworkPolicy în afara storage-urilor: în `monitoring` intrarea e permisă doar din același namespace și de la Traefik spre Grafana; blackbox-exporter (`filegrid`, eticheta storage-client) primește probe pe 9115 doar de la podul Prometheus server; backend-ul doar de la Traefik, `filegrid` și `monitoring`; simulatorul doar de la backend și `monitoring`.
 - Înregistrarea DNS rămâne **DNS-only** (nor gri) în Cloudflare: proxy-ul Cloudflare (planurile Free/Pro) limitează corpul unei cereri la 100 MB, prea puțin pentru videoclipurile de dronă. Dacă proxy-ul e totuși activat, modul SSL/TLS trebuie să fie **Full (strict)**, niciodată Flexible (buclă de redirect), iar IP-ul văzut de aplicație devine cel al Cloudflare (header-ele lui nu sunt crezute).
 
 ## Structura
 
-- `deploy/k8s/`: manifeste k3s (cert-manager, Traefik, placeholder) și `storage/` (StatefulSet-uri, NetworkPolicy)
+- `deploy/k8s/`: manifeste k3s (cert-manager, Traefik, placeholder), `app/` (backend, frontend, simulator, Middleware-ul `security-headers`), `observability/` (valori helm, alerte și testele lor, dashboard) și `storage/` (StatefulSet-uri, NetworkPolicy)
 - `infra/`: Docker Compose pentru laptop
-- `scripts/`: bootstrap-ul gazdei, Secret-ul de credențiale, job-ul de bucket, configurarea Traefik, verificarea izolării
+- `scripts/`: bootstrap-ul gazdei, Secret-urile, job-ul de bucket, configurarea Traefik, verificarea izolării, criptarea Secret-elor k3s, helm-ul observabilității; `scripts/tests/` (testele lor, `make scripts-test`)
