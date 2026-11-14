@@ -8,6 +8,7 @@ import { UPLOAD_STATES, type UploadEvent, type UploadState } from './types';
 const ROWS: [UploadState, UploadEvent, UploadState][] = [
   ['queued', { type: 'SLOT_FREE' }, 'hashing'],
   ['queued', { type: 'FILE_MISSING' }, 'needs_file'],
+  ['queued', { type: 'FILE_ATTACHED', to: 'uploading' }, 'uploading'],
   ['hashing', { type: 'FILE_MISSING' }, 'needs_file'],
   ['hashing', { type: 'HASH_DONE' }, 'uploading'],
   ['hashing', { type: 'FAIL', reason: 'file_changed' }, 'failed'],

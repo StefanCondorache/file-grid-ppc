@@ -11,10 +11,11 @@ import { createUploadApi, createXhrTransport, errorBody, type PartTransport, typ
 import { backoffMs } from './backoff';
 import { rangesToParts, type CompleteResult, type UploadMetadata } from './contract';
 import type { UploadControl } from './engine-port';
+import { reopen } from './file-handle';
 import { createWorkerHasher, type HashClient } from './hasher';
 import { transition } from './machine';
 import { createNetMonitor, createPingProbe, type NetMonitor } from './net';
-import { persistableHandle, toPersistable } from './pii';
+import { hasPersonalData, persistableHandle, toPersistable } from './pii';
 import { effectiveMime, isUsableChunkSize, partCount, partRange, validateFile } from './plan';
 import { createCoalescer, createSpeedMeter, type SpeedMeter } from './progress';
 import { bitsetHas, bitsetNew, bitsetSet, createRepo, type UploadRepo } from './repo';
@@ -141,6 +142,8 @@ interface Job {
   /** Bumped by every pause, cancel or new run; async work checks it after each await. */
   gen: number;
   reconciles: number;
+  /** Loaded after a reload: GET /uploads/{id} is merged into the bitset before the first part goes out. */
+  syncPending: boolean;
 }
 
 const noop = () => {};
@@ -220,6 +223,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       storage: r?.storage,
       usedFallback: r?.usedFallback,
       policyVersion: rec?.policy?.version,
+      reopenable: job.state === 'needs_file' && job.handle !== null,
     };
   }
 
@@ -304,6 +308,11 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
 
   function guard(job: Job, g: number): void {
     if (job.gen !== g || jobs.get(job.id) !== job) throw new Stale();
+  }
+
+  /** Nothing ended this run (pause, cancel, a newer run) and the owner is still the one signed in (BA-65). */
+  function live(job: Job, g: number): boolean {
+    return job.gen === g && jobs.get(job.id) === job && job.userId === owner;
   }
 
   function pauseJob(job: Job, reason: PauseReason): void {
@@ -420,6 +429,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
   async function run(job: Job): Promise<void> {
     const g = supersede(job);
     try {
+      if (job.syncPending) await syncReceived(job, g);
       if (job.state === 'hashing') await prepare(job, g);
       if (job.state === 'uploading') startParts(job);
       else if (job.state === 'verifying') await verify(job, g);
@@ -526,6 +536,30 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       persist(job, true);
     }
     fire(job, { type: 'HASH_DONE' });
+  }
+
+  /**
+   * After a reload, before any part goes out: the server's received parts are merged into the local bitset, since a
+   * part can land as the tab closes, before its receipt arrives. Only the parts missing on both sides are sent.
+   */
+  async function syncReceived(job: Job, g: number): Promise<void> {
+    const rec = job.rec;
+    const uploadId = rec?.uploadId;
+    if (!rec || !uploadId || !rec.partCount) {
+      job.syncPending = false; // no session yet: nothing was sent
+      return;
+    }
+    const st = await withRetry(job, g, () => api.status(uploadId));
+    if (st.status === 'aborted' || st.status === 'expired') throw new Failure('upload_gone');
+    // Past `open`, the server took complete: it holds every part.
+    const all = Array.from({ length: rec.partCount }, (_, i) => i + 1);
+    const received = st.status === 'open' ? rangesToParts(st.receivedRanges).filter((n) => n >= 1 && n <= rec.partCount!) : all;
+    job.rec = { ...rec, confirmed: received.reduce(bitsetSet, rec.confirmed) };
+    job.syncPending = false;
+    persist(job);
+    changed(job);
+    if (job.state === 'uploading' && phase(job) === 'verifying') fire(job, { type: 'ALL_PARTS_OK' });
+    if (st.result && job.state === 'verifying') settle(job, st.result);
   }
 
   /** `uploading`: hand the unconfirmed parts to the scheduler (one per job, reused across runs). */
@@ -709,6 +743,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       ac: new AbortController(),
       gen: 0,
       reconciles: 0,
+      syncPending: false,
       ...rest,
     };
   }
@@ -718,7 +753,13 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     const { localId: id, clientKey, userId, startedByRole: role, category, displayName, createdAt, state, pauseReason, failReason } = rec;
     return newJob(
       { id, clientKey, userId, role, category, size: rec.fingerprint.size, displayName, createdAt, state },
-      { rec, pauseReason, failReason, error: failReason ? { code: failReason.toUpperCase(), message: ro.upload.failure[failReason] } : undefined },
+      {
+        rec,
+        pauseReason,
+        failReason,
+        error: failReason ? { code: failReason.toUpperCase(), message: ro.upload.failure[failReason] } : undefined,
+        syncPending: true,
+      },
     );
   }
 
@@ -736,6 +777,38 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     const parts = samplePartNumbers(count);
     const hashes = await hasher.sample(file, chunkSize, parts);
     return parts.every((n) => hashes[n] === partSha256[n - 1]);
+  }
+
+  /** Gives the job its file back once it is proven to be the same one; another file fails and nothing is sent. */
+  async function attach(job: Job, file: File): Promise<void> {
+    const g = supersede(job);
+    const same = await isSameFile(job.rec!, file).catch(() => false);
+    if (!live(job, g)) return;
+    if (!same) return fail(job, 'different_file');
+    job.file = file;
+    fire(job, { type: 'FILE_ATTACHED', to: phase(job) });
+    void run(job);
+  }
+
+  /**
+   * After a reload: the stored file handle (Chromium) gives the file back with no click while read access is still
+   * granted (upload-engine.md §8.5). Otherwise the upload waits in `needs_file`: one click when the handle only needs
+   * read access again, a re-select when there is no handle or it cannot give the file back. Connection documents
+   * never reopen from a handle, even one found in IndexedDB: the user always picks them again (§8.2, UE-12).
+   * `auto` is false for an upload the user paused: their pause survives the reload.
+   */
+  async function reopenStored(job: Job, auto: boolean): Promise<void> {
+    const g = job.gen;
+    const handle = hasPersonalData(job.category) ? null : ((await repo.getHandle(job.id).catch(() => null)) ?? null);
+    if (!live(job, g)) return; // another user signed in meanwhile: the upload waits, paused, for its owner
+    job.handle = handle;
+    if (handle && auto) {
+      const file = await reopen(handle);
+      if (!live(job, g)) return;
+      if (file !== null && file !== 'needs_permission') return attach(job, file);
+      if (file === null) job.handle = null; // refused, moved or deleted: only a re-select brings it back
+    }
+    fire(job, { type: 'FILE_MISSING' });
   }
 
   // ---- commands --------------------------------------------------------------------------------------------
@@ -793,13 +866,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       const job = jobs.get(id);
       const attachable = job?.state === 'needs_file' || (job?.state === 'failed' && job.failReason === 'different_file');
       if (!job?.rec || !attachable) return;
-      const g = supersede(job);
-      const same = await isSameFile(job.rec, file).catch(() => false);
-      if (job.gen !== g || jobs.get(id) !== job) return;
-      if (!same) return fail(job, 'different_file');
-      job.file = file;
-      fire(job, { type: 'FILE_ATTACHED', to: phase(job) });
-      void run(job);
+      await attach(job, file);
     },
 
     pauseAll(reason) {
@@ -807,6 +874,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     },
 
     resumeAll(ownerUserId) {
+      if (ownerUserId !== owner) return; // a late call for a user who is no longer signed in (Review Focus 2)
       for (const job of jobs.values()) {
         if (job.userId === ownerUserId && job.state === 'paused' && (job.pauseReason === 'session' || job.pauseReason === 'logout')) resumeJob(job);
       }
@@ -821,6 +889,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       await repo.purgeOlderThan(RECORD_TTL_MS).catch(noop);
       const records = await repo.listFor(userId).catch((): PersistedUpload[] => []);
       if (owner !== userId) return; // a newer restore owns the view
+      const restored: { job: Job; auto: boolean }[] = [];
       for (const rec of records) {
         if (jobs.has(rec.localId)) continue;
         if (rec.state === 'verified') {
@@ -829,10 +898,12 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
         }
         const job = fromRecord(rec);
         jobs.set(job.id, job);
-        // A reloaded upload never jumps straight back to `uploading`; without its file it waits for the user.
-        if (fire(job, { type: 'RESTORE' }) === 'queued') fire(job, { type: 'FILE_MISSING' });
+        const userPaused = rec.state === 'paused' && rec.pauseReason === 'user';
+        // A reloaded upload never jumps straight back to `uploading`: it waits in `queued` until its file is back.
+        if (fire(job, { type: 'RESTORE' }) === 'queued') restored.push({ job, auto: !userPaused });
       }
       rebuild();
+      await Promise.all(restored.map(({ job, auto }) => reopenStored(job, auto)));
     },
 
     async restoreAndResume(userId) {

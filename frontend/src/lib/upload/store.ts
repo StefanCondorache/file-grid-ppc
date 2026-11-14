@@ -59,6 +59,11 @@ export interface UploadItemView {
   usedFallback?: boolean;
   /** The policy version frozen when the upload started ("Politica v3 (la pornire)"). */
   policyVersion?: number;
+  /**
+   * `needs_file` with a stored file handle (Chromium) that only needs read access again: one click on the row gives
+   * the file back. When false the user re-selects the file (`reattach`).
+   */
+  reopenable: boolean;
 }
 
 export interface UploadStoreState {
