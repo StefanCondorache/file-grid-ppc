@@ -7,7 +7,9 @@ import { BulkheadService } from '../bulkhead/bulkhead.service';
 import { AppError } from '../common/app-error';
 import type { Keyring } from '../crypto/keys';
 import { decryptStream } from '../crypto/envelope';
+import { VIEW_CAPABILITY } from '../common/domain';
 import { DB, type Db } from '../database/database';
+import { EventBus } from '../events/event-bus.service';
 import { KEYRING, ObjectStoreService } from '../object-store/object-store.service';
 import { UPLOAD_DURATION, UPLOADS_TOTAL } from '../observability/app-metrics';
 import { OperationsService } from '../observability/operations.service';
@@ -54,6 +56,7 @@ export class UploadAssembler {
     private readonly bulkhead: BulkheadService,
     private readonly audit: AuditService,
     private readonly operations: OperationsService,
+    private readonly events: EventBus,
   ) {}
 
   async complete(
@@ -155,6 +158,7 @@ export class UploadAssembler {
           principal,
         );
         finish('mismatch');
+        this.announce(session, result);
         return result;
       }
       const availableAfterMs = Math.round(performance.now() - started);
@@ -217,6 +221,7 @@ export class UploadAssembler {
         }),
       );
       finish('success');
+      this.announce(session, result);
       await this.operations.record({
         operation: 'upload.complete',
         category: session.category,
@@ -237,6 +242,37 @@ export class UploadAssembler {
       });
       throw error;
     }
+  }
+
+  /** Live events: the uploader learns the verdict; everyone who sees the category, the new file. */
+  private announce(session: SessionRow, result: Record<string, unknown>): void {
+    this.events.publish(
+      'upload.verified',
+      {
+        uploadId: session.id,
+        fileId: result.fileId ?? null,
+        verdict: result.verdict,
+        serverSha256: result.serverSha256,
+        availableAfterMs: result.availableAfterMs ?? null,
+      },
+      { username: session.created_by },
+    );
+    if (result.verdict !== 'match') return;
+    const metadata = session.metadata as Record<string, unknown>;
+    this.events.publish(
+      'file.created',
+      {
+        fileId: result.fileId,
+        category: session.category,
+        zone: session.zone,
+        severity: typeof metadata.severity === 'string' ? metadata.severity : null,
+        substation: typeof metadata.substation === 'string' ? metadata.substation : null,
+        origin: 'manual',
+        createdAt: result.availableAt,
+        availableAt: result.availableAt,
+      },
+      { capability: VIEW_CAPABILITY[session.category] },
+    );
   }
 
   /** The staged parts in order, decrypted, each checked against the hash recorded when it arrived. */

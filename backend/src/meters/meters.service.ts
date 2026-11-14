@@ -9,6 +9,7 @@ import { OperationsService } from '../observability/operations.service';
 import { currentTraceId, span } from '../observability/trace-context';
 import { PoliciesService } from '../policies/policies.service';
 import type { Reading, ReadingBatch, ReadingQuery } from './meters.schemas';
+import { SimulatorClient } from './simulator.client';
 
 export interface BatchResult {
   readonly received: number;
@@ -42,6 +43,7 @@ export class MetersService {
     private readonly store: ObjectStoreService,
     private readonly bulkhead: BulkheadService,
     private readonly operations: OperationsService,
+    private readonly simulator: SimulatorClient,
   ) {}
 
   async ingest(batch: ReadingBatch, keyId: string): Promise<BatchResult> {
@@ -254,6 +256,19 @@ export class MetersService {
         hasMore: rows.length > query.pageSize,
       },
     };
+  }
+
+  /**
+   * The counters with `lost` = sent - acked - queued as reported by the simulator, or null when the
+   * simulator does not answer.
+   */
+  async liveCounters() {
+    const status = await this.simulator.status().catch(() => null);
+    const lost =
+      status?.sentUnique === undefined || status.ackedUnique === undefined
+        ? null
+        : Math.max(0, status.sentUnique - status.ackedUnique - (status.queueDepth ?? 0));
+    return this.counters(lost);
   }
 
   /** Totals since the start, the rate over the last minute, and per zone. */

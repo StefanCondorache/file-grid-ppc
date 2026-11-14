@@ -1,8 +1,9 @@
 import { Controller, Get, Module } from '@nestjs/common';
 import { Authenticated, NoSessionRefresh } from '../auth/auth.decorators';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
-import { CATEGORIES, STORAGES } from '../common/domain';
+import { CATEGORIES } from '../common/domain';
 import { ObjectStoreService } from '../object-store/object-store.service';
+import { storageHealthItems } from './storage-health';
 
 /** Storage health strip and bulkhead state for the UI (live values of this replica). */
 @Controller()
@@ -16,19 +17,7 @@ export class MonitoringController {
   @Authenticated()
   @NoSessionRefresh()
   storageHealth() {
-    const status = this.store.status();
-    return {
-      data: STORAGES.map((storage) => {
-        const s = status[storage];
-        return {
-          storage,
-          status: s.up === false ? 'down' : s.circuit === 'closed' ? 'ok' : 'degraded',
-          latencyMs: s.latencyMs,
-          lastCheckAt: s.lastCheckAt ?? new Date().toISOString(),
-          circuitState: s.circuit,
-        };
-      }),
-    };
+    return { data: storageHealthItems(this.store.status()) };
   }
 
   @Get('metrics/bulkhead')

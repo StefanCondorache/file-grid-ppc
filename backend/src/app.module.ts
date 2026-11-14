@@ -5,6 +5,7 @@ import { BulkheadModule } from './bulkhead/bulkhead.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
+import { EventsModule } from './events/events.module';
 import { FilesModule } from './files/files.module';
 import { HealthModule } from './health/health.module';
 import { MetersModule } from './meters/meters.module';
@@ -26,6 +27,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ObjectStoreModule,
     ObservabilityModule,
     BulkheadModule,
+    EventsModule,
     AuditModule,
     HealthModule,
     AuthModule,

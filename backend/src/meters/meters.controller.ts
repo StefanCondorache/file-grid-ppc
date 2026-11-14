@@ -13,6 +13,7 @@ import type { Principal } from '../auth/auth.types';
 import { ZodPipe } from '../common/zod.pipe';
 import { Inject } from '@nestjs/common';
 import { DB, type Db } from '../database/database';
+import { EventBus } from '../events/event-bus.service';
 import {
   type ReadingBatch,
   type ReadingQuery,
@@ -40,6 +41,7 @@ export class MetersController {
     private readonly simulator: SimulatorClient,
     private readonly audit: AuditService,
     @Inject(DB) private readonly db: Db,
+    private readonly events: EventBus,
   ) {}
 
   /** Smart meters (the simulator) send batches here with X-API-Key. */
@@ -59,13 +61,8 @@ export class MetersController {
   @Get('meters/counters')
   @Authenticated('view_meters')
   @NoSessionRefresh()
-  async counters() {
-    const status = await this.simulator.status().catch(() => null);
-    const lost =
-      status?.sentUnique === undefined || status.ackedUnique === undefined
-        ? null
-        : Math.max(0, status.sentUnique - status.ackedUnique - (status.queueDepth ?? 0));
-    return this.meters.counters(lost);
+  counters() {
+    return this.meters.liveCounters();
   }
 
   @Get('meters/simulator')
@@ -81,6 +78,7 @@ export class MetersController {
     @CurrentPrincipal() principal: Principal,
   ) {
     const status = await this.simulator.update(body);
+    this.events.publish('simulator.status', { ...status }, { capability: 'view_meters' });
     await this.audit.record(this.db, {
       actor: principal.username,
       action: 'simulator_rate',

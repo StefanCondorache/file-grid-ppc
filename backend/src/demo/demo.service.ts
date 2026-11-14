@@ -5,8 +5,9 @@ import { AppError } from '../common/app-error';
 import type { StorageName } from '../common/domain';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import { DB, type Db } from '../database/database';
+import { EventBus } from '../events/event-bus.service';
 import { FilesService } from '../files/files.service';
-import { SimulatorClient } from '../meters/simulator.client';
+import { SimulatorClient, type SimulatorStatus } from '../meters/simulator.client';
 import { ObjectStoreService } from '../object-store/object-store.service';
 import { KubeClient } from './kube.client';
 
@@ -23,6 +24,7 @@ export class DemoService {
     private readonly store: ObjectStoreService,
     private readonly kube: KubeClient,
     private readonly audit: AuditService,
+    private readonly events: EventBus,
   ) {}
 
   async status() {
@@ -47,6 +49,7 @@ export class DemoService {
       throw new AppError(409, 'STORM_ALREADY_RUNNING', 'O furtună rulează deja.');
     }
     const status = await this.simulator.update({ mode: 'peak', durationS });
+    this.announceStorm(status, 'started');
     await this.record(
       principal,
       'storm_start',
@@ -57,6 +60,7 @@ export class DemoService {
 
   async stopStorm(principal: Principal) {
     const status = await this.simulator.update({ mode: 'normal' });
+    this.announceStorm(status, 'stopped');
     await this.record(principal, 'storm_stop', 'meter_readings');
     return status;
   }
@@ -101,6 +105,16 @@ export class DemoService {
     await this.kube.scale(storage, running ? 1 : 0);
     await this.record(principal, running ? 'storage_start' : 'storage_stop', storage);
     return { storage, running, replicas: running ? 1 : 0 };
+  }
+
+  private announceStorm(status: SimulatorStatus, state: 'started' | 'stopped'): void {
+    this.events.publish('demo.storm', {
+      category: 'meter_readings',
+      factor: Math.round((status.peakRatePerS / Math.max(1, status.normalRatePerS)) * 10) / 10,
+      state,
+      endsAt: state === 'started' ? (status.stormEndsAt ?? null) : null,
+    });
+    this.events.publish('simulator.status', { ...status }, { capability: 'view_meters' });
   }
 
   private record(

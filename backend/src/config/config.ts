@@ -41,6 +41,10 @@ const envSchema = z.object({
   SIMULATOR_URL: z.string().url().default('http://filegrid-simulator.filegrid.svc:8080'),
   UPLOAD_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  // Live stream (GET /stream, ADR-0008).
+  STREAM_PING_S: z.coerce.number().min(0.1).max(300).default(20),
+  STREAM_COUNTERS_INTERVAL_S: z.coerce.number().min(0.5).max(300).default(2),
+  STREAM_MAX_CLIENTS: z.coerce.number().int().min(1).max(10_000).default(200),
   // Envelope encryption keys (Secret filegrid-app-secrets); parsed and checked by src/crypto/keys.ts.
   FILEGRID_KEK: z.string().optional(),
   FILEGRID_KEK_ID: z.string().optional(),
@@ -66,6 +70,11 @@ export interface AppConfig {
   readonly simulatorUrl: string;
   readonly uploadSessionTtlHours: number;
   readonly logLevel: LogLevel;
+  readonly stream: {
+    readonly pingMs: number;
+    readonly countersIntervalMs: number;
+    readonly maxClients: number;
+  };
   /** The FILEGRID_KEK* variables, handed to Keyring.fromEnv (never logged). */
   readonly kekEnv: Readonly<Record<string, string | undefined>>;
 }
@@ -137,6 +146,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     simulatorUrl: e.SIMULATOR_URL,
     uploadSessionTtlHours: e.UPLOAD_SESSION_TTL_HOURS,
     logLevel: e.LOG_LEVEL,
+    stream: {
+      pingMs: Math.round(e.STREAM_PING_S * 1000),
+      countersIntervalMs: Math.round(e.STREAM_COUNTERS_INTERVAL_S * 1000),
+      maxClients: e.STREAM_MAX_CLIENTS,
+    },
     kekEnv: {
       FILEGRID_KEK: e.FILEGRID_KEK,
       FILEGRID_KEK_ID: e.FILEGRID_KEK_ID,
