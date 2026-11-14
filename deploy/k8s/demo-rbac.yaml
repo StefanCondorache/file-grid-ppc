@@ -1,0 +1,94 @@
+# Least-privilege RBAC for the demo panel: the backend (ServiceAccount filegrid-backend in namespace filegrid,
+# created by the app stream; a RoleBinding may reference it before it exists) may stop/start the three storages
+# by scaling their StatefulSets to 0/1, and read their state. Nothing else:
+#   - no delete/create on anything, no access to Secrets, PVCs, Services or NetworkPolicies;
+#   - scale and get are pinned to the three StatefulSets by name (list/watch cannot be pinned by resourceNames,
+#     they only expose the StatefulSet objects of this one namespace);
+#   - only namespace filegrid-storage (a Role, not a ClusterRole).
+# Network degradation (tc netem) is NOT exposed to the cluster: it needs root on the node (make chaos-netem-*).
+# The RBAC only works if the backend pod actually has an API token: the SA has automountServiceAccountToken: false,
+# so the backend Deployment (app stream) must set automountServiceAccountToken: true in its pod spec, otherwise
+# every scale call is rejected as unauthenticated (401). `make chaos-rbac-check` verifies both halves.
+# Applied by `make chaos-rbac`, which mk/chaos.mk makes a prerequisite of `app-up` (so `make up` applies it too).
+# The ValidatingAdmissionPolicy at the end caps what the SA may scale to: 0 (stop) or 1 (start), never N replicas
+# (each extra replica = a new pod + PVC, enough to OOM a 3.8 GiB node).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: filegrid-demo-storage-control
+  namespace: filegrid-storage
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames: ["postgres", "s3", "ftp"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    resourceNames: ["postgres", "s3", "ftp"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: filegrid-demo-storage-control
+  namespace: filegrid-storage
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: filegrid-demo-storage-control
+subjects:
+  - kind: ServiceAccount
+    name: filegrid-backend
+    namespace: filegrid
+---
+# RBAC cannot restrict the replica count, so an in-process admission policy does (GA since k8s 1.30, no webhook,
+# no extra pod). Scope: only the backend SA, only statefulsets/scale in filegrid-storage. kubectl/admin scaling
+# (scripts/chaos/storage.sh) is not affected. Scale.spec.replicas=0 is omitted when serialized, hence the has().
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: filegrid-demo-storage-scale-0-or-1
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: filegrid-storage
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["statefulsets/scale"]
+  matchConditions:
+    - name: demo-backend-only
+      expression: "request.userInfo.username == 'system:serviceaccount:filegrid:filegrid-backend'"
+  validations:
+    - expression: "!has(object.spec) || !has(object.spec.replicas) || object.spec.replicas <= 1"
+      message: "the demo panel may only stop (replicas=0) or start (replicas=1) a storage"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: filegrid-demo-storage-scale-0-or-1
+  labels:
+    app.kubernetes.io/part-of: filegrid
+    app.kubernetes.io/component: demo-rbac
+spec:
+  policyName: filegrid-demo-storage-scale-0-or-1
+  validationActions: [Deny]
