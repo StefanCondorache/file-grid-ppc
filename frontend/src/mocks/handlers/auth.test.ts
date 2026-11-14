@@ -49,10 +49,11 @@ describe('auth mocks', () => {
     expect(db.list<{ action: string; actingAs: string }>('audit').filter((e) => e.action === 'role_switch')).toHaveLength(1);
   });
 
-  it('login-options defaults to passwordless off, and then a password is required', async () => {
+  it('login-options defaults to passwordless off, and then a missing password is a 422 like the backend', async () => {
     expect(await unwrap(api.GET('/auth/login-options'))).toEqual({ passwordless: false });
     const e = await unwrap(api.POST('/auth/login', { body: { username: 'auditor' } })).catch((x: ApiError) => x);
-    expect((e as ApiError).code).toBe('INVALID_CREDENTIALS');
+    expect([(e as ApiError).status, (e as ApiError).code]).toEqual([422, 'VALIDATION_ERROR']);
+    expect((e as ApiError).fieldErrors).toEqual([expect.objectContaining({ field: 'password' })]);
   });
 
   describe('passwordless knob (fg.mock.passwordless, like FILEGRID_PASSWORDLESS_LOGIN)', () => {
@@ -79,7 +80,7 @@ describe('auth mocks', () => {
       setMockSettings({ passwordless: true, demoMode: false });
       expect(await unwrap(api.GET('/auth/login-options'))).toEqual({ passwordless: false });
       const e = await unwrap(api.POST('/auth/login', { body: { username: 'auditor' } })).catch((x: ApiError) => x);
-      expect((e as ApiError).code).toBe('INVALID_CREDENTIALS');
+      expect([(e as ApiError).status, (e as ApiError).code]).toEqual([422, 'VALIDATION_ERROR']);
     });
   });
 

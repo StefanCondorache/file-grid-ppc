@@ -1665,6 +1665,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["InvalidCredentials"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };

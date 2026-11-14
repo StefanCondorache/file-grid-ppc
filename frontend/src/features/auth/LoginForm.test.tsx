@@ -112,11 +112,29 @@ describe('LoginForm', () => {
     expect(screen.getByRole('button', { name: 'Intră în cont' }).closest('form')).not.toHaveAttribute('aria-busy');
   });
 
-  it('falls back to the password form when the login options cannot be read', async () => {
-    server.use(http.get(apiUrl('/auth/login-options'), () => Response.error()));
+  it('falls back to the password form after one quick retry when the login options cannot be read', async () => {
+    const attempts = vi.fn();
+    server.use(http.get(apiUrl('/auth/login-options'), () => { attempts(); return Response.error(); }));
     renderWithClient(<LoginForm next={null} reason={null} onLoggedIn={() => {}} />);
-    await ready();
+    await waitFor(() => expect(screen.getByLabelText('Rol')).toBeEnabled(), { timeout: 3_000 });
     expect(screen.getByLabelText('Parolă')).toBeInTheDocument();
+    expect(attempts).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks for the password again when passwordless login is turned off after the page loaded', async () => {
+    setMockSettings({ passwordless: true });
+    const seen = captureLoginBodies();
+    const onLoggedIn = vi.fn();
+    renderWithClient(<LoginForm next={null} reason={null} onLoggedIn={onLoggedIn} />);
+    await screen.findByText('Mod demo: autentificare fără parolă.');
+    setMockSettings(null); // the backend switch goes back to "false"
+    await submit('auditor');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unele câmpuri nu sunt completate corect.');
+    expect(await screen.findByLabelText('Parolă')).toBeEnabled();
+    expect(screen.queryByText('Mod demo: autentificare fără parolă.')).not.toBeInTheDocument();
+    await submit('auditor', SEED_PASSWORD);
+    await waitFor(() => expect(onLoggedIn).toHaveBeenCalledWith('/'));
+    expect(seen.mock.calls.map(([body]) => body)).toEqual([{ username: 'auditor' }, { username: 'auditor', password: SEED_PASSWORD }]);
   });
 
   describe('passwordless demo login', () => {

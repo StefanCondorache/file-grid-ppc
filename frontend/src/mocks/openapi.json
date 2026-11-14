@@ -93,6 +93,9 @@
           "401": {
             "$ref": "#/components/responses/InvalidCredentials"
           },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           }

@@ -32,7 +32,7 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /auth/login-options` | anyone | `{passwordless: boolean}`: whether the login form asks for a password. `Cache-Control: public, max-age=5` |
-| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. `password` may be left out while passwordless login is on. Errors: `401 INVALID_CREDENTIALS`, `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
+| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. `password` may be left out while passwordless login is on. Errors: `401 INVALID_CREDENTIALS`, `422 VALIDATION_ERROR` (no `password` while passwordless login is off), `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
 | `POST /auth/logout` | session | `204`, expires the cookie |
 | `GET /auth/me` | session | `Me` |
 | `POST /auth/refresh` | session | `200 Me`, with a new idle window |
