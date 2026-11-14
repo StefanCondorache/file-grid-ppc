@@ -4,22 +4,25 @@ import type { Category, Role } from '../common/domain';
 import type { Database } from '../database/schema';
 import { currentTraceId } from '../observability/trace-context';
 
-/** Audit actions; the names match the frontend's AuditAction enum. */
-export type AuditAction =
-  | 'login'
-  | 'logout'
-  | 'role_switch'
-  | 'upload'
-  | 'download'
-  | 'verify'
-  | 'reveal_pii'
-  | 'policy_update'
-  | 'storm_start'
-  | 'storm_stop'
-  | 'file_corrupted'
-  | 'storage_stop'
-  | 'storage_start'
-  | 'simulator_rate';
+/** Audit actions; the names match the frontend's AuditAction enum (plus storage_stop/start). */
+export const AUDIT_ACTIONS = [
+  'login',
+  'logout',
+  'role_switch',
+  'upload',
+  'download',
+  'verify',
+  'reveal_pii',
+  'policy_update',
+  'storm_start',
+  'storm_stop',
+  'file_corrupted',
+  'storage_stop',
+  'storage_start',
+  'simulator_rate',
+  'alert_ack',
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export interface AuditEntry {
   readonly actor: string;
