@@ -1,7 +1,9 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Announcer } from '@/components/a11y/Announcer';
 import { LiveBridge } from '@/features/shell/LiveBridge';
+import { resetAnnouncer } from '@/lib/a11y/announcer';
 import { db } from '@/mocks/db';
 import { buildHandlers } from '@/mocks/handlers';
 import { scenario } from '@/mocks/scenario';
@@ -111,6 +113,7 @@ describe('live fault list', () => {
     // Only the wall clock is frozen; timers, MSW and the stream run for real.
     vi.useFakeTimers({ toFake: ['Date'], now: NOW });
     db.reset();
+    resetAnnouncer();
     nav.go('/files?category=fault');
     useAppStore.setState({ live: 'connecting', livePaused: false });
     startSession(SEED_USERS.find((u) => u.username === 'dispecerat')!);
@@ -120,9 +123,10 @@ describe('live fault list', () => {
     vi.useRealTimers();
   });
 
-  it('puts a fault from the stream on top within 1 s, without moving keyboard focus, marked "Nou · acum 4 s"', async () => {
+  it('puts a fault from the stream on top within 1 s, without moving keyboard focus, marked "Nou · acum 4 s", then announces it', async () => {
     renderWithClient(
       <>
+        <Announcer />
         <LiveBridge />
         <FilesScreen />
       </>,
@@ -158,7 +162,12 @@ describe('live fault list', () => {
     // Only the live row is marked.
     expect(screen.getAllByText(/^Nou ·/)).toHaveLength(1);
     expect(bodyRows()[1]).not.toHaveAttribute('data-new');
-  });
+
+    // SC-04: screen readers hear the new fault politely, once the 5 s storm-coalescing window closes.
+    const polite = screen.getByRole('status');
+    expect(polite).toHaveTextContent('');
+    await waitFor(() => expect(polite).toHaveTextContent('Avarie nouă: Dobrogea, PT Medgidia 4'), { timeout: 6_000 });
+  }, 10_000);
 });
 
 const fault = (over: Partial<FileItem> = {}): FileItem => ({
