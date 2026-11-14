@@ -354,7 +354,7 @@ describe('auth', () => {
 
     it('serves login-options publicly, briefly cacheable, without secrets', async () => {
       await app.close();
-      app = await createTestApp({ env: PASSWORDLESS });
+      app = await createTestApp({ env: PASSWORDLESS, logDestination: memoryLogDestination() });
 
       const response = await loginOptions();
 
@@ -367,7 +367,11 @@ describe('auth', () => {
     describe('when on, with demo mode on', () => {
       beforeEach(async () => {
         await app.close();
-        app = await createTestApp({ env: PASSWORDLESS, extraModules: [TestOnlyModule] });
+        app = await createTestApp({
+          env: PASSWORDLESS,
+          extraModules: [TestOnlyModule],
+          logDestination: memoryLogDestination(),
+        });
       });
 
       it.each([
@@ -391,6 +395,40 @@ describe('auth', () => {
         const profile = await me({ Cookie: sessionCookieFrom(response) });
         expect(profile.status).toBe(200);
         expect(profile.body.user.username).toBe(role);
+      });
+
+      it('keeps the 8 h absolute and 30 min idle expiry', async () => {
+        const response = await loginWithoutPassword('auditor');
+
+        const cookie = String(response.headers['set-cookie']);
+        expect(Number(/Max-Age=(\d+)/.exec(cookie)?.[1])).toBeGreaterThan(EIGHT_HOURS_S - 5);
+        const absolute = Date.parse(response.body.expiresAt) - Date.now();
+        const idle = Date.parse(response.body.idleExpiresAt) - Date.now();
+        expect(absolute).toBeGreaterThan((EIGHT_HOURS_S - 60) * 1000);
+        expect(absolute).toBeLessThanOrEqual(EIGHT_HOURS_S * 1000);
+        expect(idle).toBeGreaterThan(29 * 60_000);
+        expect(idle).toBeLessThanOrEqual(30 * 60_000);
+      });
+
+      it('lets a passwordless admin switch the acting role, then log out', async () => {
+        const cookie = sessionCookieFrom(await loginWithoutPassword('admin'));
+
+        const switched = await request(app.getHttpServer())
+          .post('/api/v1/demo/acting-role')
+          .set(browser(cookie))
+          .send({ role: 'auditor' });
+        const logout = await request(app.getHttpServer())
+          .post('/api/v1/auth/logout')
+          .set(browser(sessionCookieFrom(switched)));
+
+        expect(switched.status).toBe(200);
+        expect(switched.body).toMatchObject({
+          activeRole: 'auditor',
+          user: { role: 'auditor' },
+          realUser: { username: 'admin', role: 'admin' },
+        });
+        expect(logout.status).toBe(204);
+        expect(String(logout.headers['set-cookie'])).toMatch(/^__Host-fg_session=; .*Max-Age=0/);
       });
 
       it('keeps the capabilities of the role', async () => {
