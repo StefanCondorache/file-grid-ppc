@@ -3,6 +3,7 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import { API_BASE } from '@/lib/api/base';
 import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
+import { auditHandlers } from './audit';
 import { actingRoleHandlers, authHandlers } from './auth';
 import { createStreamHandlers } from './stream';
 import { uploadHandlers } from './uploads';
@@ -14,7 +15,7 @@ export const groupHandlers: Record<Group, RequestHandler[]> = {
   policies: [],
   uploads: [...uploadHandlers],
   files: [],
-  audit: [],
+  audit: [...auditHandlers],
   meters: [],
   monitoring: [],
   statistics: [...statisticsHandlers],
