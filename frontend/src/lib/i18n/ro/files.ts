@@ -82,5 +82,27 @@ export const files = {
   prev: 'Pagina anterioară',
   next: 'Pagina următoare',
   pageOf: (page: string, pages: string) => `Pagina ${page} din ${pages}`,
+  /** When the server only estimates the total (a filtered readings list): no "din …". */
+  showingOpen: (from: string, to: string) => `Afișate ${from}–${to}`,
+  pageOnly: (page: string) => `Pagina ${page}`,
   partial: 'Filtrele „Încărcat de” și „Storage” se aplică pe cele mai recente 200 de fișiere găsite.',
+  /** The meter readings view of the list (`/files?category=meter`, 6c.4). */
+  meter: {
+    columns: {
+      meter: 'Contor',
+      readingTime: 'Citită la',
+      kwh: 'Consum (kWh)',
+      sequence: 'Secvență',
+    },
+    caption: 'Citiri contoare, cele mai noi primele',
+    tableRegion: 'Tabelul citirilor',
+    search: 'Contor',
+    searchPlaceholder: 'ex. RO-MUN-000123',
+    searchHint: 'ID-ul exact al contorului.',
+    empty: 'Nicio citire pentru aceste filtre',
+    emptyBody: 'Schimbă filtrele sau resetează-le ca să vezi toate citirile.',
+    emptyNone: 'Nu există încă citiri',
+    emptyNoneBody: 'Citirile trimise de contoare apar aici imediat ce sunt stocate.',
+    loading: 'Se încarcă citirile…',
+  },
 } as const;

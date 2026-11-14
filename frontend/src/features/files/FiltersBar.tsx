@@ -7,7 +7,7 @@ import { ROLE_OPTIONS } from '@/features/auth/roles';
 import { cn } from '@/lib/cn';
 import { plural, useT } from '@/lib/i18n';
 import {
-  activeFilterCount, INTEGRITY_STATES, ORIGINS, STORAGES, ZONES, type FileCategoryId, type FileFilters,
+  activeFilterCount, INTEGRITY_STATES, ORIGINS, READING_ORIGINS, STORAGES, ZONES, type FileCategoryId, type FileFilters,
 } from './filters';
 
 const CONTROL = 'h-10 w-full rounded-control border-[1.5px] border-input bg-surface px-3 text-[15px] text-ink';
@@ -68,6 +68,11 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
   const switchId = useId();
   const count = activeFilterCount(filters);
   const generatedHidden = filters.excludeGenerated === true;
+  // Readings (6c.4) are found by meter id, zone and origin only; the other filters do not apply to them.
+  const meterView = filters.category === 'meter_readings';
+  const search = meterView
+    ? { label: t.files.meter.search, placeholder: t.files.meter.searchPlaceholder, hint: t.files.meter.searchHint, maxLength: 64 }
+    : { label: f.search, placeholder: f.searchPlaceholder, hint: f.searchHint, maxLength: 100 };
 
   const submitSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -96,7 +101,7 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
-        <Field id={searchId} label={f.search} className="col-span-2">
+        <Field id={searchId} label={search.label} className="col-span-2">
           <div className="flex gap-2">
             <input
               key={filters.q ?? ''}
@@ -104,8 +109,8 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
               name="q"
               type="search"
               defaultValue={filters.q}
-              maxLength={100}
-              placeholder={f.searchPlaceholder}
+              maxLength={search.maxLength}
+              placeholder={search.placeholder}
               aria-describedby={hintId}
               autoComplete="off"
               className={CONTROL}
@@ -115,51 +120,66 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
             </Button>
           </div>
           <span id={hintId} className="text-[13px] text-ink-3">
-            {f.searchHint}
+            {search.hint}
           </span>
         </Field>
         <Choice label={f.zone} anyLabel={f.allZones} value={filters.zone} options={ZONES.map((z) => ({ value: z, label: t.files.zones[z] }))} onChange={(zone) => onChange({ zone })} />
-        <Day label={f.from} value={filters.from} max={filters.to} onChange={(from) => onChange({ from })} />
-        <Day label={f.to} value={filters.to} min={filters.from} onChange={(to) => onChange({ to })} />
-        <Choice label={f.uploader} anyLabel={f.anyone} value={filters.uploader} options={ROLE_OPTIONS.map((r) => ({ value: r.role, label: r.label }))} onChange={(uploader) => onChange({ uploader })} />
-        <Choice label={f.integrity} anyLabel={f.any} value={filters.integrity} options={INTEGRITY_STATES.map((s) => ({ value: s, label: t.files.integrity[s] }))} onChange={(integrity) => onChange({ integrity })} />
-        <Choice label={f.storage} anyLabel={f.any} value={filters.storage} options={STORAGES.map((s) => ({ value: s, label: t.files.storage[s] }))} onChange={(storage) => onChange({ storage })} />
-        <Choice label={f.origin} anyLabel={f.any} value={filters.origin} options={ORIGINS.map((o) => ({ value: o, label: t.files.origin[o] }))} onChange={(origin) => onChange({ origin })} />
+        {!meterView && (
+          <>
+            <Day label={f.from} value={filters.from} max={filters.to} onChange={(from) => onChange({ from })} />
+            <Day label={f.to} value={filters.to} min={filters.from} onChange={(to) => onChange({ to })} />
+            <Choice label={f.uploader} anyLabel={f.anyone} value={filters.uploader} options={ROLE_OPTIONS.map((r) => ({ value: r.role, label: r.label }))} onChange={(uploader) => onChange({ uploader })} />
+            <Choice label={f.integrity} anyLabel={f.any} value={filters.integrity} options={INTEGRITY_STATES.map((s) => ({ value: s, label: t.files.integrity[s] }))} onChange={(integrity) => onChange({ integrity })} />
+            <Choice label={f.storage} anyLabel={f.any} value={filters.storage} options={STORAGES.map((s) => ({ value: s, label: t.files.storage[s] }))} onChange={(storage) => onChange({ storage })} />
+          </>
+        )}
+        <Choice
+          label={f.origin}
+          anyLabel={f.any}
+          value={filters.origin}
+          options={(meterView ? READING_ORIGINS : ORIGINS).map((o) => ({ value: o, label: t.files.origin[o] }))}
+          onChange={(origin) => onChange({ origin })}
+        />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {/* The markup Radix Switch renders, without its form-size observer (no ResizeObserver needed). */}
-          <button
-            id={switchId}
-            type="button"
-            role="switch"
-            aria-checked={generatedHidden}
-            onClick={() => onChange({ excludeGenerated: generatedHidden ? undefined : true })}
-            className={cn(
-              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors duration-(--fg-dur-fast)',
-              generatedHidden ? 'bg-ink' : 'bg-(--fg-line-strong)',
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn('block size-5 rounded-full bg-surface shadow-e1 transition-transform duration-(--fg-dur-fast)', generatedHidden ? 'translate-x-[22px]' : 'translate-x-0.5')}
-            />
-          </button>
-          <label htmlFor={switchId} className="text-sm font-semibold">
-            {f.excludeGenerated}
-          </label>
+      {(!meterView || count > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Every reading is generated by the meters: hiding generated data would leave the readings view empty. */}
+          {!meterView && (
+            <div className="flex items-center gap-3">
+              {/* The markup Radix Switch renders, without its form-size observer (no ResizeObserver needed). */}
+              <button
+                id={switchId}
+                type="button"
+                role="switch"
+                aria-checked={generatedHidden}
+                onClick={() => onChange({ excludeGenerated: generatedHidden ? undefined : true })}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors duration-(--fg-dur-fast)',
+                  generatedHidden ? 'bg-ink' : 'bg-(--fg-line-strong)',
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn('block size-5 rounded-full bg-surface shadow-e1 transition-transform duration-(--fg-dur-fast)', generatedHidden ? 'translate-x-[22px]' : 'translate-x-0.5')}
+                />
+              </button>
+              <label htmlFor={switchId} className="text-sm font-semibold">
+                {f.excludeGenerated}
+              </label>
+            </div>
+          )}
+          {count > 0 && (
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-sm text-ink-2 tabular-nums">{plural(count, f.applied)}</span>
+              <Button type="button" variant="quiet" size="sm" onClick={onReset}>
+                <RotateCcw aria-hidden="true" />
+                {f.reset}
+              </Button>
+            </div>
+          )}
         </div>
-        {count > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-ink-2 tabular-nums">{plural(count, f.applied)}</span>
-            <Button type="button" variant="quiet" size="sm" onClick={onReset}>
-              <RotateCcw aria-hidden="true" />
-              {f.reset}
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
     </form>
   );
 }

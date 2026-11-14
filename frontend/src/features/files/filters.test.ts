@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, DEFAULT_FILTERS, parseFilters, toApiQuery, toSearchParams, type FileFilters } from './filters';
+import { activeFilterCount, DEFAULT_FILTERS, parseFilters, toApiQuery, toMeterApiQuery, toSearchParams, type FileFilters } from './filters';
 
 const sp = (query: string) => new URLSearchParams(query);
 
@@ -52,6 +52,26 @@ describe('file filters in the URL', () => {
     expect(activeFilterCount(DEFAULT_FILTERS)).toBe(0);
     expect(activeFilterCount({ ...DEFAULT_FILTERS, sort: 'size', page: 4 })).toBe(0);
     expect(activeFilterCount(FULL)).toBe(10);
+  });
+});
+
+describe('the meter readings view', () => {
+  it('keeps only the filters GET /meter-readings applies, in the parsed state and in the written URL', () => {
+    const query = 'category=meter&q=RO-BAN-000007&zone=banat&origin=storm&integrity=corrupt&storage=ftp&uploader=teren&from=2026-11-12&to=2026-11-14&excludeGenerated=1&sort=size&page=2';
+    expect(parseFilters(sp(query))).toEqual({ category: 'meter_readings', q: 'RO-BAN-000007', zone: 'banat', origin: 'storm', sort: '-createdAt', page: 2 });
+    expect(toSearchParams({ ...FULL, category: 'meter_readings' }).toString()).toBe('category=meter&q=Medgidia&zone=dobrogea&origin=storm&page=3');
+    // No reading is uploaded by hand.
+    expect(parseFilters(sp('category=meter&origin=manual')).origin).toBeUndefined();
+    expect(activeFilterCount(parseFilters(sp(query)))).toBe(4);
+  });
+
+  it('maps the search to the exact meter id of the real GET /meter-readings query', () => {
+    const f = parseFilters(sp('category=meter&q=RO-BAN-000007&zone=banat&origin=seed'));
+    expect(toMeterApiQuery(f, { page: 2, pageSize: 25 })).toEqual({ meterId: 'RO-BAN-000007', zone: 'banat', origin: 'seed', page: '2', pageSize: '25' });
+    expect(toMeterApiQuery(parseFilters(sp('category=meter')), { page: 1, pageSize: 25 })).toEqual({ page: '1', pageSize: '25' });
+    // An id no meter can have (the ingest format is [A-Za-z0-9._-]{1,64}) is never sent.
+    expect(toMeterApiQuery(parseFilters(sp('category=meter&q=RO%20MUN%207')), { page: 1, pageSize: 25 })).toBeNull();
+    expect(toMeterApiQuery(parseFilters(sp(`category=meter&q=${'7'.repeat(65)}`)), { page: 1, pageSize: 25 })).toBeNull();
   });
 });
 

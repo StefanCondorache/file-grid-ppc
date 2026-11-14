@@ -14,6 +14,8 @@ export const FILE_CATEGORIES = ['fault_records', 'drone_videos', 'connection_doc
 export type FileCategoryId = (typeof FILE_CATEGORIES)[number];
 export const ZONES = ['muntenia', 'banat', 'dobrogea'] as const satisfies readonly Zone[];
 export const ORIGINS = ['manual', 'simulator', 'storm', 'seed'] as const satisfies readonly Origin[];
+/** Meters send readings; nobody uploads one by hand (docs/api.md "Meter readings"). */
+export const READING_ORIGINS = ['simulator', 'storm', 'seed'] as const satisfies readonly Origin[];
 export const INTEGRITY_STATES = ['verified', 'server_verified', 'unverified', 'corrupt'] as const satisfies readonly IntegrityState[];
 export const STORAGES = ['s3', 'ftp', 'db'] as const satisfies readonly StorageId[];
 export const SORTS = ['-createdAt', 'createdAt', '-size', 'size'] as const;
@@ -71,6 +73,22 @@ const FIELDS = {
 /** Order of the keys in a written URL, so equal filters always give the same link. */
 const KEYS = Object.keys(FIELDS) as (keyof FileFilters)[];
 
+/**
+ * The meter readings view (SC-04 "readings table variant") lists readings, not files: `GET /meter-readings` filters
+ * by meter id, zone and origin only, newest first. Its other filters are dropped, so the URL, the applied count
+ * and the request never hold a filter that does nothing. Backend ask: `from`/`to` on `GET /meter-readings` (FE-11
+ * "filter by meter, zone, time").
+ */
+export function applicableFilters(f: FileFilters): FileFilters {
+  if (f.category !== 'meter_readings') return f;
+  const origin = (READING_ORIGINS as readonly string[]).includes(f.origin ?? '') ? f.origin : undefined;
+  const out: FileFilters = { category: f.category, sort: DEFAULT_FILTERS.sort, page: f.page };
+  if (f.q !== undefined) out.q = f.q;
+  if (f.zone !== undefined) out.zone = f.zone;
+  if (origin !== undefined) out.origin = origin;
+  return out;
+}
+
 export function parseFilters(sp: URLSearchParams): FileFilters {
   const out: Record<string, unknown> = { ...DEFAULT_FILTERS };
   for (const key of KEYS) {
@@ -79,10 +97,11 @@ export function parseFilters(sp: URLSearchParams): FileFilters {
     const parsed = FIELDS[key].safeParse(raw);
     if (parsed.success) out[key] = parsed.data;
   }
-  return out as FileFilters;
+  return applicableFilters(out as FileFilters);
 }
 
-export function toSearchParams(f: FileFilters): URLSearchParams {
+export function toSearchParams(filters: FileFilters): URLSearchParams {
+  const f = applicableFilters(filters);
   const params = new URLSearchParams();
   for (const key of KEYS) {
     const value = f[key];
@@ -130,6 +149,25 @@ export function toApiQuery(f: FileFilters, paging: { page: number; pageSize: num
   if (f.origin) q.origin = f.origin;
   if (f.excludeGenerated) q.excludeGenerated = 'true';
   q.sort = f.sort;
+  q.page = String(paging.page);
+  q.pageSize = String(paging.pageSize);
+  return q;
+}
+
+/** A meter id as the ingest accepts it (backend meters.schemas.ts); no other id can match a reading. */
+const METER_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
+/**
+ * The query of the real `GET /meter-readings` (docs/api.md "Meter readings"): the search is the exact meter id.
+ * Null when the search cannot be a meter id: nothing can match, so nothing is asked (the backend would refuse an
+ * id over 64 characters with a 422).
+ */
+export function toMeterApiQuery(f: FileFilters, paging: { page: number; pageSize: number }): Record<string, string> | null {
+  if (f.q !== undefined && !METER_ID.test(f.q)) return null;
+  const q: Record<string, string> = {};
+  if (f.q) q.meterId = f.q;
+  if (f.zone) q.zone = f.zone;
+  if (f.origin) q.origin = f.origin;
   q.page = String(paging.page);
   q.pageSize = String(paging.pageSize);
   return q;
