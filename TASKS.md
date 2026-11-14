@@ -104,26 +104,32 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 
    Each comes with a short plain-language interpretation.
 
-### Stare P2 (14.11.2026)
+### P2 status (14.11.2026, 18:30)
 
-Backend-ul e **NestJS 12** (TypeScript), nu FastAPI. Adaptoarele de storage și criptarea lui P1 au fost portate în TypeScript în `backend/src/storage/` și `backend/src/crypto/`, cu aceleași metrici, variabile de mediu, schema `blobstore` și formatul FGE1. Contractul REST e în [`docs/api.md`](docs/api.md), cu rute sub `/api/v1`.
+The P2 code is on branch `feat/p2-backend-nest` (pushed to `origin`, merged with `main`, no conflicts). The backend is **NestJS 12** (TypeScript), not FastAPI. P1's storage adapters and encryption were ported to TypeScript in `backend/src/storage/` and `backend/src/crypto/`, with the same metrics, env variables, `blobstore` schema and FGE1 format. The REST contract is in [`docs/api.md`](docs/api.md), under `/api/v1`.
 
-| # | Stare |
+| # | Status |
 |---|---|
-| 1 | ✅ Schema metadatelor (Kysely, migrare cu advisory lock), sesiune în cookie `__Host-fg_session` + CSRF, cele 5 roluri cu matricea de capabilități, cheie API pentru contoare |
-| 2 | ✅ Politici live în DB, cu versiuni, istoric și conflict 409 pe `baseVersion` |
-| 3 | ✅ Upload pe părți, reluabil și stateless; părțile stau în storage-ul politicii (`staging/…`); fallback; confirmare doar după scriere durabilă și SHA-256 egal |
-| 4 | ✅ Download cu SHA-256 recalculat (409 `FILE_CORRUPT` / conexiune tăiată; fișierul e marcat corupt), căutare, custodie, reveal auditat |
-| 5 | ✅ Citiri de contor idempotente pe `readingId`, în loturi; metricile din README |
-| 6 | ✅ Bulkhead per categorie (`maxConcurrency` din politică); 503 `CATEGORY_BUSY` |
-| 7 | ✅ `X-Trace-Id` pe orice răspuns, jurnal de operații (`/traces/{id}`), `/metrics` |
-| 8 | ✅ Simulator în `simulator/` (fără dependențe, normal / storm 10x, reîncercări și duplicate deliberate) |
-| 9 | ✅ Statistici cu interpretări în română; panoul demo (furtună, corupere, stop/start S3/FTP prin API-ul Kubernetes) |
+| 1 | ✅ Metadata schema (Kysely, migration under an advisory lock). Session in the `__Host-fg_session` cookie (8 h, 30 min idle) + CSRF check. The 5 roles with the capability matrix; one demo account per role in demo mode. Meter API key |
+| 2 | ✅ Policies live in the DB, with versions, change history and 409 on a stale `baseVersion`; connection documents always encrypted |
+| 3 | ✅ Stateless resumable upload in parts: parts staged in the policy's storage (`staging/…`), fallback when the primary is down, file confirmed only after a durable write and a matching SHA-256 |
+| 4 | ✅ Download with the SHA-256 recomputed (409 `FILE_CORRUPT`, or a cut connection for big files; the file is marked corrupt). Search, custody, audited personal-data reveal |
+| 5 | ✅ Meter readings idempotent on `readingId`, in batches; never stored twice; metrics as in the README |
+| 6 | ✅ Bulkhead per category (`maxConcurrency` from the policy, read live); 503 `CATEGORY_BUSY` when full |
+| 7 | ✅ `X-Trace-Id` on every response, operations log (`GET /api/v1/traces/{id}`), `/metrics` |
+| 8 | ✅ Simulator in `simulator/` (no runtime dependencies; normal, 10x storm, custom, stopped; deliberate retries and duplicates; `Dockerfile` on port 8080) |
+| 9 | ✅ Statistics with Romanian interpretations. Demo panel endpoints: storm, corrupt a file, stop/start S3/FTP through the Kubernetes API |
 
-**Rămas de făcut:**
-- [ ] Testarea adaptoarelor S3/FTP pe storage-urile reale din cluster (până acum au fost testate pe Postgres embedded și în memorie).
-- [ ] Build-ul imaginilor `backend/` și `simulator/` și o rulare cu `make app-up` pe VPS.
-- [ ] Opțional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, descărcare cu `Range`.
+Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3/FTP servers) and 87 simulator, all passing. A local end-to-end run (backend + simulator) stored 1,263 of 1,263 unique readings, rejected the deliberate duplicates and lost none.
+
+**Answers for P1:** the metric names and `outcome` values in the README are confirmed (`success` / `mismatch` / `error` for uploads), and `filegrid_sim_readings_sent_total` counts unique readings. Details are in `docs/api.md`, section "Metrics".
+
+**Left to do:**
+- [ ] Test the S3/FTP adapters against the real storages in the cluster. Locally they ran against embedded Postgres and in-process S3/FTP servers.
+- [ ] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS.
+- [ ] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it.
+- [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
+- [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`.
 
 ## P3: Frontend
 
