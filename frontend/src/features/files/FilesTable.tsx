@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { SafeName } from '@/components/SafeName';
 import { Tag } from '@/components/ui/tag';
+import { DownloadButton } from '@/features/integrity/DownloadButton';
 import { cn } from '@/lib/cn';
 import { useT } from '@/lib/i18n';
 import { formatBytes, formatDateTime, formatInt } from '@/lib/i18n/format';
@@ -202,6 +203,9 @@ function FileRow({ r, showCategory, showSeverity, paused }: RowProps) {
       <td className={cell}>
         <OriginTag origin={r.origin} />
       </td>
+      <td className={cell}>
+        <DownloadButton fileId={r.id} fileName={r.displayName} size={r.size} storage={r.storage} />
+      </td>
     </tr>
   );
 }
@@ -236,6 +240,7 @@ export function FilesTable({ rows, category, sort, onSort }: { rows: FileItem[];
             <Th>{c.storage}</Th>
             <Th>{c.integrity}</Th>
             <Th>{c.origin}</Th>
+            <Th>{c.download}</Th>
           </tr>
         </thead>
         <tbody>

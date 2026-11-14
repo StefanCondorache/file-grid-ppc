@@ -42,6 +42,7 @@ export const files = {
     storage: 'Storage',
     integrity: 'Integritate',
     origin: 'Origine',
+    download: 'Descărcare',
   },
   sortLabel: {
     '-createdAt': 'cele mai noi primele',
