@@ -16,7 +16,7 @@ import { OriginTag } from './OriginTag';
 import type { FileItem } from './queries';
 import { SeverityLevel } from './SeverityLevel';
 
-const CATEGORY_DOT: Record<FileCategoryId, string> = {
+export const CATEGORY_DOT: Record<FileCategoryId, string> = {
   fault_records: 'bg-cat-fault',
   drone_videos: 'bg-cat-drone',
   connection_documents: 'bg-cat-connection',
@@ -98,7 +98,7 @@ export function StorageTag({ storage, usedFallback }: { storage: StorageId; used
   );
 }
 
-function EncryptedTag() {
+export function EncryptedTag() {
   const t = useT();
   return (
     <span className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-chip px-2 text-[13px] font-semibold text-ok-ink shadow-[inset_0_0_0_1.5px_var(--fg-ok)]">

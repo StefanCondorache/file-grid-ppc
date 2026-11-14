@@ -84,6 +84,39 @@ export function useFiles(f: FileFilters) {
   return useQuery({ queryKey: qk.files.list(f), queryFn: () => fetchFilesPage(f), placeholderData: keepPreviousData });
 }
 
+// ─── one file (6c.5) ───────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `FileDetail` as the real `GET /files/{id}` sends it (docs/api.md "Files"; backend files.service.ts `fileDetail`).
+ * `metadata` is the stored upload metadata, untrusted and open-ended: screens read known fields from it only, so a
+ * field the backend should never send (a storage path, an unmasked name) can never reach the page.
+ */
+export type FileDetail = Omit<FileItem, 'metadata'> & {
+  /** Null where no person uploaded through the browser (meter batches, seeded history). */
+  clientSha256: string | null;
+  serverSha256: string;
+  /** `{category} v{version}`, a machine name: screens show the category label and the version instead. */
+  policyName: string;
+  encryptionAlgorithm: string | null;
+  availableAt: string | null;
+  uploadTraceId: string;
+  lastVerifiedAt: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+export async function fetchFileDetail(fileId: string): Promise<FileDetail> {
+  const body = (await unwrap(api.GET('/files/{fileId}', { params: { path: { fileId } } }))) as unknown as Partial<FileDetail> | null;
+  if (!body || typeof body.id !== 'string' || typeof body.serverSha256 !== 'string' || typeof body.storage !== 'string') {
+    throw new ApiError(0, 'BAD_RESPONSE', 'Unexpected file detail from the server');
+  }
+  return body as FileDetail;
+}
+
+/** One file; `file.integrity` on the live stream invalidates `qk.files.detail(id)` (frontend-architecture §4). */
+export function useFileDetail(fileId: string) {
+  return useQuery({ queryKey: qk.files.detail(fileId), queryFn: () => fetchFileDetail(fileId) });
+}
+
 // ─── meter readings (6c.4) ─────────────────────────────────────────────────────────────────────────────────
 
 /**
