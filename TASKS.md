@@ -150,6 +150,193 @@ Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `
 - [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor.
 - [ ] Confirmare: `GET /auth/me` nu prelungește sesiunea (doar `POST /auth/refresh` și activitatea reală).
 
+#### Prompturi pentru task-urile rămase
+
+Sursa: `docs/frontend/PROMPTS.md` (șablonul 6a–6h, Prompt 7, 8, 9). Pentru 5.15, promptul e scris după planul `docs/superpowers/plans/2026-11-14-filegrid-frontend.md` (Task 5.15). Prompturile au fost scrise înaintea planului și a ADR-urilor. Când diferă de ele (de exemplu: auth fără middleware, grafice proprii Recharts în loc de panouri Grafana încorporate, i18n fără next-intl, branch `fe/<slice>`), **planul și ADR-urile au prioritate**. Ordinea de merge: 6e înainte de 6g; 6b, 6c, 6d, 6f și 6h.1 (audit) pot rula în paralel.
+
+**Șablon comun pentru 6b–6h** (se lipește blocul SLICE al task-ului în locul `<paste one of the blocks below>`):
+
+```text
+Read frontend/CLAUDE.md, docs/frontend/context.md, the plan in docs/superpowers/plans/, the
+relevant ADRs and docs/frontend/design/*.
+Use superpowers:using-git-worktrees (branch feat/frontend-<slice>).
+Use superpowers:subagent-driven-development to execute ONLY the tasks of the slice below,
+with superpowers:test-driven-development on every task (red → green → refactor, and show the
+failing test first). Use ecc:react-patterns, ecc:frontend-patterns and ecc:typescript-patterns.
+After each task: ecc:react-reviewer + ecc:typescript-reviewer on the diff, then fix the findings.
+At the end of the slice:
+- ecc:a11y-architect audits the new screens. Fix the issues.
+- ecc:e2e-runner adds the Playwright journey for this slice's demo beat.
+- ecc:silent-failure-hunter checks error paths (no swallowed errors, every failure visible).
+- superpowers:verification-before-completion: build, typecheck, lint, unit, e2e. Paste the output.
+- Take screenshots of each new screen (light + dark) and show them to me.
+Then use superpowers:finishing-a-development-branch.
+
+SLICE:
+<paste one of the blocks below>
+```
+
+**5.15 · Primul deploy pe VPS** (prompt din planul Task 5.15 + `docs/frontend/demo-day-matrix.md`):
+
+```text
+Read docs/superpowers/plans/2026-11-14-filegrid-frontend.md (Task 5.15) and
+docs/frontend/demo-day-matrix.md. Do not edit P1's files under deploy/; propose changes instead.
+1. Build the image off-VPS (`npm run image:real` in frontend/), save it and import it into k3s.
+2. With P1: set PORT=8080, run as uid 101, and raise the frontend memory limit to 256Mi in
+   deploy/k8s/app/frontend/ (or keep 128Mi and set NODE_OPTIONS=--max-old-space-size=96).
+3. Roll out and check https://ppc.filegrid.cc.cd/healthz = ok and / = login page, no CSP
+   violations in the console, no service worker registered in the real image, and
+   `kubectl top pods -n filegrid` under the limit.
+4. Write the exact deploy commands into docs/frontend/demo-day-matrix.md. Paste real outputs.
+```
+
+**6b · Upload reluabil** (SLICE):
+
+```text
+Implement the upload engine exactly as decided in docs/frontend/architecture/upload-engine.md
+and its ADR. Use ecc:error-handling.
+- Pure TS core, framework-free and 100% unit tested: chunk planner, retry with exponential
+  backoff + jitter, resume from server state, a queue with per-category concurrency, and a
+  state machine (queued → hashing → uploading → paused → retrying → verifying → done | failed).
+- Web Worker for incremental SHA-256 (hash-wasm), streaming by Blob.slice. Prove constant
+  memory: a test or a script that uploads a generated 1.5 GB file while logging heap usage.
+- Persist sessions in IndexedDB so a browser reload resumes. Listen to online/offline.
+- UI: dropzone per category with type and size validation, metadata form (zona/regiune,
+  stație, incident, client ID for racordări), multi-file queue, and the CHUNK-GRID progress
+  visual (the "FileGrid" signature: each cell is a chunk; it fills, flashes on retry, turns
+  green when verified), speed, ETA, retries counter, pause/resume/cancel.
+- Final step: compare the client hash with the server hash and show the integrity badge.
+- Playwright: throttle and drop the network mid-upload (route abort + offline emulation),
+  reload the page, and assert the upload completes with a matching hash and no manual step.
+```
+
+**6c · Fișiere, integritate, trasare** (SLICE):
+
+```text
+Fișiere: search by name, category, date range, zone and status. Server-side pagination,
+sortable data table, saved filters in the URL. Download through the API only. Verify the
+SHA-256 of the downloaded stream in a worker and show "Integritate verificată" or a red
+"Fișier corupt detectat" state, with the expected vs actual hash.
+Detaliu fișier: metadata, storage used (S3/FTP/DB) and why (the policy at upload time),
+encryption status, a chain-of-custody timeline, and a trace waterfall (spans with durations)
+with a "Deschide în Grafana/Loki" deep link by trace ID. PII fields on connection documents are
+masked by default; revealing them is role-gated and logged.
+```
+
+**6d · Politici** (SLICE):
+
+```text
+Politici: one card per category showing the active policy (primary storage, fallback,
+encryption, chunk size, concurrency limit, retention). Editing uses react-hook-form + zod
+with validation that mirrors the backend. Show a diff of old vs new before confirm, a
+"takes effect immediately, no deploy" note, the change history (who and when), and
+optimistic update with rollback on error. Admin role only.
+```
+
+**6e · Garanții de business și observabilitate** (SLICE):
+
+```text
+Use the dataviz skill and ecc:dashboard-builder.
+Garanții de business: 4 status cards, one per row of table 2.1, each with its proving metric
+and state (OK / în pericol / încălcat), live via SSE or polling per the ADR. Active alerts
+list with severity, time and the requirement at risk. A storage health strip (S3, FTP, DB:
+up/down, circuit breaker state).
+Observabilitate: a category × storage matrix with p50/p95/p99, throughput and error rate, and
+sparklines. Decide (ADR) between embedding Grafana panels and rendering our own charts from a
+backend metrics endpoint; in either case link to the full Grafana dashboard.
+```
+
+**6f · Statistici S1/S2/S3** (SLICE):
+
+```text
+Use the dataviz skill. Every panel = chart + a 2–3 sentence Romanian interpretation +
+a "Recomandare" line. Interpretations come from the backend or are generated from the
+numbers with clear templates. No lorem ipsum.
+1. "Ce storage pentru ce categorie": the benchmark matrix (latency, throughput, errors,
+   cost/complexity notes) with the recommended storage per category and the reason.
+2. "Zi normală vs zi de vârf": side by side, showing which categories degraded and which
+   stayed flat (the bulkhead proof).
+3. "Ce spun datele despre rețea": a map of Muntenia/Banat/Dobrogea (county-level GeoJSON,
+   open data, attributed) with fault density, consumption patterns by hour, meter anomalies
+   (spikes, zero readings, suspected tampering), and the top zones by faults.
+A data-table alternative for every chart (a11y). Export to PNG/CSV.
+```
+
+**6g · Cameră de control + contoare live** (SLICE, după merge-ul 6e):
+
+```text
+Demo (admin only, hidden behind a flag in production): big projector-friendly controls for
+a 10x storm per category, simulator rate (normal ↔ vârf), stop/start a storage, corrupt a
+file, degrade the network, and reset. Every action needs confirmation, shows what happened
+and links to its evidence.
+The same screen shows live: per-category latency (the bulkhead proof), storage health, the
+meter ingest rate, the dedup counter (duplicates rejected, readings lost = 0) and alerts
+firing. This screen IS the demo, so design it for a 1920×1080 projector at 3 m distance.
+Contoare: a live meter feed (readings/s by region, latest readings, duplicate/retry stats).
+```
+
+**6h · Audit, integrare, calitate, repetiții**. Patru prompturi, în ordine.
+
+6h.1 Audit (SLICE, poate rula în paralel cu 6b–6f):
+
+```text
+Audit: an immutable log of who uploaded, viewed, downloaded or revealed PII on connection
+documents, filterable and exportable. Optional English locale through next-intl. Dark
+"dispecerat" theme toggle. Micro-interactions with ecc:make-interfaces-feel-better and
+ecc:motion-patterns (honouring reduced motion).
+```
+
+6h.5 Trecerea la backend-ul real (Prompt 7):
+
+```text
+Read frontend/CLAUDE.md and docs/api/*. My teammates' NestJS backend exposes OpenAPI at
+<URL>/api-json. Use ecc:contract-first:
+1. Regenerate types with `gen:api` from the REAL spec and diff them against
+   openapi.frontend-proposal.yaml. List every mismatch (paths, fields, enums, errors,
+   pagination, upload protocol, auth cookie, stream format).
+2. For each mismatch, propose the smallest fix and say on which side it belongs. Fix only the
+   frontend side, and write the backend asks into docs/api/HANDOFF-backend.md.
+3. Run with NEXT_PUBLIC_API_MOCKS=0 against the backend via `make up` (or the compose the team
+   uses). Use ecc:e2e-runner to run every Playwright journey against the real stack, and
+   superpowers:systematic-debugging for each failure (root cause first, no guess-fixes).
+4. Confirm that uploads go straight to NestJS (not through Next) by checking network traffic
+   and container memory during a 1.5 GB upload.
+Paste real outputs. STOP with a list of what works end-to-end and what does not.
+```
+
+6h.0–6h.4 Integrare și verificare de calitate (Prompt 8):
+
+```text
+Use superpowers:dispatching-parallel-agents to review the whole frontend/ IN PARALLEL:
+ecc:react-reviewer, ecc:typescript-reviewer, ecc:security-reviewer (against
+docs/frontend/architecture/threat-model.md; also scan for secrets), ecc:a11y-architect
+(WCAG 2.2 AA), ecc:performance-optimizer (bundle size, Server vs Client components, chart
+lazy-loading, worker usage), and ecc:silent-failure-hunter.
+Merge the findings into one list ranked by demo impact, and use superpowers:receiving-code-review
+to judge each one (push back on wrong ones with evidence). Fix the rest with TDD.
+Then run ecc:browser-qa on all screens at 1440×900, 1920×1080 (projector) and 390×844
+(field team on a phone), light and dark, and fix the visual defects.
+Finish with /ecc:gan-design polish on the 5 demo screens (at most 2 iterations) and
+superpowers:verification-before-completion with real command output.
+```
+
+6h.6 Repetiții și video de rezervă (Prompt 9):
+
+```text
+Read docs/frontend/prd.md (demo script) and the running stack.
+1. Update the 7-minute demo script into docs/frontend/demo-script.md with exact clicks, the
+   expected screen, the requirement it proves (brief section number), and a fallback for
+   each beat if something fails live.
+2. Use ecc:e2e-runner to turn the script into ONE Playwright "demo rehearsal" spec that runs
+   end-to-end against the real stack, so we can rehearse unattended and catch regressions.
+3. Use ecc:ui-demo to record a backup video of the full demo in case the venue network fails.
+4. Prepare seed data: realistic files per category, 2 storms in history, at least one
+   corrupted file, and an anomaly region, so statistics look meaningful from minute one.
+5. Final check from a clean clone: one command brings everything up per the README, the
+   frontend is reachable over HTTPS on ppc.filegrid.cc.cd behind auth, and no secret is in git.
+Report pass/fail per beat with evidence.
+```
+
 ## Milestones
 
 1. **M1:** adapters, upload/download API, and the UI shell on mocks.
