@@ -261,4 +261,37 @@ describe('upload engine facade', () => {
     expect(item(id).state).toBe('verified');
     expect(server.calls.slice(sent).map((c) => c.partNumber)).toEqual([3]);
   });
+
+  it('store updates at most 4 per second', async () => {
+    // Two parts in flight, each reporting progress every 10 ms (200 events per second) and never finishing.
+    const chatty: PartTransport = {
+      send(args) {
+        return new Promise((_resolve, reject) => {
+          let sent = 0;
+          const tick = setInterval(() => args.onProgress((sent = Math.min(args.body.size, sent + 4096))), 10);
+          args.signal.addEventListener('abort', () => {
+            clearInterval(tick);
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        });
+      },
+    };
+    const { engine } = setup(fakeServer({ transport: chatty }));
+    await engine.restore('u1');
+    const id = engine.enqueue({ file: testFile('A'), category: 'drone_videos', metadata: drone });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(item(id).inFlightParts).toEqual([1, 2]);
+
+    let writes = 0;
+    const stop = useUploadStore.subscribe(() => writes++);
+    const before = item(id).bytesInFlight;
+    await vi.advanceTimersByTimeAsync(1000);
+    stop();
+    const after = item(id).bytesInFlight;
+    engine.pause(id);
+
+    expect(writes).toBeLessThanOrEqual(4);
+    expect(writes).toBeGreaterThanOrEqual(3);
+    expect(after).toBeGreaterThan(before); // coalesced, not dropped
+  });
 });

@@ -15,7 +15,7 @@ import { transition } from './machine';
 import { createNetMonitor, createPingProbe, type NetMonitor } from './net';
 import { persistableHandle, toPersistable } from './pii';
 import { effectiveMime, isUsableChunkSize, partCount, partRange, validateFile } from './plan';
-import { createSpeedMeter, type SpeedMeter } from './progress';
+import { createCoalescer, createSpeedMeter, type SpeedMeter } from './progress';
 import { bitsetHas, bitsetNew, bitsetSet, createRepo, type UploadRepo } from './repo';
 import { classifyError, createScheduler, isAbort, MAX_ATTEMPTS, type Scheduler, type SchedulerSignal } from './scheduler';
 import { useUploadStore, type UploadErrorView, type UploadItemView } from './store';
@@ -233,16 +233,20 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     useUploadStore.setState({ items });
   }
 
-  function changed(job: Job): void {
+  // Progress reaches the store at most 4 times per second; transitions, new rows and removals go at once (§14).
+  const coalescer = createCoalescer(clock, flush);
+
+  function changed(job: Job, now = false): void {
     dirty.add(job.id);
-    flush();
+    if (now) coalescer.now();
+    else coalescer.schedule();
   }
 
   function rebuild(): void {
     for (const id of jobs.keys()) dirty.add(id);
     const items = useUploadStore.getState().items;
     for (const id of Object.keys(items)) dirty.add(id);
-    flush();
+    coalescer.now();
   }
 
   // ---- persistence -----------------------------------------------------------------------------------------
@@ -272,7 +276,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     if (next !== 'uploading') job.speed.reset();
     if (next !== prev) persist(job);
     if (prev === 'hashing' && next !== 'hashing') queueMicrotask(pumpQueue);
-    changed(job);
+    changed(job, true);
     return next;
   }
 
@@ -747,7 +751,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
         reconciles: 0,
       };
       jobs.set(job.id, job);
-      changed(job);
+      changed(job, true);
       queueMicrotask(pumpQueue); // the caller sees the row `queued` first
       return job.id;
     },
@@ -767,7 +771,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
       if (!job) return;
       supersede(job);
       jobs.delete(id);
-      changed(job);
+      changed(job, true);
       queueMicrotask(pumpQueue);
       const uploadId = job.rec?.uploadId;
       // Both are best effort: an unreachable server drops the session itself after 24 h without parts.
