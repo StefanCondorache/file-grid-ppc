@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createScenario } from './scenario';
+import { CATEGORY_IDS, type CategoryId } from '@/lib/monitoring/contract';
+import { createDb } from './db';
+import { createScenario, type Scenario } from './scenario';
 
 describe('scenario clock', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -30,5 +32,24 @@ describe('scenario clock', () => {
     expect(a).toHaveBeenCalledTimes(2);
     expect(b).toHaveBeenCalledTimes(1);
     expect(a.mock.calls[0]![0]).toMatchObject({ type: 'policy.updated', data: { version: 4 } });
+  });
+});
+
+/** An isolated scenario: its own in-memory db, jitter fixed by `random`. */
+const make = (random = () => 0.5) => createScenario({ db: createDb(null), random });
+const lastP95 = (s: Scenario, c: CategoryId) => s.series().find((x) => x.category === c)!.points.at(-1)!.p95Ms;
+const OTHERS = CATEGORY_IDS.filter((c) => c !== 'fault_records');
+
+describe('monitoring scenario', () => {
+  it('a fault storm raises fault p95 above 2 s within 3 ticks while the others stay under 1 s', () => {
+    // Lowest, middle and highest jitter: the margins hold whatever Math.random returns.
+    for (const r of [0, 0.5, 0.999]) {
+      const s = make(() => r);
+      expect(lastP95(s, 'fault_records')).toBeLessThan(1000);
+      s.startStorm('fault_records', 10, 60);
+      for (let i = 0; i < 3; i++) s.tick();
+      expect(lastP95(s, 'fault_records')).toBeGreaterThan(2000);
+      for (const c of OTHERS) expect(lastP95(s, c)).toBeLessThan(1000);
+    }
   });
 });
