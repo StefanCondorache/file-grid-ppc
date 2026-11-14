@@ -4,6 +4,7 @@ import { API_BASE } from '@/lib/api/base';
 import { GROUPS, pathGroup, type Group } from '../groups';
 import spec from '../openapi.json';
 import { actingRoleHandlers, authHandlers } from './auth';
+import { createStreamHandlers } from './stream';
 
 /** Hand-written handlers per group; each slice appends its import here (append-only). */
 export const groupHandlers: Record<Group, RequestHandler[]> = {
@@ -16,7 +17,7 @@ export const groupHandlers: Record<Group, RequestHandler[]> = {
   monitoring: [],
   statistics: [],
   demo: [...actingRoleHandlers],
-  stream: [],
+  stream: createStreamHandlers(),
 };
 
 function relativePath(handler: RequestHandler): string | null {
