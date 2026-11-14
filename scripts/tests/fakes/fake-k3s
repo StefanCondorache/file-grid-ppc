@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Fake k3s for scripts/tests. Every call is appended to $FAKE_STATE/calls.
+#   k3s ctr ... images import -        -> drains stdin
+#   k3s ctr ... images ls -q           -> contents of $FAKE_STATE/k3s-images (if any)
+#   k3s secrets-encrypt status -o json -> state from $FAKE_STATE/k3s-enc ("<enable> <stage>", e.g. "true start");
+#                                         missing file = no encryption config
+#   k3s secrets-encrypt status         -> the matching text form
+#   k3s secrets-encrypt enable          -> enable=true (needs a config, i.e. an existing state file)
+#   k3s secrets-encrypt reencrypt ...   -> stage reencrypt_finished (fails if not enabled)
+set -euo pipefail
+printf 'k3s %s\n' "$*" >> "$FAKE_STATE/calls"
+state=$FAKE_STATE/k3s-enc
+read_state() { if [ -f "$state" ]; then read -r enable stage < "$state"; else enable="" stage=""; fi; }
+case " $* " in
+  *" images import "*) cat >/dev/null; exit 0 ;;
+  *" images ls "*) [ ! -f "$FAKE_STATE/k3s-images" ] || cat "$FAKE_STATE/k3s-images"; exit 0 ;;
+esac
+case "${1:-} ${2:-}" in
+  "secrets-encrypt status")
+    read_state
+    if [ "${3:-}" = -o ] && [ "${4:-}" = json ]; then
+      if [ -z "$enable" ]; then printf '{\n\t"stage": "",\n\t"activekey": ""\n}\n'
+      else jq -n --argjson e "$enable" --arg s "$stage" '{enable: $e, stage: $s, activekey: "aescbckey", hashmatch: true}'; fi
+    elif [ -z "$enable" ]; then echo "Encryption Status: Disabled, no configuration file found"
+    else
+      [ "$enable" = true ] && echo "Encryption Status: Enabled" || echo "Encryption Status: Disabled"
+      echo "Current Rotation Stage: $stage"
+      echo "Server Encryption Hashes: All hashes match"
+    fi ;;
+  "secrets-encrypt enable")
+    read_state; [ -n "$enable" ] || { echo "fake: no encryption config" >&2; exit 1; }
+    echo "true $stage" > "$state" ;;
+  "secrets-encrypt reencrypt")
+    read_state; [ "$enable" = true ] || { echo "fake: secrets encryption not enabled" >&2; exit 1; }
+    echo "true reencrypt_finished" > "$state" ;;
+esac
