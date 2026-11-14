@@ -42,9 +42,10 @@ export function LoginForm({ next, reason, onLoggedIn }: Props) {
       {reason === 'expired' && (
         <p className="rounded-panel bg-info-tint px-4 py-3 text-info-ink">{t.auth.expired}</p>
       )}
-      <label className="flex flex-col gap-1.5 text-sm font-semibold">
-        {t.auth.roleLabel}
+      <div className="flex flex-col gap-1.5 text-sm font-semibold">
+        <label htmlFor="login-role">{t.auth.roleLabel}</label>
         <select
+          id="login-role"
           {...register('role')}
           className="h-11 rounded-control border-[1.5px] border-input bg-surface px-3 text-[15px] font-normal text-ink"
         >
@@ -54,10 +55,11 @@ export function LoginForm({ next, reason, onLoggedIn }: Props) {
             </option>
           ))}
         </select>
-      </label>
-      <label className="flex flex-col gap-1.5 text-sm font-semibold">
-        {t.auth.passwordLabel}
+      </div>
+      <div className="flex flex-col gap-1.5 text-sm font-semibold">
+        <label htmlFor="login-password">{t.auth.passwordLabel}</label>
         <input
+          id="login-password"
           type="password"
           autoComplete="current-password"
           aria-invalid={formState.errors.password ? true : undefined}
@@ -70,7 +72,7 @@ export function LoginForm({ next, reason, onLoggedIn }: Props) {
             {formState.errors.password.message}
           </span>
         )}
-      </label>
+      </div>
       {errorText && (
         <p role="alert" className="rounded-panel border border-crit bg-crit-tint px-4 py-3 font-semibold text-crit-ink">
           {errorText}
