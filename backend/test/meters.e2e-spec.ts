@@ -91,6 +91,8 @@ describe('meter readings', () => {
 
     const metrics = await request(app.getHttpServer()).get('/metrics');
 
+    // Prometheus 3 refuses a scrape whose Content-Type is not an exposition format.
+    expect(metrics.headers['content-type']).toMatch(/^text\/plain; version=0\.0\.4/);
     expect(metrics.text).toMatch(/filegrid_meter_readings_stored_total\{zone="banat"\} [1-9]/);
     expect(metrics.text).toMatch(/filegrid_meter_readings_duplicates_total\{zone="banat"\} [1-9]/);
     expect(metrics.text).toContain('filegrid_meter_readings_duplicate_stored_total 0');

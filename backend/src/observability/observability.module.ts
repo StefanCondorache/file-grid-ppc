@@ -33,6 +33,8 @@ export class MetricsController implements OnModuleInit {
 
   @Get('metrics')
   @Header('Cache-Control', 'no-store')
+  // Without it Express sends text/html, and Prometheus 3 rejects the scrape (unsupported Content-Type).
+  @Header('Content-Type', register.contentType)
   async metrics(): Promise<string> {
     return register.metrics();
   }
