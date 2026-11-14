@@ -40,7 +40,7 @@ tests:
   - name: TargetDown dupa 2 minute de scrape esuat
     interval: 30s
     input_series:
-      - series: 'up{job="kubernetes-pods",instance="10.42.0.9:8000",namespace="filegrid",pod="filegrid-backend-a"}'
+      - series: 'up{job="kubernetes-pods",instance="filegrid-backend-a:8000",namespace="filegrid",pod="filegrid-backend-a"}'
         values: '1 1 0x20'
       - series: 'up{job="kube-state-metrics",instance="ksm:8080"}'
         values: '1x22'
@@ -49,12 +49,12 @@ tests:
       - eval_time: 3m
         alertname: TargetDown
         exp_alerts:
-          - exp_labels: {severity: warning, job: kubernetes-pods, instance: "10.42.0.9:8000", namespace: filegrid,
+          - exp_labels: {severity: warning, job: kubernetes-pods, instance: "filegrid-backend-a:8000", namespace: filegrid,
                          pod: filegrid-backend-a}
             exp_annotations:
-              summary: Tinta kubernetes-pods nu mai poate fi scrapuita (10.42.0.9:8000)
+              summary: Tinta kubernetes-pods nu mai poate fi scrapuita (filegrid-backend-a:8000)
               description: >-
-                Prometheus nu mai citeste metricile de la kubernetes-pods / 10.42.0.9:8000 (pod filegrid-backend-a) de
+                Prometheus nu mai citeste metricile de la kubernetes-pods / filegrid-backend-a:8000 (pod filegrid-backend-a) de
                 cel putin 2 minute. Alertele care depind de aceste metrici nu mai pot porni; verificati podul
                 (kubectl get pods -A) si NetworkPolicy-urile.
 
