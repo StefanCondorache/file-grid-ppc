@@ -25,6 +25,8 @@
     "@nestjs/core": "12.5.0",
     "@nestjs/jwt": "12.0.5",
     "@nestjs/platform-express": "12.5.0",
+    "aws4fetch": "1.0.20",
+    "basic-ftp": "6.2.6",
     "kysely": "0.29.9",
     "pg": "8.23.1",
     "pino": "10.4.0",
