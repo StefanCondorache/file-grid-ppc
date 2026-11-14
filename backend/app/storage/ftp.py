@@ -11,9 +11,12 @@ iterator early closes the data and control connections (an interrupted transfer 
 control channel in an unknown state, so that connection is never reused).
 
 Connections: a small pool of logged-in control connections, bounded by
-``FILEGRID_FTP_MAX_CONNECTIONS`` (default 4) because pure-ftpd runs with ``-c 5 -C 5``. Idle connections
-are reused for at most 20 s and only after an operation that finished cleanly. ``health()`` uses its own
-short-lived connection so that a pool busy with long video transfers is never reported as "down".
+``FILEGRID_FTP_MAX_CONNECTIONS`` (default 4) because pure-ftpd runs with ``-c 5 -C 5``. Logging in is
+expensive (pure-ftpd verifies a deliberately slow password hash: about 1 s of server CPU in k3s, 3-4 s
+in Docker on the same VPS), so idle connections are kept for up to 120 s and reused, but only after an
+operation that finished cleanly. ``health()`` keeps one dedicated logged-in connection outside the pool
+and sends ``NOOP`` on it (reconnecting when it broke): a pool busy with long video transfers is never
+reported as "down", and probing every 5 s does not cost a login each time.
 
 Settings: see ``config.FtpSettings`` (FILEGRID_FTP_HOST, FILEGRID_FTP_PORT, FTP_USER, FTP_PASSWORD, ...).
 """
@@ -47,7 +50,7 @@ __all__ = ["FtpStorage"]
 log = logging.getLogger("filegrid.storage.ftp")
 
 READ_BLOCK = 256 * 1024
-IDLE_TTL_S = 20.0
+IDLE_TTL_S = 120.0
 _MAX_KNOWN_DIRS = 4096
 
 
@@ -122,6 +125,9 @@ class FtpStorage(StorageAdapter):
         self._settings = settings
         self._pool = _Pool(settings)
         self._known_dirs: set[str] = set()
+        self._health_client: aioftp.Client | None = None
+        self._health_login: asyncio.Task | None = None
+        self._health_lock = asyncio.Lock()
 
     async def _ensure_dir(self, client: aioftp.Client, directory: PurePosixPath) -> None:
         if directory == PurePosixPath(".") or str(directory) in self._known_dirs:
@@ -145,9 +151,11 @@ class FtpStorage(StorageAdapter):
         path = PurePosixPath(key)
         tmp = path.parent / f".{path.name}.{secrets.token_hex(8)}.part"
         hashing = HashingStream(chunks)
+        stored = False  # True once STOR may have created the temporary file
         try:
             async with self._pool.client() as client:
                 await self._ensure_dir(client, path.parent)
+                stored = True
                 async with client.upload_stream(tmp) as stream:
                     async for chunk in hashing:
                         if chunk:
@@ -158,7 +166,8 @@ class FtpStorage(StorageAdapter):
         except BaseException as exc:
             self._known_dirs.clear()
             await hashing.aclose()
-            await self._remove_quietly(tmp)
+            if stored:  # never pay a second connect timeout when the server was not even reachable
+                await self._remove_quietly(tmp)
             translated = _translate(exc, key)
             if translated is exc:
                 raise
@@ -219,19 +228,54 @@ class FtpStorage(StorageAdapter):
             raise _translate(exc, key) from exc
 
     async def health(self) -> HealthStatus:
-        start = time.perf_counter()
-        client = None
+        async with self._health_lock:
+            start = time.perf_counter()
+            if self._health_client is not None:
+                try:
+                    await self._health_client.command("NOOP", "2xx")
+                    return HealthStatus(True, (time.perf_counter() - start) * 1000, "NOOP ok")
+                except Exception:
+                    self._drop_health_client()  # broken (server restarted?): log in again below
+                    start = time.perf_counter()
+                except BaseException:  # cancelled (probe timeout): the connection state is unknown
+                    self._drop_health_client()
+                    raise
+            # The login runs in its own task, shielded from the probe's timeout: when a login takes
+            # longer than one probe (slow hash on a busy host) it still completes, and the next probe
+            # only sends NOOP instead of starting another login that would be cut off again.
+            if self._health_login is None:
+                self._health_login = asyncio.create_task(self._login_for_health(), name="ftp-health-login")
+            try:
+                client = await asyncio.shield(self._health_login)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - health never raises
+                self._health_login = None
+                return HealthStatus(False, (time.perf_counter() - start) * 1000, str(_translate(exc)))
+            self._health_login = None
+            self._health_client = client
+            return HealthStatus(True, (time.perf_counter() - start) * 1000, "login + NOOP ok")
+
+    async def _login_for_health(self) -> aioftp.Client:
+        client = await self._pool.connect()
         try:
-            client = await self._pool.connect()
             await client.command("NOOP", "2xx")
-            with contextlib.suppress(Exception):
-                await client.quit()
-        except Exception as exc:  # noqa: BLE001 - health never raises
-            return HealthStatus(False, (time.perf_counter() - start) * 1000, str(_translate(exc)))
-        finally:
-            if client is not None:
-                client.close()
-        return HealthStatus(True, (time.perf_counter() - start) * 1000, "login + NOOP ok")
+        except BaseException:
+            client.close()
+            raise
+        return client
+
+    def _drop_health_client(self) -> None:
+        client, self._health_client = self._health_client, None
+        if client is not None:
+            client.close()
 
     async def aclose(self) -> None:
+        login, self._health_login = self._health_login, None
+        if login is not None:
+            login.cancel()
+            with contextlib.suppress(BaseException):
+                client = await login
+                client.close()
+        self._drop_health_client()
         self._pool.close()
