@@ -104,6 +104,27 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 
    Each comes with a short plain-language interpretation.
 
+### Stare P2 (14.11.2026)
+
+Backend-ul e **NestJS 12** (TypeScript), nu FastAPI. Adaptoarele de storage și criptarea lui P1 au fost portate în TypeScript în `backend/src/storage/` și `backend/src/crypto/`, cu aceleași metrici, variabile de mediu, schema `blobstore` și formatul FGE1. Contractul REST e în [`docs/api.md`](docs/api.md), cu rute sub `/api/v1`.
+
+| # | Stare |
+|---|---|
+| 1 | ✅ Schema metadatelor (Kysely, migrare cu advisory lock), sesiune în cookie `__Host-fg_session` + CSRF, cele 5 roluri cu matricea de capabilități, cheie API pentru contoare |
+| 2 | ✅ Politici live în DB, cu versiuni, istoric și conflict 409 pe `baseVersion` |
+| 3 | ✅ Upload pe părți, reluabil și stateless; părțile stau în storage-ul politicii (`staging/…`); fallback; confirmare doar după scriere durabilă și SHA-256 egal |
+| 4 | ✅ Download cu SHA-256 recalculat (409 `FILE_CORRUPT` / conexiune tăiată; fișierul e marcat corupt), căutare, custodie, reveal auditat |
+| 5 | ✅ Citiri de contor idempotente pe `readingId`, în loturi; metricile din README |
+| 6 | ✅ Bulkhead per categorie (`maxConcurrency` din politică); 503 `CATEGORY_BUSY` |
+| 7 | ✅ `X-Trace-Id` pe orice răspuns, jurnal de operații (`/traces/{id}`), `/metrics` |
+| 8 | ✅ Simulator în `simulator/` (fără dependențe, normal / storm 10x, reîncercări și duplicate deliberate) |
+| 9 | ✅ Statistici cu interpretări în română; panoul demo (furtună, corupere, stop/start S3/FTP prin API-ul Kubernetes) |
+
+**Rămas de făcut:**
+- [ ] Testarea adaptoarelor S3/FTP pe storage-urile reale din cluster (până acum au fost testate pe Postgres embedded și în memorie).
+- [ ] Build-ul imaginilor `backend/` și `simulator/` și o rulare cu `make app-up` pe VPS.
+- [ ] Opțional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, descărcare cu `Range`.
+
 ## P3: Frontend
 
 1. **App shell:** React + Vite, login, layout, and an API client running on mocks from `docs/api.md`.
