@@ -59,6 +59,10 @@ spec:
             # FTP_MAX_CLIENTS (deploy/k8s/storage/ftp.yaml; the image default 5 is too low, raised at merge), and
             # 4 x 2 concurrent transfers fit the passive port range.
             - {name: FILEGRID_FTP_MAX_CONNECTIONS, value: "2"}
+            # Client IP: X-Forwarded-For is honoured only when the TCP peer is in these CIDRs (k3s pods, services),
+            # i.e. Traefik, which keeps the real source IP (deploy/k8s/traefik-config.yaml). request.ip feeds the
+            # login rate limiter and the audit trail. Same as the backend default; set here to pin the contract.
+            - {name: TRUSTED_PROXY_CIDRS, value: "10.42.0.0/16,10.43.0.0/16"}
           # /readyz must stay 200 when a single storage is down (circuit breaker handles it), otherwise
           # one dead storage would pull every backend out of the Service.
           readinessProbe:

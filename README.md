@@ -137,6 +137,7 @@ await withCategory('fault_records', async () => {
   - `filegrid_uploads_total{category,outcome}` și `filegrid_upload_duration_seconds{category,outcome}`; outcome `success`/`ok`/`duplicate` contează ca succes;
   - `filegrid_meter_readings_stored_total`, `filegrid_meter_readings_duplicates_total` (retry-uri deduplicate) și `filegrid_meter_readings_duplicate_stored_total` (trebuie să rămână 0).
 - Loguri JSON pe stdout cu `trace_id`, `category`, `storage`, `operation`, `file_id`. `trace_id` vine din header-ul `X-Trace-Id` (îl generați dacă lipsește) și se întoarce în răspuns.
+- IP-ul clientului: Traefik păstrează IP-ul sursă real (Service cu `externalTrafficPolicy: Local`) și îl pune în `X-Forwarded-For`; X-Forwarded-* venite din Internet sunt șterse (Traefik crede aceste header-e doar de la CIDR-ul podurilor, `10.42.0.0/16`). Backend-ul crede `X-Forwarded-For` doar când conexiunea vine din CIDR-urile clusterului (`TRUSTED_PROXY_CIDRS`, implicit `10.42.0.0/16,10.43.0.0/16`, setat și în `deploy/k8s/app/backend/deployment.yaml`), deci `request.ip` e IP-ul real pentru limitarea încercărilor de login și pentru audit.
 - Panoul demo: ServiceAccount-ul `filegrid-backend` poate scala StatefulSet-urile `postgres`/`s3`/`ftp` (0↔1) în `filegrid-storage` (`deploy/k8s/demo-rbac.yaml`); backend-ul apelează direct API-ul Kubernetes (`backend/src/demo/kube.client.ts`, doar `s3` și `ftp`, fiindcă Postgres ține și metadatele).
 - Contractul REST complet: [`docs/api.md`](docs/api.md).
 
@@ -162,7 +163,7 @@ await withCategory('fault_records', async () => {
 
 - cert-manager obține certificatul Let's Encrypt (HTTP-01 prin Traefik); Traefik redirecționează permanent HTTP la HTTPS.
 - Traefik citește o cerere (cu tot corpul) cel mult 15 minute (`readTimeout` 900s; implicit ar fi 60s). Încărcările mari se trimit în bucăți de 1-5 MB, ca fiecare cerere să încapă în acest timp și pe o legătură lentă.
-- Înregistrarea DNS rămâne **DNS-only** (nor gri) în Cloudflare: proxy-ul Cloudflare (planurile Free/Pro) limitează corpul unei cereri la 100 MB, prea puțin pentru videoclipurile de dronă. Dacă proxy-ul e totuși activat, modul SSL/TLS trebuie să fie **Full (strict)**, niciodată Flexible (buclă de redirect).
+- Înregistrarea DNS rămâne **DNS-only** (nor gri) în Cloudflare: proxy-ul Cloudflare (planurile Free/Pro) limitează corpul unei cereri la 100 MB, prea puțin pentru videoclipurile de dronă. Dacă proxy-ul e totuși activat, modul SSL/TLS trebuie să fie **Full (strict)**, niciodată Flexible (buclă de redirect), iar IP-ul văzut de aplicație devine cel al Cloudflare (header-ele lui nu sunt crezute).
 
 ## Structura
 

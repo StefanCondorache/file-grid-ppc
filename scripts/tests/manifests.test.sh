@@ -40,4 +40,34 @@ test_security_headers_middleware_exists_in_filegrid_and_monitoring_with_the_requ
   done
 }
 
+# valuesContent of the k3s HelmChartConfig for Traefik, as JSON (wrapped in a dummy object for the YAML parser)
+traefik_values() {
+  local vc
+  vc=$(KUBECONFIG=/dev/null kubectl annotate --local -f "$REPO/deploy/k8s/traefik-config.yaml" x=y -o json \
+    | jq -r .spec.valuesContent)
+  { printf 'apiVersion: test.filegrid.io/v1\nkind: Values\nmetadata: {name: v}\nvalues:\n'; sed 's/^/  /' <<<"$vc"; } \
+    | KUBECONFIG=/dev/null kubectl annotate --local -f - x=y -o json | jq -c .values
+}
+
+test_traefik_keeps_the_client_ip_and_trusts_forwarded_headers_only_from_the_pod_cidr() {
+  local v ep
+  v=$(traefik_values)
+  assert_eq "$(jq -r '.service.spec.externalTrafficPolicy' <<<"$v")" Local "service.spec.externalTrafficPolicy"
+  for ep in web websecure; do
+    assert_eq "$(jq -c --arg e "$ep" '.ports[$e].forwardedHeaders.trustedIPs' <<<"$v")" '["10.42.0.0/16"]' \
+      "ports.$ep.forwardedHeaders.trustedIPs"
+    assert_eq "$(jq -r --arg e "$ep" '.ports[$e].forwardedHeaders.insecure // false' <<<"$v")" false \
+      "ports.$ep.forwardedHeaders.insecure"
+  done
+  # unchanged settings stay
+  assert_eq "$(jq -r '.ports.websecure.transport.respondingTimeouts.readTimeout' <<<"$v")" 900s "readTimeout"
+  assert_eq "$(jq -r '.ports.web.http.redirections.entryPoint.to' <<<"$v")" websecure "HTTP -> HTTPS redirect"
+}
+
+test_backend_trusts_x_forwarded_for_only_from_the_cluster_cidrs() {
+  assert_eq "$(q '.[] | select(.kind == "Deployment" and .metadata.name == "filegrid-backend")
+      | .spec.template.spec.containers[0].env[] | select(.name == "TRUSTED_PROXY_CIDRS") | .value')" \
+    "10.42.0.0/16,10.43.0.0/16" "backend TRUSTED_PROXY_CIDRS"
+}
+
 run_tests
