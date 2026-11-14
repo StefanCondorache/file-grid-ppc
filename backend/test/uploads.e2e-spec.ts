@@ -235,8 +235,7 @@ describe('uploads, downloads and files', () => {
       metadata: FAULT_METADATA,
     });
     const { uploadId } = created.body;
-    const status = () =>
-      request(server()).get(`/api/v1/uploads/${uploadId}`).set(browser(admin));
+    const status = () => request(server()).get(`/api/v1/uploads/${uploadId}`).set(browser(admin));
 
     await status(); // nothing received yet: not a resume
     await putPart(admin, uploadId, 1, file);
@@ -314,6 +313,35 @@ describe('uploads, downloads and files', () => {
 
     expect(done.status).toBe(200);
     expect(done.body).toMatchObject({ verdict: 'match', storage: 'db', usedFallback: true });
+  });
+
+  it('logs a failed completion against the storage that refused it', async () => {
+    const file = bytes(5000);
+    const created = await create(admin, {
+      category: 'fault_records',
+      fileName: 'refuzat.pdf',
+      fileSize: file.length,
+      mimeType: 'application/pdf',
+      metadata: FAULT_METADATA,
+    });
+    await putPart(admin, created.body.uploadId, 1, file);
+    storages.adapter('s3').setAvailable(false);
+    storages.adapter('db').setAvailable(false);
+
+    const done = await complete(admin, created.body.uploadId, file, 1);
+
+    expect(done.status).toBe(503);
+    const db = testDb();
+    try {
+      const row = await db
+        .selectFrom('operations')
+        .select(['status', 'storage'])
+        .where('operation', '=', 'upload.complete')
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({ status: 'error', storage: 's3' });
+    } finally {
+      await db.destroy();
+    }
   });
 
   it('encrypts connection documents at rest, masks personal data and reveals it only to the auditor', async () => {

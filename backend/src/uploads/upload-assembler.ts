@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { AuditService } from '../audit/audit.service';
 import type { Principal } from '../auth/auth.types';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
-import { AppError } from '../common/app-error';
+import { AppError, failedStorage } from '../common/app-error';
 import type { Keyring } from '../crypto/keys';
 import { decryptStream } from '../crypto/envelope';
 import { VIEW_CAPABILITY } from '../common/domain';
@@ -238,6 +238,7 @@ export class UploadAssembler {
       await this.operations.record({
         operation: 'upload.complete',
         category: session.category,
+        storage: failedStorage(error),
         status: 'error',
       });
       throw error;

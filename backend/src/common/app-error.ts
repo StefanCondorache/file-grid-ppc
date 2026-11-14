@@ -60,3 +60,9 @@ export function categoryBusy(): AppError {
     retryAfter(2),
   );
 }
+
+/** The storage named by an error (STORAGE_UNAVAILABLE carries it), for the operations log. */
+export function failedStorage(error: unknown): 's3' | 'ftp' | 'db' | null {
+  const storage = error instanceof AppError ? error.extras.storage : undefined;
+  return storage === 's3' || storage === 'ftp' || storage === 'db' ? storage : null;
+}

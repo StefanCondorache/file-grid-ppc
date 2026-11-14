@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { BulkheadService } from '../bulkhead/bulkhead.service';
+import { failedStorage } from '../common/app-error';
 import type { Zone } from '../common/domain';
 import { DB, type Db } from '../database/database';
 import { ObjectStoreService } from '../object-store/object-store.service';
@@ -62,6 +63,7 @@ export class MetersService {
       await this.operations.record({
         operation: 'meter.batch',
         category: 'meter_readings',
+        storage: failedStorage(error),
         status: 'error',
       });
       throw error;
