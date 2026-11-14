@@ -53,6 +53,9 @@ spec:
             # FTP_MAX_CLIENTS (deploy/k8s/storage/ftp.yaml; the image default 5 is too low, raised at merge), and
             # 4 x 2 concurrent transfers fit the passive port range.
             - {name: FILEGRID_FTP_MAX_CONNECTIONS, value: "2"}
+            # Temporar, pentru demo: autentificare fără parolă (doar alegerea rolului), activă doar cu
+            # FILEGRID_DEMO_MODE=true. Pune "false" ca parola să fie cerută din nou (fără nicio schimbare de cod).
+            - {name: FILEGRID_PASSWORDLESS_LOGIN, value: "true"}
           # /readyz must stay 200 when a single storage is down (circuit breaker handles it), otherwise
           # one dead storage would pull every backend out of the Service.
           readinessProbe:
