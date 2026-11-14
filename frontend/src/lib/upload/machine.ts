@@ -14,7 +14,8 @@ const ACTIVE: Row = { PAUSE: 'paused', FAIL: 'failed', RESTORE: 'queued' };
  * because the real backend fixes the part size (docs/api.md, "Resumable upload").
  */
 const TABLE: Record<UploadState, Row> = {
-  queued: { ...ACTIVE, SLOT_FREE: 'hashing', FILE_MISSING: 'needs_file' },
+  // A reloaded upload waits in `queued` while its stored file handle is tried, then continues where it was (§8, §11).
+  queued: { ...ACTIVE, SLOT_FREE: 'hashing', FILE_MISSING: 'needs_file', FILE_ATTACHED: toPhase },
   hashing: { ...ACTIVE, HASH_DONE: 'uploading', FILE_MISSING: 'needs_file' },
   uploading: { ...ACTIVE, PART_OK: 'uploading', ALL_PARTS_OK: 'verifying', RETRY_SCHEDULED: 'connection_lost', OFFLINE: 'connection_lost' },
   connection_lost: {
