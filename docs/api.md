@@ -20,6 +20,10 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   `TRUSTED_PROXY_CIDRS` (default `10.42.0.0/16,10.43.0.0/16`, the k3s pod and service CIDRs; Traefik keeps
   the client source IP with `externalTrafficPolicy: Local`). From any other peer the header is ignored and
   the peer address is used, so a client cannot choose its own IP.
+- **Response headers:** every answer carries `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: no-referrer` and `Cache-Control: no-store` (sessions, user data and file metadata are
+  never cached). File content sends `private, no-store` with its `ETag`, `Accept-Ranges` and `If-Range`
+  handling, and `GET /stream` sends `no-cache, no-transform`. HSTS is added by Traefik.
 - **Trace ID:** every response carries `X-Trace-Id`. A valid incoming value (`[A-Za-z0-9-]{1,64}`) is
   reused; otherwise the backend generates one. `GET /traces/{traceId}` shows the steps of that operation.
 - **Errors:** one body for every error: `{ code, message, traceId, fieldErrors?, ...extras }`.

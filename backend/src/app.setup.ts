@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import { errorBody } from './common/app-error';
 import { csrfMiddleware } from './common/csrf.middleware';
 import { ErrorEnvelopeFilter } from './common/error.filter';
+import { securityHeaders } from './common/security-headers';
 import { APP_CONFIG, type AppConfig } from './config/config';
 import { Lifecycle } from './lifecycle/lifecycle';
 import { NestPinoLogger, ROOT_LOGGER } from './observability/logger';
@@ -24,6 +25,7 @@ export function configureApp(app: NestExpressApplication): void {
   // X-Forwarded-For only when the TCP peer is in TRUSTED_PROXY_CIDRS; otherwise the peer itself.
   const { trustedProxyCidrs } = app.get<AppConfig>(APP_CONFIG);
   app.set('trust proxy', trustedProxyCidrs.length > 0 ? [...trustedProxyCidrs] : false);
+  app.use(securityHeaders());
   app.use(traceMiddleware(logger));
   // With a global prefix Nest's JSON 404 covers only /api/v1/*; answer everything else here.
   app.use((request: Request, response: Response, next: NextFunction) => {
