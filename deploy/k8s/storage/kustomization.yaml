@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# The s3-init Job is deliberately NOT here: a finished Job's pod template is immutable, so scripts/k8s-s3-init.sh
+# (run by `make k8s-storage-up`) re-runs it, delete + apply, only when it has not completed, unchanged, on the
+# current S3 volume. Secret filegrid-storage-credentials comes from scripts/k8s-secrets.sh, never from git.
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - s3.yaml
+  - ftp.yaml
+  - networkpolicies.yaml
+  - endpoints.yaml   # ConfigMap in namespace filegrid (created by scripts/k8s-secrets.sh)

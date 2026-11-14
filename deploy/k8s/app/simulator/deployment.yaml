@@ -1,0 +1,49 @@
+# Meter simulator: sends readings to the backend Service with the meter API key. It is NOT a storage client
+# (no filegrid.io/storage-client label), so the storage NetworkPolicies reject it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filegrid-simulator
+  namespace: filegrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: filegrid-simulator}
+  template:
+    metadata:
+      labels: {app: filegrid-simulator}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
+    spec:
+      automountServiceAccountToken: false
+      # no FILEGRID_*_SERVICE_HOST/PORT link variables: they would collide with the app's FILEGRID_ settings prefix
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: simulator
+          image: filegrid-simulator
+          imagePullPolicy: Never
+          ports:
+            - {name: http, containerPort: 8080}
+          envFrom:
+            - configMapRef: {name: filegrid-simulator-config}
+          env:
+            - {name: BACKEND_URL, value: "http://filegrid-backend.filegrid.svc:8000"}
+            - name: METER_API_KEY
+              valueFrom:
+                secretKeyRef: {name: filegrid-app-secrets, key: METER_API_KEY}
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {cpu: 300m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
