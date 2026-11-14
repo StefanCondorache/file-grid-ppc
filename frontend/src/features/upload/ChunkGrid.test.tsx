@@ -5,7 +5,7 @@ import { ChunkGrid } from './ChunkGrid';
 
 const MiB = 1024 * 1024;
 const GiB = 1024 * MiB;
-const NBSP = ' ';
+const NBSP = '\u00A0';
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 const bits = (parts: number, confirmed: number[]) => confirmed.reduce((b, n) => bitsetSet(b, n), bitsetNew(parts));

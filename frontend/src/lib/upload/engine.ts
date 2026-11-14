@@ -93,9 +93,10 @@ const MAX_HASHING = 2;
 const RECORD_TTL_MS = 24 * 60 * 60 * 1000;
 const POLL_MS = 2000;
 const MAX_RECONCILES = 3;
-const RUNNING: readonly UploadState[] = ['queued', 'hashing', 'uploading', 'connection_lost', 'verifying'];
+/** States with work going on: a pause stops them, the queue counts them as "în curs". */
+export const RUNNING: readonly UploadState[] = ['queued', 'hashing', 'uploading', 'connection_lost', 'verifying'];
 /** Failures a "Reia" continues: the server still holds the parts. */
-const RESUMABLE: readonly FailReason[] = ['retries_exhausted', 'unknown'];
+export const RESUMABLE: readonly FailReason[] = ['retries_exhausted', 'unknown'];
 const EMPTY_BITS = new Uint8Array(0);
 
 /** A run that was paused, cancelled or superseded: its late results are dropped, never shown. */

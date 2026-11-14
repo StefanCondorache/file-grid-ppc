@@ -35,8 +35,11 @@ const e = ro.upload.form.errors;
 
 const text = (required: string, max: number) => z.string().trim().min(1, required).max(max, e.tooLong(max));
 
-/** A `<select>` starts on the empty "Alege…" option: anything but a listed value is the "choose" message. */
-const choice = <const T extends readonly [string, ...string[]]>(values: T, message: string) => z.enum(values, { error: message });
+/**
+ * A `<select>` starts on the empty "Alege…" option, so the form value is any string; anything but a listed value
+ * gives the "choose" message, and the output is the contract's enum.
+ */
+const choice = <const T extends readonly [string, ...string[]]>(values: T, message: string) => z.string().pipe(z.enum(values, { error: message }));
 
 /** `<input type="datetime-local">` (local time, no offset) → ISO 8601 in UTC, which the backend's offset check accepts. */
 const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/;
