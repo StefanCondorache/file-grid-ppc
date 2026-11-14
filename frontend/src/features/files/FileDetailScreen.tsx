@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ErrorState';
 import { SafeName } from '@/components/SafeName';
 import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/tag';
+import { CustodyTimeline } from '@/features/integrity/CustodyTimeline';
 import { TraceWaterfall } from '@/features/integrity/TraceWaterfall';
 import { ApiError } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
@@ -233,6 +234,18 @@ function TracePanel({ traceId }: { traceId: string }) {
   );
 }
 
+function CustodyPanel({ fileId }: { fileId: string }) {
+  const t = useT();
+  return (
+    <section aria-labelledby="file-custody-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+      <h2 id="file-custody-h" className="text-lg font-bold">
+        {t.files.custody.title}
+      </h2>
+      <CustodyTimeline fileId={fileId} />
+    </section>
+  );
+}
+
 function Loading() {
   const t = useT();
   return (
@@ -289,6 +302,7 @@ export function FileDetailScreen({ fileId }: { fileId: string }) {
       </div>
       <MetadataPanel file={file} />
       {file.uploadTraceId && <TracePanel traceId={file.uploadTraceId} />}
+      <CustodyPanel fileId={file.id} />
     </div>
   );
 }
