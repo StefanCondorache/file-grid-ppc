@@ -8,4 +8,14 @@ export const common = {
   copy: 'Copiază',
   copied: 'Copiat',
   loading: 'Se încarcă…',
+  viewAsTable: 'Vezi ca tabel',
+  interpretation: 'Ce înseamnă',
+  unusualChars: 'caractere neobișnuite',
+  copyTraceId: 'Copiază ID urmărire',
+  errorCode: 'Cod',
+  forbiddenTitle: 'Nu ai acces la această pagină',
+  forbiddenBody: (role: string) =>
+    `Rolul activ (${role}) nu are acces aici. Alege alt rol sau întoarce-te la Garanții de business.`,
+  backHome: 'Înapoi la Garanții',
+  emptyTitle: 'Nimic de afișat încă',
 } as const;
