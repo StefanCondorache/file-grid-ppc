@@ -77,10 +77,8 @@ describe('File detail (SC-05)', () => {
     await user.click(within(panel).getByRole('button', { name: 'Copiază amprenta Server' }));
     expect(await navigator.clipboard.readText()).toBe(sha);
 
-    // The download goes straight to the API, never through Next.js.
-    const download = screen.getByRole('link', { name: 'Descarcă' });
-    expect(download).toHaveAttribute('href', apiUrl(`/files/${file.id}/content`));
-    expect(download).toHaveAttribute('download');
+    // The download is the verifying download button (6c.8), labelled with the file name.
+    expect(screen.getByRole('button', { name: `Descarcă și verifică ${file.displayName}` })).toBeEnabled();
   });
 
   it('never claims a match for a corrupt copy, a mismatch, or a file without a client hash', () => {

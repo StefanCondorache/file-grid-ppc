@@ -193,7 +193,7 @@ function Header({ file }: { file: FileDetail }) {
         {file.zone && ` · ${t.files.zones[file.zone] ?? file.zone}`}
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <FileDownloadSlot fileId={file.id} />
+        <FileDownloadSlot fileId={file.id} fileName={file.displayName} size={file.size} storage={file.storage} expectedSha256={file.serverSha256} />
       </div>
     </section>
   );

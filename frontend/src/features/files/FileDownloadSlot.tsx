@@ -1,19 +1,20 @@
-import { Download } from 'lucide-react';
-import { buttonVariants } from '@/components/ui/button';
-import { apiUrl } from '@/lib/api/base';
-import { useT } from '@/lib/i18n';
+import { DownloadButton } from '@/features/integrity/DownloadButton';
+
+type Props = {
+  fileId: string;
+  fileName: string;
+  size: number;
+  storage?: string | null;
+  expectedSha256?: string | null;
+};
 
 /**
- * The download action of the file detail. For now a plain link straight to the API (the bytes never pass through
- * Next.js); the backend recomputes the SHA-256 while it streams and cuts the connection on a mismatch. Kept in its own
- * component so the streaming verifier (6c.8, `features/integrity/DownloadButton`) can replace it in one place.
+ * The download action of the file detail: the streaming verifier from 6c.8 (`features/integrity/DownloadButton`).
+ * It downloads straight from the API (bytes never pass through Next.js), recomputes the SHA-256 and shows
+ * "Verificat" or "Fișier corupt detectat" with both hashes; large files are verified by the server.
  */
-export function FileDownloadSlot({ fileId }: { fileId: string }) {
-  const t = useT();
+export function FileDownloadSlot({ fileId, fileName, size, storage, expectedSha256 }: Props) {
   return (
-    <a href={apiUrl(`/files/${encodeURIComponent(fileId)}/content`)} download className={buttonVariants({ variant: 'primary', size: 'md' })}>
-      <Download aria-hidden="true" />
-      {t.files.detail.download}
-    </a>
+    <DownloadButton fileId={fileId} fileName={fileName} size={size} storage={storage} expectedSha256={expectedSha256} />
   );
 }
