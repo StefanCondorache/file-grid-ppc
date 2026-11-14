@@ -131,3 +131,17 @@ describe('metrics exposition', () => {
     assert.throws(() => registry.register(new Counter('dup_total', 'x')), /duplicate metric/);
   });
 });
+
+describe('exposition of unlabelled metrics', () => {
+  it('prints each unlabelled series exactly once after increments (Prometheus rejects duplicates)', async () => {
+    const { createSimMetrics } = await import('../src/metrics.ts');
+    const m = createSimMetrics({ queueDepth: () => 0, mode: () => 'normal', ratePerS: () => 1, backpressure: () => false });
+    m.duplicatesSent.inc({}, 3);
+    m.retries.inc();
+
+    const text = m.registry.render();
+    const lines = text.split('\n').filter((l) => l.startsWith('filegrid_sim_duplicates_sent_total'));
+
+    assert.deepEqual(lines, ['filegrid_sim_duplicates_sent_total 3']);
+  });
+});

@@ -59,7 +59,7 @@ export class Counter implements Collector {
     this.name = name;
     this.help = help;
     this.#labelNames = labelNames;
-    if (labelNames.length === 0) this.#series.set('', { labels: {}, value: 0 });
+    if (labelNames.length === 0) this.#series.set(JSON.stringify([]), { labels: {}, value: 0 });
   }
 
   #key(labels: Labels): { key: string; ordered: Labels } {
