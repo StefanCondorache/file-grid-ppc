@@ -76,6 +76,10 @@ export const upload = {
   /** Row label of a connection document before the server names it: never the file name (personal data). */
   connectionLabel: (requestNumber: string) => `Document racordare nr. ${requestNumber}`,
   form,
+  /** Name of a progress bar that has no file name next to it. */
+  progressLabel: 'Progresul încărcării',
+  /** Chunk-grid cells. */
+  legend: { done: 'Confirmată de server', flight: 'În transfer', failed: 'Se reîncearcă', pending: 'În așteptare' },
   validation: {
     empty: 'Fișierul este gol.',
     tooLarge: (limit: string) => `Fișierul depășește ${limit}, limita politicii.`,
