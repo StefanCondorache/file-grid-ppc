@@ -1,8 +1,13 @@
 import type { StreamEvent, StreamEventType } from '@/lib/live/events';
 import type { Policy } from '@/lib/api/types';
-import { CATEGORY_IDS, STORAGE_IDS, type BulkheadPoint, type CategoryId, type StorageId } from '@/lib/monitoring/contract';
+import {
+  CATEGORY_IDS, STORAGE_IDS, type Alert, type BulkheadPoint, type CategoryId, type Comparator, type GuaranteeMetric, type GuaranteeStatus,
+  type StorageId,
+} from '@/lib/monitoring/contract';
 import { db as sharedDb, type MockDb } from './db';
-import { HISTORY_TICKS, JITTER, LOAD_LATENCY, PROFILES, SERIES_POINTS, SMOOTHING, TICK_MS } from './seed/monitoring';
+import {
+  DRONE_TRANSFERS, HISTORY_TICKS, JITTER, LOAD_LATENCY, PROFILES, SERIES_POINTS, SMOOTHING, THRESHOLDS, TICK_MS, seedAlerts,
+} from './seed/monitoring';
 
 type Listener = (e: StreamEvent) => void;
 
@@ -22,6 +27,8 @@ type Tick = { t: number; samples: Record<CategoryId, Sample> };
 
 export type Storm = { category: CategoryId; factor: number; startedAt: number; endsAt: number };
 type MonitoringState = { id: 'state'; storms: Storm[] };
+type AlertRow = Alert & Record<string, unknown>;
+type Verdict = Pick<GuaranteeStatus, 'state' | 'causeCode' | 'causeFacts'>;
 
 const LEGACY_CATEGORY: Record<string, CategoryId> = { meter: 'meter_readings', fault: 'fault_records', connection: 'connection_documents', drone: 'drone_videos' };
 
@@ -41,6 +48,14 @@ export function toStorageId(name: string): StorageId {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
+const OK: Verdict = { state: 'ok', causeCode: null, causeFacts: {} };
+
+function metric(key: string, value: number | string | null, extra: { unit?: string; threshold?: number; comparator?: Comparator } = {}): GuaranteeMetric {
+  return {
+    key, value: value === null ? null : String(value), unit: extra.unit ?? null,
+    threshold: extra.threshold === undefined ? null : String(extra.threshold), comparator: extra.comparator ?? null,
+  };
+}
 
 /**
  * Mock "server" (6a.8 clock, 6e.1 state): every TICK_MS it advances the per-category latency series and emits the
@@ -52,6 +67,7 @@ export function createScenario(options: ScenarioOptions = {}) {
   const random = options.random ?? Math.random;
   const now = options.now ?? (() => Date.now());
   d.register<MonitoringState>('monitoring', () => [{ id: 'state', storms: [] }]);
+  d.register<AlertRow>('alerts', () => seedAlerts(now()) as AlertRow[]);
 
   const listeners = new Set<Listener>();
   let nextId = 1;
@@ -91,6 +107,89 @@ export function createScenario(options: ScenarioOptions = {}) {
   };
   let history: Tick[] = prefill();
 
+  const legacyOf = (c: CategoryId) => Object.keys(LEGACY_CATEGORY).find((k) => LEGACY_CATEGORY[k] === c);
+  const ofCategory = (c: CategoryId) => (row: Record<string, unknown>) => row.category === c || row.category === legacyOf(c);
+
+  /** The four business guarantees (backend/src/guarantees), judged on the latest tick. */
+  const judge = (): GuaranteeStatus[] => {
+    const updatedAt = iso(now());
+    const last = history.at(-1)!.samples;
+
+    const meter: Verdict = OK;
+
+    const p95 = last.fault_records.p95Ms;
+    const samples = Math.round(history.slice(-SERIES_POINTS).reduce((n, tk) => n + tk.samples.fault_records.opsPerS, 0) * (TICK_MS / 1000));
+    const faultFacts = { p95Ms: p95, targetMs: THRESHOLDS.faultTargetMs, samples, windowMinutes: 1 };
+    const fault: Verdict = p95 === null || p95 <= THRESHOLDS.faultTargetMs
+      ? OK
+      : { state: p95 > THRESHOLDS.faultViolatedMs ? 'violated' : 'at_risk', causeCode: 'FAULT_P95_ABOVE_TARGET', causeFacts: faultFacts };
+
+    const docs = d.list<Record<string, unknown>>('files').filter(ofCategory('connection_documents'));
+    const encrypted = docs.filter((f) => f.encryptedAtRest !== false).length;
+    const encryptedPct = docs.length === 0 ? 100 : Math.round((encrypted / docs.length) * 10_000) / 100;
+    const today = new Date(now()).setHours(0, 0, 0, 0);
+    const unmasked = d.list<{ action?: string; at?: string }>('audit')
+      .filter((a) => (a.action === 'reveal' || a.action === 'reveal_pii') && Date.parse(a.at ?? '') >= today).length;
+    const connection: Verdict = encryptedPct < THRESHOLDS.connectionEncryptedPct
+      ? { state: 'violated', causeCode: 'CONNECTION_NOT_ENCRYPTED', causeFacts: { encryptedPct, unencrypted: docs.length - encrypted, minPct: THRESHOLDS.connectionEncryptedPct } }
+      : unmasked > THRESHOLDS.connectionUnmaskMax
+        ? { state: 'at_risk', causeCode: 'CONNECTION_UNMASK_SPIKE', causeFacts: { unmaskEventsToday: unmasked, max: THRESHOLDS.connectionUnmaskMax } }
+        : OK;
+
+    const uploads = d.list<{ category?: string; status?: string }>('uploads').filter((u) => u.category === 'drone_videos');
+    const completed = DRONE_TRANSFERS.completed + uploads.filter((u) => u.status === 'completed').length;
+    const failed = DRONE_TRANSFERS.failed + uploads.filter((u) => u.status === 'failed' || u.status === 'expired').length;
+    const successRate = completed + failed === 0 ? null : Math.round((completed / (completed + failed)) * 10_000) / 10_000;
+    const droneFacts = { successRate, min: THRESHOLDS.droneSuccessMin, failed, completed, windowMinutes: 60 };
+    const drone: Verdict = successRate === null || successRate >= THRESHOLDS.droneSuccessAtRisk
+      ? OK
+      : successRate < THRESHOLDS.droneSuccessMin
+        ? { state: 'violated', causeCode: 'DRONE_SUCCESS_BELOW_TARGET', causeFacts: droneFacts }
+        : { state: 'at_risk', causeCode: 'DRONE_SUCCESS_NEAR_TARGET', causeFacts: droneFacts };
+
+    return [
+      { category: 'meter_readings', ...meter, metrics: [metric('lost', 0, { threshold: THRESHOLDS.meterLostMax, comparator: 'lte' })], updatedAt },
+      { category: 'fault_records', ...fault, metrics: [metric('uploadToAvailableP95Ms', p95, { unit: 'ms', threshold: THRESHOLDS.faultTargetMs, comparator: 'lte' })], updatedAt },
+      {
+        category: 'connection_documents', ...connection, updatedAt, metrics: [
+          metric('encryptedPct', encryptedPct, { unit: '%', threshold: THRESHOLDS.connectionEncryptedPct, comparator: 'gte' }),
+          metric('unmaskEventsToday', unmasked, { threshold: THRESHOLDS.connectionUnmaskMax, comparator: 'lte' }),
+          metric('lastAuditCheckAt', updatedAt),
+        ],
+      },
+      {
+        category: 'drone_videos', ...drone, updatedAt, metrics: [
+          metric('transfersCompleted', completed),
+          metric('transfersResumed', DRONE_TRANSFERS.resumed),
+          metric('transfersFailed', failed),
+          metric('successRate', successRate, { threshold: THRESHOLDS.droneSuccessMin, comparator: 'gte' }),
+        ],
+      },
+    ];
+  };
+
+  /** Alert transitions (backend/src/guarantees/alerts.service.ts): leave ok → raised; change → updated; back to ok → resolved. */
+  const transition = (g: GuaranteeStatus) => {
+    const open = d.find<AlertRow>('alerts', (a) => a.category === g.category && a.state !== 'resolved');
+    if (g.state === 'ok') {
+      if (open) api.emit('alert.updated', d.update<AlertRow>('alerts', (a) => a.id === open.id, { state: 'resolved', resolvedAt: iso(now()) }));
+      return;
+    }
+    const causeCode = g.causeCode ?? 'GUARANTEE_AT_RISK';
+    if (!open) {
+      const raised: AlertRow = {
+        id: crypto.randomUUID(), category: g.category, state: g.state, raisedAt: iso(now()), resolvedAt: null, causeCode,
+        causeFacts: g.causeFacts, traceId: null, acknowledgedAt: null, acknowledgedBy: null,
+      };
+      api.emit('alert.raised', d.insert('alerts', raised));
+      return;
+    }
+    if (open.state === g.state && open.causeCode === causeCode) return;
+    api.emit('alert.updated', d.update<AlertRow>('alerts', (a) => a.id === open.id, { state: g.state, causeCode, causeFacts: g.causeFacts }));
+  };
+
+  let guarantees = judge();
+
   const api = {
     emit(type: StreamEventType, data: unknown): StreamEvent {
       const e: StreamEvent = { type, id: nextId++, data };
@@ -115,6 +214,21 @@ export function createScenario(options: ScenarioOptions = {}) {
     /** One step of the mock server. */
     tick(): void {
       history = [...history.slice(-(HISTORY_TICKS - 1)), { t: now(), samples: samples(load) }];
+      guarantees = judge();
+      guarantees.forEach(transition);
+      api.emit('guarantees.status', { items: guarantees });
+    },
+
+    /** Latest guarantee statuses (GET /guarantees). */
+    guarantees(): GuaranteeStatus[] {
+      return guarantees;
+    },
+
+    /** Alerts, newest first (GET /alerts; `active` = not resolved). */
+    alerts(filter: 'active' | 'resolved' | 'all' = 'all'): Alert[] {
+      return d.list<AlertRow>('alerts')
+        .filter((a) => filter === 'all' || (filter === 'active') === (a.state !== 'resolved'))
+        .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt));
     },
 
     /** Per-category p95 series of the last minute, on one time axis (GET /metrics/bulkhead). */
