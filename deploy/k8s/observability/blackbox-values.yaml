@@ -1,0 +1,16 @@
+# prometheus-community/prometheus-blackbox-exporter (versiunea fixata in mk/observability.mk).
+# Ruleaza in namespace-ul filegrid cu eticheta filegrid.io/storage-client=true: NetworkPolicy-urile din
+# filegrid-storage accepta doar astfel de poduri, deci proba TCP masoara storage-urile fara sa depinda de aplicatie.
+# Prometheus (namespace monitoring) il apeleaza la /probe?module=tcp_connect&target=<host:port> (job blackbox-storage).
+fullnameOverride: blackbox-exporter
+pod:
+  labels:
+    filegrid.io/storage-client: "true"
+config:
+  modules:
+    tcp_connect:
+      prober: tcp
+      timeout: 5s
+resources:
+  requests: {cpu: 5m, memory: 16Mi}
+  limits: {cpu: 100m, memory: 48Mi}
