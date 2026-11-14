@@ -34,6 +34,13 @@ export function UploadTray() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const running = items.filter((i) => RUNNING.includes(i.state)).length;
   const verified = items.filter((i) => i.state === 'verified').length;
   const summary = [running > 0 && `${running} în curs`, verified > 0 && `${verified} ${verified === 1 ? 'verificat' : 'verificate'}`]
@@ -52,7 +59,6 @@ export function UploadTray() {
         <div
           role="group"
           aria-label={u.queue.title}
-          onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
           className="fixed right-4 bottom-4 z-30 w-[min(92vw,360px)] rounded-card border border-border bg-card shadow-e3"
         >
           <button
