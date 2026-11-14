@@ -15,4 +15,9 @@ const stateLabel: Record<UploadState, string> = {
 /** Upload screen, tray and engine copy (slice 6b). */
 export const upload = {
   stateLabel,
+  validation: {
+    empty: 'Fișierul este gol.',
+    tooLarge: (limit: string) => `Fișierul depășește ${limit}, limita politicii.`,
+    typeNotAllowed: (mime: string) => `Tipul ${mime} nu este permis pentru această categorie.`,
+  },
 } as const;

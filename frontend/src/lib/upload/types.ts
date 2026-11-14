@@ -1,5 +1,25 @@
 /** Upload engine vocabulary (docs/frontend/architecture/upload-engine.md §4, §11). Framework-free. */
 
+/** Category ids of the real backend (docs/api.md "Basics"); the UI shows Romanian labels. */
+export const UPLOAD_CATEGORIES = ['fault_records', 'connection_documents', 'drone_videos'] as const;
+export type UploadCategoryId = (typeof UPLOAD_CATEGORIES)[number];
+
+/** Storage ids of the real backend; displayed as S3, FTP, PostgreSQL. */
+export type StorageId = 's3' | 'ftp' | 'db';
+
+/** The policy fields the engine needs, frozen when an upload starts (upload-engine.md §5, UE-7). */
+export interface PolicySnapshot {
+  category: UploadCategoryId;
+  version: number;
+  primaryStorage: StorageId;
+  fallbackStorage: StorageId | null;
+  encryptionAtRest: boolean;
+  chunkSize: number;
+  maxParallel: number;
+  maxFileSize: number;
+  allowedTypes: string[];
+}
+
 export const UPLOAD_STATES = [
   'queued',
   'hashing',
