@@ -95,3 +95,5 @@ k8s-storage-up: k8s-secrets
 # Test al verificarii (trebuie sa pice): ISOCHECK_FAULT=leak|nopod|notool|badtoken|s3down make storage-isolation-check
 storage-isolation-check:
 	./scripts/storage-isolation-check.sh
+
+-include mk/*.mk
