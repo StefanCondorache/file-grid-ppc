@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ErrorState';
 import { SafeName } from '@/components/SafeName';
 import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/tag';
+import { TraceWaterfall } from '@/features/integrity/TraceWaterfall';
 import { ApiError } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
 import { useT } from '@/lib/i18n';
@@ -215,6 +216,23 @@ function Breadcrumb({ file }: { file: FileDetail }) {
   );
 }
 
+function TracePanel({ traceId }: { traceId: string }) {
+  const t = useT();
+  return (
+    <section aria-labelledby="file-trace-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="file-trace-h" className="text-lg font-bold">
+          {t.files.trace.title}
+        </h2>
+        <Link href={`/traces/${encodeURIComponent(traceId)}`} className="text-sm font-semibold text-link hover:underline">
+          {t.files.trace.openPage}
+        </Link>
+      </div>
+      <TraceWaterfall traceId={traceId} />
+    </section>
+  );
+}
+
 function Loading() {
   const t = useT();
   return (
@@ -270,6 +288,7 @@ export function FileDetailScreen({ fileId }: { fileId: string }) {
         <StoragePolicyPanel file={file} />
       </div>
       <MetadataPanel file={file} />
+      {file.uploadTraceId && <TracePanel traceId={file.uploadTraceId} />}
     </div>
   );
 }
