@@ -23,19 +23,23 @@ describe('buildHandlers', () => {
   const server = setupServer();
   beforeAll(async () => {
     // Only the marker is hand-written in `statistics` here, so the group's other proposal paths must not fall back.
+    // `audit` is emptied too (hand-written since 6h.1) so /audit-events below really comes from the baseline.
     const written = groupHandlers.statistics;
+    const writtenAudit = groupHandlers.audit;
     groupHandlers.statistics = [];
+    groupHandlers.audit = [];
     try {
       server.use(...(await buildHandlers('all', { statistics: [marker] })));
     } finally {
       groupHandlers.statistics = written;
+      groupHandlers.audit = writtenAudit;
     }
     server.listen({ onUnhandledRequest: 'error' });
   });
   afterAll(() => server.close());
 
   it('serves every proposal path from the baseline', async () => {
-    // A group no slice of this wave hand-writes (monitoring is hand-written since 6e.1).
+    // The audit group is emptied in beforeAll, so this path is answered by the OpenAPI baseline.
     const res = await fetch(new URL(apiUrl('/audit-events'), location.origin));
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty('data');
