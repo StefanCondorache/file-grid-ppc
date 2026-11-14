@@ -5,6 +5,7 @@
  */
 import { api as apiClient, unwrap } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
+import { notifyUnauthenticated } from '@/lib/auth/session-end';
 import { ro } from '@/lib/i18n/ro';
 import { createUploadApi, createXhrTransport, errorBody, type PartTransport, type UploadApi } from './api';
 import { backoffMs } from './backoff';
@@ -77,6 +78,8 @@ export interface EngineDeps {
   newId(): string;
   /** Hex SHA-256 of a string (the file-name fingerprint). */
   sha256Text(text: string): Promise<string>;
+  /** A 401 from the uploads API: the session is over, the auth layer shows the login (SR-19). */
+  onUnauthenticated?(error: ApiError): void;
 }
 
 const MAX_HASHING = 2;
@@ -91,6 +94,9 @@ const EMPTY_BITS = new Uint8Array(0);
 
 /** A run that was paused, cancelled or superseded: its late results are dropped, never shown. */
 class Stale extends Error {}
+
+/** Someone other than the upload's owner is signed in: the upload waits for its owner (BA-65). */
+class OtherUser extends Error {}
 
 /** A failure decided by the engine itself (not an HTTP status), with the reason to show. */
 class Failure extends Error {
@@ -307,12 +313,19 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
     fire(job, { type: 'FAIL', reason });
   }
 
+  /** 401: pause for the session (resumed by `resumeAll` after the same user logs in) and end the session. */
+  function sessionEnded(job: Job, error: ApiError): void {
+    pauseJob(job, 'session');
+    deps.onUnauthenticated?.(error);
+  }
+
   function onError(job: Job, error: unknown): void {
     if (error instanceof Stale) return;
+    if (error instanceof OtherUser) return pauseJob(job, 'session');
     if (error instanceof Failure) return fail(job, error.reason, error.cause, error.detail);
     const c = classifyError(error);
     if (c.kind === 'abort') return;
-    if (c.kind === 'session') return pauseJob(job, 'session');
+    if (c.kind === 'session') return sessionEnded(job, error as ApiError);
     if (c.kind === 'reconcile') return void reconcile(job);
     if (c.kind === 'fatal') return fail(job, c.reason, error);
     if (c.kind === 'checksum') return fail(job, 'file_changed', error);
@@ -412,8 +425,8 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
 
   async function createRecord(job: Job, g: number, file: File): Promise<PersistedUpload> {
     const who = await withRetry(job, g, () => deps.whoami());
-    // Another account signed in since enqueue: keep the upload for its owner (BA-65, Review Focus 2).
-    if (who.userId !== job.userId) throw new ApiError(401, 'UNAUTHENTICATED', 'A different user is signed in');
+    // Another account signed in since enqueue: keep the upload for its owner (Review Focus 2).
+    if (who.userId !== job.userId) throw new OtherUser();
     job.role = who.role;
     changed(job);
     const policy = await withRetry(job, g, () => api.policy(job.category));
@@ -571,7 +584,7 @@ export function createUploadEngine(deps: EngineDeps): UploadEngine {
         if (fire(job, { type: 'ALL_PARTS_OK' }) === 'verifying') void run(job);
         return;
       case 'session':
-        pauseJob(job, 'session');
+        sessionEnded(job, s.error);
         return;
       case 'reconcile':
         void reconcile(job);
@@ -857,6 +870,7 @@ function browserDeps(): EngineDeps {
     },
     newId: () => crypto.randomUUID(),
     sha256Text: async (text) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))),
+    onUnauthenticated: (error) => notifyUnauthenticated(error),
   };
 }
 

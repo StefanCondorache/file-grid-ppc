@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/lib/api/errors';
 import type { CompleteOutcome, PartSend, PartTransport, UploadApi } from './api';
 import { partsToRanges, type CompleteResult, type DroneMetadata, type UploadSession } from './contract';
 import { createUploadEngine, type EngineDeps } from './engine';
@@ -143,7 +144,7 @@ function memoryRepo(): UploadRepo & { records: Map<string, PersistedUpload> } {
 
 const onlineNet = (): NetMonitor => ({ online: true, subscribe: () => () => {}, reportNetworkError() {}, reportSuccess() {}, dispose() {} });
 
-function setup(server = fakeServer(), repo = memoryRepo(), hasher = fakeHasher()) {
+function setup(server = fakeServer(), repo = memoryRepo(), hasher = fakeHasher(), over: Partial<EngineDeps> = {}) {
   let n = 0;
   const deps: EngineDeps = {
     api: server.api,
@@ -156,6 +157,7 @@ function setup(server = fakeServer(), repo = memoryRepo(), hasher = fakeHasher()
     whoami: async () => ({ userId: 'u1', role: 'teren' }),
     newId: () => `id-${++n}-${Math.random().toString(36).slice(2, 8)}`,
     sha256Text: async (text) => `sha256(${text})`,
+    ...over,
   };
   return { engine: createUploadEngine(deps), server, repo, hasher };
 }
@@ -293,5 +295,27 @@ describe('upload engine facade', () => {
     expect(writes).toBeLessThanOrEqual(4);
     expect(writes).toBeGreaterThanOrEqual(3);
     expect(after).toBeGreaterThan(before); // coalesced, not dropped
+  });
+
+  it('a 401 pauses the upload for the session, tells the auth layer, and re-login resumes it', async () => {
+    const server = fakeServer();
+    let expired = true;
+    const transport: PartTransport = {
+      send: (args) => (expired ? Promise.reject(new ApiError(401, 'UNAUTHENTICATED', 'Sesiunea a expirat.')) : server.transport.send(args)),
+    };
+    const onUnauthenticated = vi.fn();
+    const { engine } = setup({ ...server, transport }, memoryRepo(), fakeHasher(), { onUnauthenticated });
+    await engine.restore('u1');
+    const id = engine.enqueue({ file: testFile('A'), category: 'drone_videos', metadata: drone });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(item(id)).toMatchObject({ state: 'paused', pausedReason: 'session' });
+    expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+    expect(onUnauthenticated.mock.calls[0]![0]).toMatchObject({ status: 401 });
+
+    expired = false; // the same user logs in again; AuthGate calls restoreAndResume
+    await engine.restoreAndResume('u1');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(item(id).state).toBe('verified');
   });
 });
