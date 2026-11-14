@@ -3,7 +3,7 @@
 Source of requirements: `docs/brief/FileGrid_PPC.pdf`.
 
 Stack:
-- **Backend:** Python FastAPI.
+- **Backend:** NestJS 12 (TypeScript, Node 26).
 - **Frontend:** React + Vite.
 - **Storage (already in `infra/`):** PostgreSQL, SeaweedFS (S3) and pure-ftpd (FTP).
 - **Observability:** Prometheus, Grafana and Loki.
@@ -17,14 +17,14 @@ Only edit your own folders. If you need a change in someone else's folder, ask t
 
 | Person | Role | Owns |
 |---|---|---|
-| **P1** | Infra, storage, security | `infra/`, `deploy/`, `Makefile`, `README.md`, `backend/app/storage/`, `backend/app/crypto/` |
+| **P1** | Infra, storage, security | `infra/`, `deploy/`, `Makefile`, `README.md`, `backend/src/storage/`, `backend/src/crypto/` |
 | **P2** | Backend API, data, simulator | `backend/` (except `storage/` and `crypto/`), `simulator/`, `docs/api.md` |
 | **P3** | Frontend | `frontend/` |
 
 Each person writes the Dockerfile for their own part. P1 wires the Dockerfiles into compose and k8s.
 
 **Contracts to agree in the first hour.** After that, change them only after telling the others:
-- `backend/app/storage/base.py` (P1 writes it, P2 uses it). It defines the storage adapter interface: `put_stream(key, chunks) -> (size, sha256)`, `get_stream(key)`, `delete(key)` and `health()`.
+- `backend/src/storage/base.ts` (P1 owns it, P2 uses it). It defines the storage adapter interface: `putStream(key, chunks) -> {size, sha256}`, `getStream(key)`, `delete(key)` and `health()`. It is the TypeScript port of the original Python `base.py`.
 - `docs/api.md` (P2 writes it, P3 uses it). It is the REST API below. P3 builds against mocks until the real endpoints exist.
 
 Draft API:
@@ -79,12 +79,12 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 | 8 | ✅ `make chaos-storage-stop/start S=…`, `make chaos-netem-on/off` (doar în rețeaua podului), RBAC pentru panoul demo |
 
 **Rămas de făcut (oricine din echipă):**
-- [ ] Rulați `sudo make up` de două ori pe VPS după merge: a doua rulare nu trebuie să schimbe nimic. Apoi `make storage-isolation-check`.
-- [ ] Repetiție de chaos live: `make chaos-storage-stop S=s3`; categoriile pe FTP/DB trebuie să meargă în continuare; apoi `make chaos-storage-start S=s3`. Netem a fost testat doar pe un pod de unică folosință.
-- [ ] Testele de integrare ale adaptoarelor, în cluster: `backend/app/storage/tests/run-in-cluster.sh`. Ultimele commit-uri pe storage (FTP keep-alive, curățenie de teste) nu au mai avut review independent.
-- [ ] Ultimul re-review pentru fix-urile k8s (pin k3s/Helm, timeout Traefik, ordinea storage → TLS în `make up`) a fost oprit înainte de final: o trecere rapidă prin `git show fd79ace eb23ac0`.
-- [ ] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`.
-- [ ] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice.
+- [x] Rulați `sudo make up` de două ori pe VPS după merge: a doua rulare nu trebuie să schimbe nimic. Apoi `make storage-isolation-check`. **Făcut 14.11:** a doua rulare nu a repornit nimic (aceleași poduri, 0 restarturi); singura linie `configured` e `ValidatingAdmissionPolicy` `filegrid-demo-storage-scale-0-or-1`, cosmetică (`kubectl diff` gol). Izolare: **30/30**.
+- [x] Repetiție de chaos live: `make chaos-storage-stop S=s3`; categoriile pe FTP/DB trebuie să meargă în continuare; apoi `make chaos-storage-start S=s3`. Netem a fost testat doar pe un pod de unică folosință. **Făcut 14.11** (prin API-ul demo, același ca panoul): cu S3 oprit, fault records au mers pe fallback `db`, video pe FTP și contoarele pe DB au continuat (0 pierdute); `FileGridStorageDown(s3)` + `FileGridCircuitOpen(s3)` au pornit în ~1,5 min și s-au stins după repornire. Netem pe podul backend real (300 ms ± 50 ms, 5% pierderi): API ~0,35 s în loc de 0,04 s, backend gata; `chaos-netem-off` a curățat complet.
+- [x] ~~Testele de integrare ale adaptoarelor, în cluster: `backend/app/storage/tests/run-in-cluster.sh`.~~ Înlocuit: adaptoarele Python au fost portate în TypeScript (`backend/src/storage/`) și verificate pe storage-urile din cluster (vezi „P2 status”). Fix-ul FTP keep-alive (b66395d) e inclus în portare; review independent făcut pe codul TypeScript.
+- [x] Ultimul re-review pentru fix-urile k8s (pin k3s/Helm, timeout Traefik, ordinea storage → TLS în `make up`) a fost oprit înainte de final: o trecere rapidă prin `git show fd79ace eb23ac0`. **Făcut 14.11:** corecte; `readTimeout` 900 s acoperă părțile de upload (16 MiB la 1 Mbit/s ≈ 2-3 min).
+- [x] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`. **Făcut 14.11:** limite backend 384Mi (heap V8 192 MB), simulator 128Mi, frontend ridicat la 256Mi (cererea P3). Măsurat: backend ~170-180Mi, simulator ~40-50Mi, toate podurile ~1,35 GiB, ~1,2 GiB disponibili pe gazdă.
+- [x] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice. **Confirmat** (vezi „P2 status” și `docs/api.md`); Prometheus scrapează backend-ul (fix Content-Type `a96d1fa`), iar `MeterReadingsLost` arată 0.
 - [ ] Opțional: webhook Discord/Telegram pentru alerte (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
 
 ## P2: Backend API, data, simulator
@@ -103,6 +103,37 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
    - Grid insights: consumption peaks, anomalies and the regions with the most faults.
 
    Each comes with a short plain-language interpretation.
+
+### P2 status (14.11.2026, 18:30)
+
+The P2 code is on branch `feat/p2-backend-nest` (pushed to `origin`, merged with `main`, no conflicts). The backend is **NestJS 12** (TypeScript), not FastAPI. P1's storage adapters and encryption were ported to TypeScript in `backend/src/storage/` and `backend/src/crypto/`, with the same metrics, env variables, `blobstore` schema and FGE1 format. The REST contract is in [`docs/api.md`](docs/api.md), under `/api/v1`.
+
+| # | Status |
+|---|---|
+| 1 | ✅ Metadata schema (Kysely, migration under an advisory lock). Session in the `__Host-fg_session` cookie (8 h, 30 min idle) + CSRF check. The 5 roles with the capability matrix; one demo account per role in demo mode. Meter API key |
+| 2 | ✅ Policies live in the DB, with versions, change history and 409 on a stale `baseVersion`; connection documents always encrypted |
+| 3 | ✅ Stateless resumable upload in parts: parts staged in the policy's storage (`staging/…`), fallback when the primary is down, file confirmed only after a durable write and a matching SHA-256 |
+| 4 | ✅ Download with the SHA-256 recomputed (409 `FILE_CORRUPT`, or a cut connection for big files; the file is marked corrupt). Search, custody, audited personal-data reveal |
+| 5 | ✅ Meter readings idempotent on `readingId`, in batches; never stored twice; metrics as in the README |
+| 6 | ✅ Bulkhead per category (`maxConcurrency` from the policy, read live); 503 `CATEGORY_BUSY` when full |
+| 7 | ✅ `X-Trace-Id` on every response, operations log (`GET /api/v1/traces/{id}`), `/metrics` |
+| 8 | ✅ Simulator in `simulator/` (no runtime dependencies; normal, 10x storm, custom, stopped; deliberate retries and duplicates; `Dockerfile` on port 8080) |
+| 9 | ✅ Statistics with Romanian interpretations. Demo panel endpoints: storm, corrupt a file, stop/start S3/FTP through the Kubernetes API |
+
+Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3/FTP servers) and 87 simulator, all passing. A local end-to-end run (backend + simulator) stored 1,263 of 1,263 unique readings, rejected the deliberate duplicates and lost none.
+
+**Answers for P1:** the metric names and `outcome` values in the README are confirmed (`success` / `mismatch` / `error` for uploads), and `filegrid_sim_readings_sent_total` counts unique readings. Details are in `docs/api.md`, section "Metrics".
+
+**Left to do:**
+- [x] Test the S3/FTP adapters against the real storages in the cluster (14.11, through `kubectl port-forward`): health, 1 KB and 20 MiB objects with matching SHA-256, early stop, missing object, cleanup. Note: the first FTP operation of a process takes ~4-6 s (pure-ftpd login), later ones reuse the connection.
+- [x] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS. **Done 14.11:** built and deployed by `sudo make up` (run twice, idempotent); over HTTPS: login (`__Host-` cookie), CSRF, one upload per category with matching SHA-256 after download, masked personal data, traces, 1,172/1,172 readings stored and 0 lost. Found and fixed on the VPS: `/metrics` was served as text/html, so Prometheus rejected the scrape (`a96d1fa`).
+- [x] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it. **Done 14.11** through the demo API: 10x storm, S3 stopped (fault records on the `db` fallback, FTP and DB categories unaffected, 0 readings lost, `FileGridStorageDown(s3)` fired and cleared), S3 restarted, corrupted file answered `409 FILE_CORRUPT` and was marked corrupt.
+- [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
+- [ ] Known limits from the code review (minor, left as they are):
+  - S3 down: a part upload gets `503` (the client retries) instead of the fallback until the circuit opens (~10 s: 5 failures or 2 failed health probes). FTP and DB fall back at once.
+  - A DB storage pool full of slow transfers (default 8 clients, `FILEGRID_PG_POOL_MAX`) is counted as an outage and can open the `db` circuit.
+  - A download client that stalls for more than 30 s on a large S3 file can count as an S3 failure.
+- [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`.
 
 ## P3: Frontend
 
@@ -143,11 +174,11 @@ Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `
 - [ ] 6h · Jurnal de audit, test de integrare între etape, pas final de accesibilitate, repetiții, video de rezervă
 
 **Am nevoie de la P2 (detalii în `docs/api/backend-sync-2026-11-14.md`):**
-- [ ] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`.
-- [ ] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`.
-- [ ] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri).
+- [x] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`. **Făcut (P2):** sesiunea e cookie-ul `__Host-fg_session` (Secure, HttpOnly, SameSite=Strict) + verificare CSRF; bearer acceptat doar pentru scripturi.
+- [x] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`. **Făcut (P2):** matricea din PRD FE-01, un cont demo per rol, comutator de rol pentru admin, `reveal` doar pentru `auditor`.
+- [x] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri). **Făcut (P2):** `meter_readings`, `fault_records`, `connection_documents`, `drone_videos` peste tot (API, metrici, alerte).
 - [ ] `@nestjs/swagger` cu `/api/docs-json`, ca să generăm tipurile din API-ul real.
-- [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor.
+- [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor. **Parțial (P2):** jurnalul operațiilor (`/traces/{id}`), `origin` și perioadele etichetate (`/statistics/periods`) există; pragurile garanțiilor sunt în lucru.
 - [ ] Confirmare: `GET /auth/me` nu prelungește sesiunea (doar `POST /auth/refresh` și activitatea reală).
 
 #### Prompturi pentru task-urile rămase
@@ -345,3 +376,34 @@ Report pass/fail per beat with evidence.
 4. **M4:** statistics and the demo panel, a one-command start on a clean machine, and a demo rehearsal.
 
 The VPS has 4 GB RAM and 2 cores, so every container needs a memory limit. Keep Prometheus, Loki and Grafana retention short.
+
+## Completion plan and where we stopped (P2, 14.11.2026, 19:52)
+
+Goal: close every open item above (P1, P2, P3), in this order. Everything below is on `main` unless marked otherwise.
+
+**Done today**
+- P1: double `sudo make up` (idempotent), `make storage-isolation-check` 30/30, live chaos run (S3 stopped through the demo API: fallback to `db`, alerts fired and cleared, 0 readings lost), netem on the real backend pod, k8s re-review, RAM limits (frontend raised to 256Mi), metric names confirmed.
+- P2: backend + simulator deployed on the VPS through `make up`, checked over HTTPS (login, uploads per category with matching SHA-256, masked personal data, traces, meter readings 0 lost), demo rehearsal (storm, S3 down, corruption). Fixed on the VPS: `/metrics` Content-Type, so Prometheus scrapes the backend and `MeterReadingsLost` is quiet.
+- Cleanup: the Python adapters were removed (TypeScript port in `backend/src/storage/`), and old images and logs were removed from the VPS. Every test credential is now generated at random; no secret is in git.
+
+**In progress (not merged yet; each one in its own git worktree, at most 2 at a time)**
+1. Branch `feat/p2-backend-endpoints` (backend):
+   - `GET /auth/me` and background polling no longer extend the session;
+   - fixes for the three known limits and the FTP "degraded at idle" glitch;
+   - SSE `GET /api/v1/stream` (cross-replica through Postgres LISTEN/NOTIFY);
+   - `/audit-events`, `/guarantees` (thresholds in env), `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series;
+   - `Range` downloads, `/api/docs-json` (OpenAPI of the real API), and `docs/api.md` updated.
+2. Branch `feat/frontend-6b-upload` (frontend slice 6b, the resumable upload engine), wired to the real backend contract instead of the OpenAPI proposal.
+
+**Next, in order**
+1. Review both branches (tests, typecheck, lint, build), merge into `main`, push, then redeploy the backend on the VPS (backend image only).
+2. P3 5.15: build the frontend image off-VPS (Docker now runs locally), `docker save | k3s ctr images import` on the VPS, roll out with `make app-up` (it skips nothing that has an image). Check `/healthz`, the login page on `/`, the CSP, and `kubectl top`.
+3. P3 slices 6c, 6d and 6f, two at a time, each wired to the real API.
+4. P3 6e (guarantees, health strip, alerts, matrix, bulkhead chart), then 6g (demo control room, live meter view); 6e must merge before 6g.
+5. P3 6h: audit log, cross-slice integration test, accessibility pass, demo rehearsal on the VPS, backup video (Playwright recording).
+6. Final pass: `make up` on the VPS, a full rehearsal of the demo beats, then tick everything here.
+
+**Left undone on purpose**
+- P1: alert webhook (Discord or Telegram). The main dev will do it; the URL goes only into the `monitoring/alertmanager-config` Secret.
+
+**How to resume:** `git fetch upstream`; the branches above are local worktrees of the P2 machine until they are merged. The VPS runs backend `68972a4` and simulator `91a34b9` (`kubectl -n filegrid get pods`), and `/` still serves the placeholder.

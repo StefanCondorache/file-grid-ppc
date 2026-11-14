@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+# Postgres data dirs created by the test setup (embedded-postgres)
+.pgdata*/
