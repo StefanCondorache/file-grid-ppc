@@ -126,8 +126,8 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
 
 **Left to do:**
 - [x] Test the S3/FTP adapters against the real storages in the cluster (14.11, through `kubectl port-forward`): health, 1 KB and 20 MiB objects with matching SHA-256, early stop, missing object, cleanup. Note: the first FTP operation of a process takes ~4-6 s (pure-ftpd login), later ones reuse the connection.
-- [ ] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS.
-- [ ] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it.
+- [x] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS. **Done 14.11:** built and deployed by `sudo make up` (run twice, idempotent); over HTTPS: login (`__Host-` cookie), CSRF, one upload per category with matching SHA-256 after download, masked personal data, traces, 1,172/1,172 readings stored and 0 lost. Found and fixed on the VPS: `/metrics` was served as text/html, so Prometheus rejected the scrape (`a96d1fa`).
+- [x] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it. **Done 14.11** through the demo API: 10x storm, S3 stopped (fault records on the `db` fallback, FTP and DB categories unaffected, 0 readings lost, `FileGridStorageDown(s3)` fired and cleared), S3 restarted, corrupted file answered `409 FILE_CORRUPT` and was marked corrupt.
 - [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
 - [ ] Known limits from the code review (minor, left as they are):
   - S3 down: a part upload gets `503` (the client retries) instead of the fallback until the circuit opens (~10 s: 5 failures or 2 failed health probes). FTP and DB fall back at once.
@@ -174,11 +174,11 @@ Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `
 - [ ] 6h · Jurnal de audit, test de integrare între etape, pas final de accesibilitate, repetiții, video de rezervă
 
 **Am nevoie de la P2 (detalii în `docs/api/backend-sync-2026-11-14.md`):**
-- [ ] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`.
-- [ ] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`.
-- [ ] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri).
+- [x] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`. **Făcut (P2):** sesiunea e cookie-ul `__Host-fg_session` (Secure, HttpOnly, SameSite=Strict) + verificare CSRF; bearer acceptat doar pentru scripturi.
+- [x] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`. **Făcut (P2):** matricea din PRD FE-01, un cont demo per rol, comutator de rol pentru admin, `reveal` doar pentru `auditor`.
+- [x] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri). **Făcut (P2):** `meter_readings`, `fault_records`, `connection_documents`, `drone_videos` peste tot (API, metrici, alerte).
 - [ ] `@nestjs/swagger` cu `/api/docs-json`, ca să generăm tipurile din API-ul real.
-- [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor.
+- [ ] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor. **Parțial (P2):** jurnalul operațiilor (`/traces/{id}`), `origin` și perioadele etichetate (`/statistics/periods`) există; pragurile garanțiilor sunt în lucru.
 - [ ] Confirmare: `GET /auth/me` nu prelungește sesiunea (doar `POST /auth/refresh` și activitatea reală).
 
 #### Prompturi pentru task-urile rămase
