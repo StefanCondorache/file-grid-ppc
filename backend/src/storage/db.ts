@@ -139,6 +139,18 @@ export class DbStorage implements StorageAdapter {
       idleTimeoutMillis: IDLE_CONNECTION_MS,
       Client: TimedClient as unknown as new () => ClientBase,
     });
+    // pg emits 'error' on a client whose connection ends unexpectedly (DB restart, terminated backend,
+    // a destroyed connection after an abort). pg-pool listens only while a client is idle, so give
+    // every client its own listener for its whole life; otherwise a checked-out client crashes the
+    // process. The failing query still rejects, so the operation fails as StorageUnavailable.
+    pool.on('connect', (client) =>
+      client.on('error', (error) =>
+        this.logger?.warn(
+          { storage: this.name, error: errorKind(error) },
+          'db connection failed while in use',
+        ),
+      ),
+    );
     // An idle client can die (DB restart); without a listener that would crash the process.
     pool.on('error', (error) =>
       this.logger?.warn(

@@ -347,10 +347,15 @@ export class FtpStorage implements StorageAdapter {
           // into a socket nobody reads and never sends the transfer's final reply.
           destination?.destroy();
           client.ftp.dataSocket?.destroy();
+          const timer = new AbortController();
           const finished = await Promise.race([
             outcome.then(() => true),
-            sleep(RESYNC_TIMEOUT_MS).then(() => false),
+            sleep(RESYNC_TIMEOUT_MS, timer.signal).then(
+              () => false,
+              () => false,
+            ),
           ]);
+          timer.abort();
           reusable = finished && !client.closed && (await resyncAfterAbort(client));
         }
         this.pool.release(client, reusable);

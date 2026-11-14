@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { Client } from 'pg';
 import {
   DecryptionError,
   SEGMENT_SIZE,
@@ -123,6 +124,23 @@ describe('circuit breaker around a storage', () => {
     expect(storage.breaker.stateName).toBe('open');
   });
 
+  it('lets other calls through once a half-open trial read has received data', async () => {
+    const memory = new MemoryStorage('ftp', { readBlock: 1024 });
+    await memory.putStream('t/k', chunksOf(randomBytes(10_000)));
+    const storage = new ResilientStorage(memory, {
+      breaker: new CircuitBreaker('ftp', { failureThreshold: 1, resetTimeoutMs: 60_000 }),
+    });
+    storage.breaker.trip();
+    storage.breaker.allowTrial();
+
+    const trial = storage.getStream('t/k')[Symbol.asyncIterator]();
+    await trial.next(); // the storage answered: a long transfer must not block every other call
+
+    await expect(collect(storage.getStream('t/k'))).resolves.toHaveLength(10_000);
+    expect(storage.breaker.stateName).toBe('closed');
+    await trial.return(undefined);
+  });
+
   it('counts ObjectNotFound as a storage that answered', async () => {
     const storage = new ResilientStorage(new MemoryStorage('db'), {
       breaker: new CircuitBreaker('db', { failureThreshold: 1 }),
@@ -169,6 +187,30 @@ describe('DbStorage (PostgreSQL blobstore)', () => {
 
     await expect(storage.putStream('test/keep.bin', failing())).rejects.toThrow();
     expect((await collect(storage.getStream('test/keep.bin'))).toString()).toBe('old');
+  });
+
+  it('survives the database killing the connection in the middle of a read', async () => {
+    await storage.putStream('test/kill.bin', chunksOf(randomBytes(300_000)));
+    const reading = storage.getStream('test/kill.bin')[Symbol.asyncIterator]();
+    await reading.next(); // a pooled client is now checked out, idle in its read transaction
+
+    const admin = new Client({ connectionString: testDatabaseUrl() });
+    await admin.connect();
+    try {
+      const killed = await admin.query(
+        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+         WHERE datname = current_database() AND pid <> pg_backend_pid() AND state = 'idle in transaction'`,
+      );
+      expect(killed.rowCount).toBeGreaterThan(0);
+    } finally {
+      await admin.end();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200)); // let the socket close event fire
+
+    await expect(collect({ [Symbol.asyncIterator]: () => reading })).rejects.toThrow(
+      StorageUnavailable,
+    );
+    expect((await collect(storage.getStream('test/kill.bin'))).length).toBe(300_000);
   });
 
   it('reports health', async () => {

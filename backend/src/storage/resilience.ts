@@ -467,7 +467,7 @@ export class ResilientStorage implements StorageAdapter {
     caller: AbortSignal | undefined,
   ): AsyncGenerator<Buffer, void, undefined> {
     const op = new OperationRecorder(this.name, 'get', category);
-    const trial = this.admit(op);
+    let trial = this.admit(op);
     const controller = new AbortController();
     const unlink = onAbort(caller, () => controller.abort(abortReason(caller as AbortSignal)));
     let iterator: AsyncIterator<Buffer> | undefined;
@@ -485,6 +485,12 @@ export class ResilientStorage implements StorageAdapter {
         if (chunk.length > 0) {
           received += chunk.length;
           op.addBytes(chunk.length);
+          if (trial) {
+            // The storage answered: close the breaker now, so a long half-open trial transfer
+            // (a big download) does not keep rejecting every other call until it ends.
+            this.breaker.recordSuccess(true);
+            trial = false;
+          }
         }
         yield chunk;
       }

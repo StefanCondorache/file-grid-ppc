@@ -15,5 +15,12 @@ export function createDatabase(config: AppConfig, logger?: Logger): Db {
   });
   // An idle client can die (DB restart, network); without a listener that would crash the process.
   pool.on('error', (error) => logger?.warn({ err: error }, 'idle database connection failed'));
+  // pg-pool listens for errors only on idle clients; a connection that dies while checked out (DB
+  // restart mid-query) would otherwise crash the process. The query itself still rejects.
+  pool.on('connect', (client) =>
+    client.on('error', (error) =>
+      logger?.warn({ err: error }, 'database connection failed while in use'),
+    ),
+  );
   return new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
 }

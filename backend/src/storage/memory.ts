@@ -41,6 +41,8 @@ export class MemoryStorage implements StorageAdapter {
   private available = true;
   private delayMs = 0;
   calls = 0;
+  /** Reads started and not yet finished or closed (test hook: proves a reader was released). */
+  openReads = 0;
 
   constructor(name: StorageName, options: MemoryStorageOptions = {}) {
     this.name = name;
@@ -118,12 +120,17 @@ export class MemoryStorage implements StorageAdapter {
     signal: AbortSignal | undefined,
   ): AsyncGenerator<Buffer, void, undefined> {
     this.calls += 1;
-    await this.step(signal);
-    const stored = this.objects.get(key);
-    if (!stored) throw new ObjectNotFound(`${this.name}: no object ${JSON.stringify(key)}`);
-    for (let offset = 0; offset < stored.data.length; offset += this.readBlock) {
-      if (offset > 0) await this.step(signal);
-      yield Buffer.from(stored.data.subarray(offset, offset + this.readBlock));
+    this.openReads += 1;
+    try {
+      await this.step(signal);
+      const stored = this.objects.get(key);
+      if (!stored) throw new ObjectNotFound(`${this.name}: no object ${JSON.stringify(key)}`);
+      for (let offset = 0; offset < stored.data.length; offset += this.readBlock) {
+        if (offset > 0) await this.step(signal);
+        yield Buffer.from(stored.data.subarray(offset, offset + this.readBlock));
+      }
+    } finally {
+      this.openReads -= 1;
     }
   }
 

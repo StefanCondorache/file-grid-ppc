@@ -155,9 +155,9 @@ export class ObjectStoreService {
   }
 
   /** Plaintext of a stored object. Throws IntegrityError at the end when the stored hash differs. */
-  read(category: Category, object: StoredObject): AsyncGenerator<Buffer> {
+  read(category: Category, object: StoredObject, signal?: AbortSignal): AsyncGenerator<Buffer> {
     const stored = withCategory(category, () =>
-      this.registry.get(object.storage).getStream(object.key),
+      this.registry.get(object.storage).getStream(object.key, { signal }),
     );
     const verified = verifyStream(stored, object.storedSha256);
     return object.encrypted ? decryptStream(verified, this.requireKeyring()) : verified;

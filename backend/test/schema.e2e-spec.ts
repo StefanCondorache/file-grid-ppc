@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { type Kysely, sql } from 'kysely';
 import { migrateToLatest, migrateToNothing } from '../src/database/migrator';
 import type { Database } from '../src/database/schema';
-import { resetDatabase, testDb } from './helpers';
+import { createDatabase } from '../src/database/database';
+import { resetDatabase, testConfig, testDb } from './helpers';
 
 const EXPECTED_TABLES = [
   'audit_log',
@@ -188,6 +189,25 @@ describe('metadata schema (migration 0001)', () => {
         await trx.insertInto('meter_readings').values(reading(randomUUID())).execute();
       }),
     ).rejects.toThrow('fk_meter_readings_file_id_files');
+  });
+
+  it('survives the database killing a connection in the middle of a transaction', async () => {
+    const app = createDatabase(testConfig());
+    const admin = testDb();
+    try {
+      const failure = app.transaction().execute(async (trx) => {
+        await sql`SELECT 1`.execute(trx);
+        await sql`SELECT pg_terminate_backend(pg_backend_pid())`.execute(trx);
+      });
+
+      await expect(failure).rejects.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const { rows } = await sql<{ ok: number }>`SELECT 1 AS ok`.execute(app);
+      expect(rows[0].ok).toBe(1);
+    } finally {
+      await app.destroy();
+      await admin.destroy();
+    }
   });
 
   it('migrates down to nothing and back up again', async () => {
