@@ -376,3 +376,34 @@ Report pass/fail per beat with evidence.
 4. **M4:** statistics and the demo panel, a one-command start on a clean machine, and a demo rehearsal.
 
 The VPS has 4 GB RAM and 2 cores, so every container needs a memory limit. Keep Prometheus, Loki and Grafana retention short.
+
+## Completion plan and where we stopped (P2, 14.11.2026, 19:52)
+
+Goal: close every open item above (P1, P2, P3), in this order. Everything below is on `main` unless marked otherwise.
+
+**Done today**
+- P1: double `sudo make up` (idempotent), `make storage-isolation-check` 30/30, live chaos run (S3 stopped through the demo API: fallback to `db`, alerts fired and cleared, 0 readings lost), netem on the real backend pod, k8s re-review, RAM limits (frontend raised to 256Mi), metric names confirmed.
+- P2: backend + simulator deployed on the VPS through `make up`, checked over HTTPS (login, uploads per category with matching SHA-256, masked personal data, traces, meter readings 0 lost), demo rehearsal (storm, S3 down, corruption). Fixed on the VPS: `/metrics` Content-Type, so Prometheus scrapes the backend and `MeterReadingsLost` is quiet.
+- Cleanup: the Python adapters were removed (TypeScript port in `backend/src/storage/`), and old images and logs were removed from the VPS. Every test credential is now generated at random; no secret is in git.
+
+**In progress (not merged yet; each one in its own git worktree, at most 2 at a time)**
+1. Branch `feat/p2-backend-endpoints` (backend):
+   - `GET /auth/me` and background polling no longer extend the session;
+   - fixes for the three known limits and the FTP "degraded at idle" glitch;
+   - SSE `GET /api/v1/stream` (cross-replica through Postgres LISTEN/NOTIFY);
+   - `/audit-events`, `/guarantees` (thresholds in env), `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series;
+   - `Range` downloads, `/api/docs-json` (OpenAPI of the real API), and `docs/api.md` updated.
+2. Branch `feat/frontend-6b-upload` (frontend slice 6b, the resumable upload engine), wired to the real backend contract instead of the OpenAPI proposal.
+
+**Next, in order**
+1. Review both branches (tests, typecheck, lint, build), merge into `main`, push, then redeploy the backend on the VPS (backend image only).
+2. P3 5.15: build the frontend image off-VPS (Docker now runs locally), `docker save | k3s ctr images import` on the VPS, roll out with `make app-up` (it skips nothing that has an image). Check `/healthz`, the login page on `/`, the CSP, and `kubectl top`.
+3. P3 slices 6c, 6d and 6f, two at a time, each wired to the real API.
+4. P3 6e (guarantees, health strip, alerts, matrix, bulkhead chart), then 6g (demo control room, live meter view); 6e must merge before 6g.
+5. P3 6h: audit log, cross-slice integration test, accessibility pass, demo rehearsal on the VPS, backup video (Playwright recording).
+6. Final pass: `make up` on the VPS, a full rehearsal of the demo beats, then tick everything here.
+
+**Left undone on purpose**
+- P1: alert webhook (Discord or Telegram). The main dev will do it; the URL goes only into the `monitoring/alertmanager-config` Secret.
+
+**How to resume:** `git fetch upstream`; the branches above are local worktrees of the P2 machine until they are merged. The VPS runs backend `68972a4` and simulator `91a34b9` (`kubectl -n filegrid get pods`), and `/` still serves the placeholder.
