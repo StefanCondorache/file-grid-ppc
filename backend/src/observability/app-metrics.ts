@@ -1,4 +1,4 @@
-import { Counter, Histogram, register } from 'prom-client';
+import { Counter, Gauge, Histogram, register } from 'prom-client';
 
 /**
  * Application metrics on prom-client's default registry (exposed at /metrics with the storage
@@ -88,6 +88,21 @@ export const METER_BATCHES = metric(
       name: 'filegrid_meter_batches_total',
       help: 'Meter reading batches per outcome (success, rejected, error).',
       labelNames: ['outcome'],
+    }),
+);
+
+/**
+ * Meter readings lost, as GET /guarantees computes it (sent - acked - queued, from the simulator),
+ * set by the guarantee evaluator on the leader replica every GUARANTEE_EVAL_INTERVAL_S. 0 when
+ * nothing is lost and on the other replicas; NaN while the loss is unknown (simulator unreachable).
+ * The MeterReadingsLost alert (> 0 for 2m) and the dashboard's "Pierdute" stat read only this.
+ */
+export const METER_READINGS_LOST = metric(
+  'filegrid_meter_readings_lost',
+  () =>
+    new Gauge({
+      name: 'filegrid_meter_readings_lost',
+      help: 'Meter readings lost (sent - acked - queued), from the guarantee evaluator; NaN when unknown.',
     }),
 );
 
