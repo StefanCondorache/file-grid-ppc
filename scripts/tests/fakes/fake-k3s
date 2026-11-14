@@ -6,7 +6,8 @@
 #                                         missing file = no encryption config
 #   k3s secrets-encrypt status         -> the matching text form
 #   k3s secrets-encrypt enable          -> enable=true (needs a config, i.e. an existing state file)
-#   k3s secrets-encrypt reencrypt ...   -> stage reencrypt_finished (fails if not enabled)
+#   k3s secrets-encrypt reencrypt ...   -> stage reencrypt_finished (fails if not enabled); with $FAKE_REENCRYPT_DB
+#                                         also prefixes the Secret rows of that kine SQLite file with k8s:enc:aescbc
 set -euo pipefail
 printf 'k3s %s\n' "$*" >> "$FAKE_STATE/calls"
 state=$FAKE_STATE/k3s-enc
@@ -32,5 +33,14 @@ case "${1:-} ${2:-}" in
     echo "true $stage" > "$state" ;;
   "secrets-encrypt reencrypt")
     read_state; [ "$enable" = true ] || { echo "fake: secrets encryption not enabled" >&2; exit 1; }
-    echo "true reencrypt_finished" > "$state" ;;
+    echo "true reencrypt_finished" > "$state"
+    [ -z "${FAKE_REENCRYPT_DB:-}" ] || python3 -I - "$FAKE_REENCRYPT_DB" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+for rowid, value in db.execute("SELECT id, value FROM kine WHERE name LIKE '/registry/secrets/%'").fetchall():
+    if not bytes(value).startswith(b"k8s:enc:"):
+        db.execute("UPDATE kine SET value = ? WHERE id = ?", (b"k8s:enc:aescbc:v1:aescbckey:" + bytes(value), rowid))
+db.commit()
+PY
+    ;;
 esac

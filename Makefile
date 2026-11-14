@@ -11,7 +11,8 @@ export DOMAIN ?= ppc.filegrid.cc.cd
 # helm si kubectl (link-ul k3s) citesc acelasi cluster: kubeconfig-ul k3s, nu un ~/.kube/config oarecare
 export KUBECONFIG ?= /etc/rancher/k3s/k3s.yaml
 
-.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check scripts-test
+.PHONY: up status infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check scripts-test \
+	k3s-secrets-encrypt
 
 # O singura comanda pe VPS sau pe un Ubuntu curat, ca root. Idempotenta: a doua rulare nu schimba nimic.
 # host-bootstrap.sh instaleaza doar ce lipseste (curl/openssl/jq, k3s, helm) si asteapta clusterul;
@@ -112,6 +113,13 @@ k8s-storage-up: k8s-secrets
 # Test al verificarii (trebuie sa pice): ISOCHECK_FAULT=leak|nopod|notool|badtoken|s3down make storage-isolation-check
 storage-isolation-check:
 	./scripts/storage-isolation-check.sh
+
+# Criptarea Secret-elor Kubernetes in datastore-ul k3s (at rest, cheie AES-CBC a k3s). Oprita pana rulati aceasta
+# tinta ca root (k3s-ul de pe VPS a fost instalat fara --secrets-encryption). NU face parte din `make up`: activarea
+# reporneste k3s (API-ul lipseste ~1 minut, podurile merg mai departe). Idempotenta: rescrie toate Secret-ele cu
+# cheia activa si verifica (k3s secrets-encrypt status + datastore); a doua rulare doar verifica.
+k3s-secrets-encrypt:
+	./scripts/k3s-secrets-encrypt.sh
 
 # Teste pentru scripturile din scripts/ si tintele make (fara cluster, fara root: kubectl/helm/k3s/systemctl/docker
 # sunt inlocuite cu fake-uri din scripts/tests/fakes)
