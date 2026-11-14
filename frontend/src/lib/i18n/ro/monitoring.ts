@@ -87,4 +87,28 @@ export const monitoring = {
     noTrace: '—',
     empty: 'Nicio alertă până acum: toate garanțiile au fost respectate.',
   },
+  /** Observabilitate (SC-07, FE-09): the category × storage matrix and its window. */
+  observability: {
+    matrixTitle: 'Categorie × storage',
+    matrixLead:
+      'Latența p50 / p95 / p99, debitul și rata de erori ale operațiilor de stocare, măsurate de server pentru fiecare categorie pe fiecare storage.',
+    caption: (window: string) => `Latență, debit și erori pe categorie și storage, ${window}`,
+    corner: 'Categorie',
+    windowLabel: 'Interval',
+    windows: { '5m': '5 minute', '15m': '15 minute', '1h': '1 oră', '24h': '24 de ore' },
+    windowsLong: { '5m': 'ultimele 5 minute', '15m': 'ultimele 15 minute', '1h': 'ultima oră', '24h': 'ultimele 24 de ore' },
+    noTraffic: 'fără trafic',
+    /** Short metric labels inside a cell; numbers arrive formatted. */
+    perSecond: (value: string) => `${value}/s`,
+    ops: (value: string) => `${value} op/s`,
+    errors: (pct: string) => `${pct} erori`,
+    missing: '—',
+    overThreshold: 'Peste prag',
+    thresholdNote: (pct: string) => `Peste prag: rata de erori peste ${pct}. Celulele fără trafic nu au fost folosite în interval.`,
+    updatedAt: (time: string) => `Actualizat la ${time}`,
+    polling: (seconds: string) => `se actualizează la fiecare ${seconds}`,
+    paused: 'Actualizări live în pauză: valorile sunt înghețate',
+    switching: (window: string) => `se încarcă ${window}…`,
+    refreshFailed: 'Ultima actualizare nu a reușit; reîncercăm.',
+  },
 } as const;

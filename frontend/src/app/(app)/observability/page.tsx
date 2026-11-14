@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ComingSoon';
+import { ObservabilityScreen } from '@/features/observability/ObservabilityScreen';
 
 export const metadata: Metadata = { title: 'Observabilitate · FileGrid' };
 
-export default function Page() {
-  return <ComingSoon title="Observabilitate" />;
+/** SC-07 Observabilitate: the category × storage matrix (`?window=5m|1h|24h`). */
+export default function ObservabilityPage() {
+  return <ObservabilityScreen />;
 }
