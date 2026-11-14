@@ -76,7 +76,7 @@ export const policyHandlers = [
     const c = toCategory(params.category);
     if (!c) return fail(404, 'POLICY_NOT_FOUND', 'Categoria nu există.');
     const rows = db.list<PolicyVersionRow>('policyVersions').filter((r) => r.category === c).sort((a, b) => b.version - a.version);
-    return HttpResponse.json({ data: rows.map(({ category: _c, ...rest }) => rest) });
+    return HttpResponse.json({ data: rows.map((r) => ({ version: r.version, policy: r.policy, changedAt: r.changedAt, changedBy: r.changedBy, changes: r.changes })) });
   }),
 
   http.get(apiUrl('/policies/:category'), ({ params }) => {
