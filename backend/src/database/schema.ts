@@ -175,6 +175,8 @@ export interface AuditLogTable {
   reason: string | null;
   details: string | null;
   trace_id: string | null;
+  /** The client of the request (X-Forwarded-For from a trusted proxy, else the TCP peer). */
+  client_ip: string | null;
 }
 
 export interface SpanRow {

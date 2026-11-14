@@ -3,6 +3,7 @@ import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
+import { ClusterChannel } from '../src/events/cluster-channel.service';
 import type { StreamEvent } from '../src/events/events.types';
 import { EventBus } from '../src/events/event-bus.service';
 import { GuaranteeEvaluator } from '../src/guarantees/guarantee-evaluator';
@@ -205,6 +206,44 @@ describe('business guarantees and alerts', () => {
     expect(metric(lost, 'lost')).toBe('3');
     expect(unknown).toMatchObject({ state: 'at_risk', causeCode: 'METER_LOSS_UNKNOWN' });
     expect(metric(unknown, 'lost')).toBeNull();
+  });
+
+  it('exposes the evaluated meter loss as the gauge filegrid_meter_readings_lost', async () => {
+    const evaluator = app.get(GuaranteeEvaluator);
+    const gauge = async (): Promise<string | undefined> => {
+      const response = await request(app.getHttpServer()).get('/metrics');
+      return /^filegrid_meter_readings_lost (\S+)$/m.exec(response.text)?.[1];
+    };
+
+    simulator.state.acked = 96;
+    await evaluator.evaluateOnce();
+    const lost = await gauge();
+    const fromApi = metric((await guarantees()).meter_readings, 'lost');
+    simulator.state.acked = 100;
+    await evaluator.evaluateOnce();
+    const none = await gauge();
+    simulator.state.down = true;
+    await evaluator.evaluateOnce();
+    const unknown = await gauge();
+
+    expect(lost).toBe('4');
+    expect(fromApi).toBe('4');
+    expect(none).toBe('0');
+    // Unknown is not "nothing lost": NaN never satisfies `> 0`, and is no false 0 either.
+    // (prom-client writes `Nan`; Prometheus parses NaN case-insensitively.)
+    expect(unknown?.toLowerCase()).toBe('nan');
+  });
+
+  it('reports no loss for filegrid_meter_readings_lost on a replica that is not the leader', async () => {
+    const evaluator = app.get(GuaranteeEvaluator);
+    simulator.state.acked = 90;
+    await evaluator.evaluateOnce();
+    jest.spyOn(app.get(ClusterChannel), 'isLeader').mockResolvedValueOnce(false);
+
+    await evaluator.tick();
+
+    const response = await request(app.getHttpServer()).get('/metrics');
+    expect(response.text).toMatch(/^filegrid_meter_readings_lost 0$/m);
   });
 
   it('compares the fault upload-to-available p95 with GUARANTEE_FAULT_P95_MS', async () => {

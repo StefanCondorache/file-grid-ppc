@@ -11,6 +11,7 @@ import { ensureSeedUsers } from '../src/auth/user-seeder';
 import { configureApp } from '../src/app.setup';
 import { APP_CONFIG, type AppConfig, loadConfig } from '../src/config/config';
 import type { Database } from '../src/database/schema';
+import { BootService } from '../src/lifecycle/boot.service';
 import { ROOT_LOGGER, createRootLogger } from '../src/observability/logger';
 import { STORAGE_NAMES, type StorageName } from '../src/storage/base';
 import { MemoryStorage } from '../src/storage/memory';
@@ -96,6 +97,8 @@ export interface TestAppOptions {
   logDestination?: DestinationStream;
   /** Storages for the app; default: fresh in-memory ones (no S3/FTP needed in tests). */
   storage?: StorageRegistry;
+  /** Wait until the boot (database reachable, migrated, accounts seeded) is done. Default true. */
+  waitForBoot?: boolean;
 }
 
 /** Three in-memory storages behind the real resilience layer, with test hooks. */
@@ -144,6 +147,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
   configureApp(app);
   await app.init();
+  if (options.waitForBoot ?? true) await app.get(BootService).ready;
   return app;
 }
 

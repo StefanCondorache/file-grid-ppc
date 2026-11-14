@@ -51,6 +51,7 @@ export class AuditController {
           'audit_log.reason',
           'audit_log.details',
           'audit_log.trace_id',
+          'audit_log.client_ip',
           'users.id as user_id',
           'users.display_name',
           'users.role',
@@ -84,6 +85,7 @@ export class AuditController {
         reason: row.reason,
         details: row.details,
         traceId: row.trace_id,
+        clientIp: row.client_ip,
       })),
       meta: {
         page: query.page,

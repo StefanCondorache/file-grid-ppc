@@ -14,6 +14,7 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
+import { clientIpOf } from '../common/client-ip';
 import { ROLES } from '../common/domain';
 import { ZodPipe, parseOrThrow } from '../common/zod.pipe';
 import { APP_CONFIG, type AppConfig } from '../config/config';
@@ -70,7 +71,8 @@ export class AuthController {
   ): Promise<MeResponse> {
     const schema = this.config.passwordlessLogin ? passwordlessLoginSchema : loginSchema;
     const body: LoginBody = parseOrThrow(schema, rawBody);
-    const session = await this.auth.login(body.username, body.password, request.ip ?? 'unknown');
+    const clientIp = clientIpOf(request) ?? 'unknown';
+    const session = await this.auth.login(body.username, body.password, clientIp);
     return this.respond(response, session);
   }
 

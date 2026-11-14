@@ -15,6 +15,15 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   - Categories: `meter_readings`, `fault_records`, `connection_documents`, `drone_videos`.
   - Storages: `s3`, `ftp`, `db`.
   - Zones: `muntenia`, `banat`, `dobrogea`.
+- **Client IP:** the login rate limiter and the audit trail use the client's IP. Behind Traefik that is
+  the address in `X-Forwarded-For`, which the backend believes only when the TCP peer is in
+  `TRUSTED_PROXY_CIDRS` (default `10.42.0.0/16,10.43.0.0/16`, the k3s pod and service CIDRs; Traefik keeps
+  the client source IP with `externalTrafficPolicy: Local`). From any other peer the header is ignored and
+  the peer address is used, so a client cannot choose its own IP.
+- **Response headers:** every answer carries `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: no-referrer` and `Cache-Control: no-store` (sessions, user data and file metadata are
+  never cached). File content sends `private, no-store` with its `ETag`, `Accept-Ranges` and `If-Range`
+  handling, and `GET /stream` sends `no-cache, no-transform`. HSTS is added by Traefik.
 - **Trace ID:** every response carries `X-Trace-Id`. A valid incoming value (`[A-Za-z0-9-]{1,64}`) is
   reused; otherwise the backend generates one. `GET /traces/{traceId}` shows the steps of that operation.
 - **Errors:** one body for every error: `{ code, message, traceId, fieldErrors?, ...extras }`.
@@ -32,7 +41,7 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /auth/login-options` | anyone | `{passwordless: boolean}`: whether the login form asks for a password. `Cache-Control: public, max-age=5` |
-| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. `password` may be left out while passwordless login is on. Errors: `401 INVALID_CREDENTIALS`, `422 VALIDATION_ERROR` (no `password` while passwordless login is off), `429 RATE_LIMITED` (10 failures per 5 min per IP and username) |
+| `POST /auth/login` `{username, password}` | anyone | `200 Me` and sets the cookie. `password` may be left out while passwordless login is on. Errors: `401 INVALID_CREDENTIALS`, `422 VALIDATION_ERROR` (no `password` while passwordless login is off), `429 RATE_LIMITED` (10 failures per 5 min per client IP and username) |
 | `POST /auth/logout` | session | `204`, expires the cookie |
 | `GET /auth/me` | session | `Me` |
 | `POST /auth/refresh` | session | `200 Me`, with a new idle window |
@@ -189,9 +198,9 @@ session.
 
 | Method & path | Notes |
 |---|---|
-| `GET /statistics/periods` | `{ data: Period[] }`. A period is a run of storm batches (`peak`) or of regular simulator batches (`normal`) over the last 7 days: `{ id, label, kind, origin, start, end }` |
+| `GET /statistics/periods` | `{ data: Period[] }`, newest first. A period is a run of storm batches (`peak`) or of regular simulator batches (`normal`) over the last 7 days: `{ id, label, kind, origin, start, end }`. `id` is the start in epoch milliseconds, so it stays the same while a running period grows; a running storm has `end: null` |
 | `GET /statistics/storage-fit` | `{ items: [{ category, storages: [{ storage, samples, p50Ms, p95Ms, throughputBps, errorRate }], recommendedStorage, interpretation }] }`, measured from the operations log over 7 days |
-| `GET /statistics/period-comparison?a=&b=` | `{ periodA, periodB, rows: [{ category, metric, a, b, deltaPct }], interpretation }`, where `metric` is one of `p95Ms`, `opsPerS`, `errorRate` or `volume` |
+| `GET /statistics/period-comparison?a=&b=` | `{ periodA, periodB, rows: [{ category, metric, a, b, deltaPct }], interpretation }`, where `metric` is one of `p95Ms`, `opsPerS`, `errorRate` or `volume`. `a` and `b` are period ids; either may be the newest, still-running period (measured up to now). An older `start-end` id is still accepted. `404 NOT_FOUND` for an unknown period |
 | `GET /statistics/grid-insights` | `{ faultsByZone, consumptionByHourZone, anomalies, interpretation }` over the last 24 h. Anomalies are readings of zero or above 5x the zone average |
 
 All of these need `view_statistics`.
@@ -203,8 +212,18 @@ All of these need `view_statistics`.
 | `GET /storage-health` | session | `{ data: [{ storage, status: ok|degraded|down, latencyMs, lastCheckAt, circuitState }] }`, from the health monitor (every 5 s) |
 | `GET /metrics/bulkhead` | `view_observability` | `{ data: [{ category, active, queued }] }` for this replica |
 | `GET /traces/{traceId}` | session | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, name, startOffsetMs, durationMs, status, storage, errorCode }] }` |
-| `GET /healthz`, `GET /readyz` | probes | `/readyz` stays **200** when a storage or the DB is down (`status: degraded`), as the README requires |
+| `GET /healthz`, `GET /readyz` | probes | `/healthz` is 200 while the process lives. `/readyz` answers `{ status, database }`: **200** `ready`, or `degraded` when a storage or the DB is down after the start, as the README requires. It answers **503** (with `Retry-After`) only while `starting` (the database has not been reached, migrated and seeded yet) and while `stopping` (SIGTERM, see below) |
 | `GET /metrics` | Prometheus | Text exposition |
+
+## Audit, guarantees, alerts and the live stream
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /audit-events?action=&actor=&fileId=&from=&to=&page=&pageSize=` | `view_audit` | `{ data: AuditEvent[], meta }`, newest first. `AuditEvent`: `{ id, at, actor: { id, username, displayName, role }, actingAs, demo, action, outcome, category, fileId, fileDisplayName, reason, details, traceId, clientIp }`. `clientIp` is the client of the audited request (see Basics), `null` for background work and for rows written before it was recorded |
+| `GET /guarantees` | session | `{ data: [{ category, state: ok\|at_risk\|violated, causeCode, causeFacts, metrics: [{ key, value, unit, threshold, comparator }], updatedAt }] }`, the four business guarantees with the `GUARANTEE_*` thresholds |
+| `GET /alerts?state=active\|resolved\|all&page=&pageSize=` | session | `{ data: [{ id, category, state, raisedAt, resolvedAt, causeCode, causeFacts, traceId, acknowledgedAt, acknowledgedBy }], meta }`. The leader replica evaluates the guarantees every `GUARANTEE_EVAL_INTERVAL_S` and records the transitions |
+| `POST /alerts/{id}/acknowledge` | session | The alert, acknowledged (idempotent, audited as `alert_ack`) |
+| `GET /stream` | session | Server-Sent Events: `meters.counters`, `guarantees.status`, `alert.raised`, `alert.updated`, `storage.health`, `policy.updated`, `simulator.status`, `demo.storm` and a `ping`, filtered by the active role. Streams end when the session does and when the replica shuts down; `EventSource` reconnects |
 
 ## Demo controls (demo mode only: 404 when `FILEGRID_DEMO_MODE=false`; admin, audited)
 
@@ -219,7 +238,25 @@ All of these need `view_statistics`.
 The network-slowdown control (`tc netem`) stays a `make` target run by P1, because it needs root on the
 node.
 
+## Start and shutdown
+
+- **Start:** the server listens at once (`/healthz` 200, `/readyz` 503 `starting`). It then reaches the
+  database, retrying DNS and connection errors with backoff (0.5 s doubling up to 5 s) for
+  `FILEGRID_DB_BOOT_TIMEOUT_S` (90 s), runs the migrations (a Postgres advisory lock lets replicas take
+  turns) and creates the accounts from the environment. Then `/readyz` turns 200. If the database stays
+  unreachable, the process logs `database not reachable at startup; giving up` and exits 1, and
+  Kubernetes restarts it.
+- **Shutdown (SIGTERM, SIGINT):** `/readyz` turns 503 `stopping` and the live streams (`GET /stream`) end,
+  so `EventSource` reconnects to another replica. The server stops accepting connections, and responses
+  still being written carry `Connection: close`. In-flight requests finish, for at most
+  `FILEGRID_SHUTDOWN_DRAIN_S` (20 s, below the pod's grace period), and anything still open after that is
+  cut. Only then do the database pool, the storages and the timers close, so a rolling update or an HPA
+  scale-down answers no request with 500.
+
 ## Metrics (confirmation for P1: the names match the README)
+
+Every outcome of the counters below (failures included) is exported at 0 from the start, per category,
+zone or storage, so `rate()` and `increase()` see the first failure.
 
 - **Uploads:** `filegrid_uploads_total{category,outcome}` and
   `filegrid_upload_duration_seconds{category,outcome}`. The outcome is one of `success`, `mismatch` or
@@ -228,11 +265,17 @@ node.
   - `filegrid_meter_readings_stored_total{zone}` counts first stores only.
   - `filegrid_meter_readings_duplicates_total{zone}` counts deduplicated retries.
   - `filegrid_meter_readings_duplicate_stored_total` is always 0.
-  - `filegrid_meter_batches_total{outcome}`.
+  - `filegrid_meter_batches_total{outcome}` (`success`, `rejected` or `error`).
+  - `filegrid_meter_readings_lost` (gauge, no labels): the readings lost, with the same definition as the
+    `lost` metric of `GET /guarantees` (sent − acked − queued, as the simulator reports it). The guarantee
+    evaluator sets it on the leader replica every `GUARANTEE_EVAL_INTERVAL_S`; the other replicas show 0. It
+    is 0 when nothing is lost and `NaN` while the loss is unknown (simulator unreachable). The
+    `MeterReadingsLost` alert (`> 0` for 2 m) and the dashboard's "Pierdute" stat use only this gauge.
 - **Storages:** the P1 metrics unchanged: `filegrid_storage_operation_seconds`,
   `filegrid_storage_bytes_total`, `filegrid_storage_errors_total`, `filegrid_storage_up` and
   `filegrid_storage_circuit_state`.
-- **Downloads and integrity:** `filegrid_downloads_total{category,outcome}`,
+- **Downloads and integrity:** `filegrid_downloads_total{category,outcome}` (outcome `success`, `corrupt`,
+  `aborted` or `error`),
   `filegrid_integrity_failures_total{category,storage}`.
 - **Bulkhead:** `filegrid_bulkhead_in_flight{category}`, `filegrid_bulkhead_queued{category}` and
   `filegrid_bulkhead_rejected_total{category}`.
@@ -248,9 +291,8 @@ node.
 - **Identifiers:** category and storage ids are the team identifiers from the README (`fault_records`,
   `s3`, ...), not `fault` or `S3`. The UI shows the labels (S3, FTP, PostgreSQL). The metadata `kind`
   values stay `fault`, `connection` and `drone`.
-- **Not implemented yet:** `GET /api/docs-json` (Swagger), `GET /stream` (SSE), `GET /audit-events`,
-  `GET /guarantees`, `GET /alerts`, `GET /metrics/matrix` and `Range` downloads. Use polling until SSE
-  exists.
+- **Not implemented yet:** `GET /api/docs-json` (Swagger). The live stream, the audit trail, guarantees,
+  alerts, `GET /metrics/matrix` and single-range downloads (`206`, `If-Range`, `416`) are implemented.
 - **Extra endpoints:** `maxConcurrency` on policies and `POST /demo/storages/{storage}/{action}`.
 
 ## Answers to `docs/api/HANDOFF-backend.md`
@@ -262,7 +304,7 @@ node.
    on the pod's disk.
 4. **Errors and traces:** the error shape and `X-Trace-Id` are on every response. Traces come from the
    operations log.
-5. **SSE:** not done yet (see above).
+5. **SSE:** `GET /stream`, cross-replica through Postgres LISTEN/NOTIFY (see [Audit, guarantees, alerts and the live stream](#audit-guarantees-alerts-and-the-live-stream)).
 6. **Storage outage:** writes go to the policy fallback. If the fallback is down too, the answer is
    `503 STORAGE_UNAVAILABLE` with `storage` and `Retry-After`.
 7. **Corruption:** any storage can be corrupted in place (S3 object, FTP file, DB row).
@@ -285,6 +327,9 @@ The variables come from the k3s Secrets `filegrid-storage-credentials` and `file
   `FILEGRID_KEK_ID`.
 
 Optional:
+- `FILEGRID_DB_BOOT_TIMEOUT_S` (default 90) and `FILEGRID_SHUTDOWN_DRAIN_S` (default 20), see
+  [Start and shutdown](#start-and-shutdown)
+- `TRUSTED_PROXY_CIDRS` (default `10.42.0.0/16,10.43.0.0/16`; empty = trust no proxy), see Basics
 - `FILEGRID_DEMO_MODE` (default `true`)
 - `FILEGRID_PASSWORDLESS_LOGIN` (default `false`; only takes effect with demo mode on, see "Auth and session")
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
@@ -295,4 +340,6 @@ Optional:
 - `LOG_LEVEL`
 
 Simulator variables: `BACKEND_URL`, `METER_API_KEY`, `METER_RATE` (default 10/s), `STORM_FACTOR` (10),
-`PORT` (8080), `METER_COUNT`, `BATCH_MAX`, `DUPLICATE_RATIO` (0.02) and `MAX_RATE`.
+`PORT` (8080), `METER_COUNT`, `BATCH_MAX`, `DUPLICATE_RATIO` (0.02) and `MAX_RATE`. The simulator logs JSON
+lines with the trace id of each batch request in `trace_id`, the same field as the backend's logs (it sends
+the same id as `X-Trace-Id`).

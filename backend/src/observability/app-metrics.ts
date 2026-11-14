@@ -1,4 +1,4 @@
-import { Counter, Histogram, register } from 'prom-client';
+import { Counter, Gauge, Histogram, register } from 'prom-client';
 
 /**
  * Application metrics on prom-client's default registry (exposed at /metrics with the storage
@@ -91,15 +91,45 @@ export const METER_BATCHES = metric(
     }),
 );
 
-/** Touch every label combination once so dashboards show 0 instead of "no data". */
-export function initAppMetrics(categories: readonly string[], zones: readonly string[]): void {
+/**
+ * Meter readings lost, as GET /guarantees computes it (sent - acked - queued, from the simulator),
+ * set by the guarantee evaluator on the leader replica every GUARANTEE_EVAL_INTERVAL_S. 0 when
+ * nothing is lost and on the other replicas; NaN while the loss is unknown (simulator unreachable).
+ * The MeterReadingsLost alert (> 0 for 2m) and the dashboard's "Pierdute" stat read only this.
+ */
+export const METER_READINGS_LOST = metric(
+  'filegrid_meter_readings_lost',
+  () =>
+    new Gauge({
+      name: 'filegrid_meter_readings_lost',
+      help: 'Meter readings lost (sent - acked - queued), from the guarantee evaluator; NaN when unknown.',
+    }),
+);
+
+/** Every outcome label value each counter can take (failures included). */
+export const UPLOAD_OUTCOMES = ['success', 'mismatch', 'error'] as const;
+export const DOWNLOAD_OUTCOMES = ['success', 'corrupt', 'aborted', 'error'] as const;
+export const METER_BATCH_OUTCOMES = ['success', 'rejected', 'error'] as const;
+
+/**
+ * Export every label combination at 0 from the start: dashboards show 0 instead of "no data", and
+ * rate()/increase() need a sample before the first failure, or a counter that appears already at 1
+ * hides that failure from the alerts.
+ */
+export function initAppMetrics(
+  categories: readonly string[],
+  zones: readonly string[],
+  storages: readonly string[],
+): void {
   METER_DUPLICATE_STORED.inc(0);
   for (const zone of zones) {
     METER_STORED.labels(zone).inc(0);
     METER_DUPLICATES.labels(zone).inc(0);
   }
+  for (const outcome of METER_BATCH_OUTCOMES) METER_BATCHES.labels(outcome).inc(0);
   for (const category of categories) {
-    UPLOADS_TOTAL.labels(category, 'success').inc(0);
-    DOWNLOADS_TOTAL.labels(category, 'success').inc(0);
+    for (const outcome of UPLOAD_OUTCOMES) UPLOADS_TOTAL.labels(category, outcome).inc(0);
+    for (const outcome of DOWNLOAD_OUTCOMES) DOWNLOADS_TOTAL.labels(category, outcome).inc(0);
+    for (const storage of storages) INTEGRITY_FAILURES.labels(category, storage).inc(0);
   }
 }

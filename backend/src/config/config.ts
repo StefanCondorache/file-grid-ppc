@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 /**
@@ -15,6 +16,28 @@ const bool = z
   .enum(['true', 'false', '1', '0', 'yes', 'no'])
   .transform((value) => ['true', '1', 'yes'].includes(value));
 
+/** `a.b.c.d`, `a.b.c.d/n` (n <= 32), an IPv6 address or `x::y/n` (n <= 128). */
+function isAddressOrCidr(entry: string): boolean {
+  const [address, prefix, extra] = entry.split('/');
+  const family = isIP(address ?? '');
+  if (family === 0 || extra !== undefined) return false;
+  if (prefix === undefined) return true;
+  const bits = Number(prefix);
+  return /^\d{1,3}$/.test(prefix) && bits <= (family === 4 ? 32 : 128);
+}
+
+const cidrList = z
+  .string()
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  )
+  .refine((entries) => entries.every(isAddressOrCidr), {
+    message: 'must be a comma-separated list of IP addresses or CIDR ranges',
+  });
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(8000),
   // Metadata database: the same PostgreSQL as the `db` storage, tables in schema public.
@@ -26,6 +49,10 @@ const envSchema = z.object({
   POSTGRES_DB: z.string().optional(),
   FILEGRID_DB_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(8),
   FILEGRID_DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).default(3000),
+  // Start-up: how long to keep retrying an unreachable database (DNS, connection) before exiting.
+  FILEGRID_DB_BOOT_TIMEOUT_S: z.coerce.number().min(1).max(3600).default(90),
+  // SIGTERM: how long in-flight requests may take to finish (stay below the pod's grace period).
+  FILEGRID_SHUTDOWN_DRAIN_S: z.coerce.number().min(0).max(600).default(20),
   JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
   SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(10_080).default(480),
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(10_080).default(30),
@@ -35,6 +62,8 @@ const envSchema = z.object({
   METER_API_KEY: z.string({ error: 'is required' }).min(16, 'must be at least 16 characters'),
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(1).default(10),
   LOGIN_WINDOW_S: z.coerce.number().int().min(1).default(300),
+  // Peers whose X-Forwarded-For is believed (Traefik runs in the pod CIDR). Everyone else's is ignored.
+  TRUSTED_PROXY_CIDRS: cidrList.default(['10.42.0.0/16', '10.43.0.0/16']),
   FILEGRID_DEMO_MODE: bool.default(true),
   // Temporary demo switch: log in by picking a role, without a password. Ignored unless demo mode is on.
   FILEGRID_PASSWORDLESS_LOGIN: bool.default(false),
@@ -68,6 +97,8 @@ export interface AppConfig {
   readonly databaseUrl: string;
   readonly dbPoolSize: number;
   readonly dbConnectTimeoutMs: number;
+  readonly dbBootTimeoutMs: number;
+  readonly shutdownDrainMs: number;
   readonly jwtSecret: string;
   readonly sessionTtlMinutes: number;
   readonly sessionIdleMinutes: number;
@@ -77,6 +108,8 @@ export interface AppConfig {
   readonly meterApiKey: string;
   readonly loginMaxFailures: number;
   readonly loginWindowS: number;
+  /** Express `trust proxy`: X-Forwarded-For is used only when the TCP peer is in one of these. */
+  readonly trustedProxyCidrs: readonly string[];
   readonly demoMode: boolean;
   /**
    * Login without a password (POST /auth/login checks only that the account exists): true only when
@@ -165,6 +198,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     databaseUrl: databaseUrl(e),
     dbPoolSize: e.FILEGRID_DB_POOL_SIZE,
     dbConnectTimeoutMs: e.FILEGRID_DB_CONNECT_TIMEOUT_MS,
+    dbBootTimeoutMs: Math.round(e.FILEGRID_DB_BOOT_TIMEOUT_S * 1000),
+    shutdownDrainMs: Math.round(e.FILEGRID_SHUTDOWN_DRAIN_S * 1000),
     jwtSecret: e.JWT_SECRET,
     sessionTtlMinutes: e.SESSION_TTL_MINUTES,
     sessionIdleMinutes: e.SESSION_IDLE_MINUTES,
@@ -174,6 +209,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     meterApiKey: e.METER_API_KEY,
     loginMaxFailures: e.LOGIN_MAX_FAILURES,
     loginWindowS: e.LOGIN_WINDOW_S,
+    trustedProxyCidrs: e.TRUSTED_PROXY_CIDRS,
     demoMode: e.FILEGRID_DEMO_MODE,
     passwordlessLogin: e.FILEGRID_PASSWORDLESS_LOGIN && e.FILEGRID_DEMO_MODE,
     passwordlessLoginRequested: e.FILEGRID_PASSWORDLESS_LOGIN,
