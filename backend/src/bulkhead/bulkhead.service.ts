@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Counter, Gauge, register } from 'prom-client';
-import { AppError, retryAfter } from '../common/app-error';
+import { categoryBusy } from '../common/app-error';
 import type { Category } from '../common/domain';
 
 function metric<T>(name: string, create: () => T): T {
@@ -50,15 +50,7 @@ class Compartment {
   readonly waiters: Waiter[] = [];
 }
 
-function busy(): AppError {
-  return new AppError(
-    503,
-    'CATEGORY_BUSY',
-    'Prea multe operații simultane pentru această categorie. Reîncercați în câteva secunde.',
-    { retryAfterMs: 2000 },
-    retryAfter(2),
-  );
-}
+const busy = categoryBusy;
 
 /**
  * Bulkhead (TASKS P2.6): each category has its own pool of concurrent storage operations, sized by

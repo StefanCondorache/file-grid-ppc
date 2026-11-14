@@ -4,6 +4,7 @@ import {
   type HealthStatus,
   type PutResult,
   type StorageCallOptions,
+  StorageBusy,
   StorageUnavailable,
 } from '../src/storage/base';
 import { MemoryStorage } from '../src/storage/memory';
@@ -123,5 +124,59 @@ describe('ObjectStoreService.writeOnce (part uploads)', () => {
 
     expect(failure).toBeInstanceOf(AppError);
     expect(s3.puts).toBe(1);
+  });
+});
+
+describe('ObjectStoreService with a busy storage', () => {
+  class BusyStorage extends MemoryStorage {
+    override async putStream(): Promise<PutResult> {
+      throw new StorageBusy(`${this.name}: every pooled connection is in use`);
+    }
+
+    override getStream(): AsyncGenerator<Buffer, void, undefined> {
+      const name = this.name;
+      return (async function* () {
+        yield* [];
+        throw new StorageBusy(`${name}: every pooled connection is in use`);
+      })();
+    }
+  }
+
+  const busyStore = () =>
+    new ObjectStoreService(
+      StorageRegistry.fromAdapters([
+        new MemoryStorage('s3'),
+        new MemoryStorage('ftp'),
+        new BusyStorage('db'),
+      ]),
+      null,
+    );
+  const onDb = { primary: 'db', fallback: 's3', encrypted: false } as const;
+
+  it('answers 503 CATEGORY_BUSY with Retry-After instead of falling back or blaming the storage', async () => {
+    const store = busyStore();
+
+    const failure = (await store
+      .writeOnce('meter_readings', 'staging/u/1', onDb, oneShot(Buffer.from('x')))
+      .catch((error: unknown) => error)) as AppError;
+    const again = (await store
+      .write('meter_readings', 'm/1.jsonl', onDb, () => oneShot(Buffer.from('x')))
+      .catch((error: unknown) => error)) as AppError;
+
+    expect(failure).toMatchObject({ status: 503, code: 'CATEGORY_BUSY' });
+    expect(failure.headers['Retry-After']).toBeDefined();
+    expect(again).toMatchObject({ status: 503, code: 'CATEGORY_BUSY' });
+  });
+
+  it('answers 503 CATEGORY_BUSY for a read that finds the pool full', async () => {
+    const store = busyStore();
+    const reading = store.read('meter_readings', {
+      storage: 'db',
+      key: 'm/1.jsonl',
+      encrypted: false,
+      storedSha256: 'a'.repeat(64),
+    });
+
+    await expect(reading.next()).rejects.toMatchObject({ status: 503, code: 'CATEGORY_BUSY' });
   });
 });

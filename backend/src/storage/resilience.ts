@@ -8,6 +8,7 @@ import {
   type PutResult,
   type StorageAdapter,
   type StorageCallOptions,
+  StorageBusy,
   StorageError,
   type StorageName,
   StorageUnavailable,
@@ -36,7 +37,8 @@ import {
  *   HALF_OPEN: exactly one trial call goes through; others are rejected while it runs.
  *   trial succeeds --> CLOSED; trial fails --> OPEN (timer restarts).
  *   `ObjectNotFound` and `IntegrityError` prove the storage answered: they count as success.
- *   Errors of the caller's own input stream and caller aborts do not count at all.
+ *   Errors of the caller's own input stream, caller aborts and `StorageBusy` (no free pooled
+ *   connection: overload, not an outage) do not count at all.
  *   A rejected `putStream` has not read a single chunk, so the same iterable can be handed to the
  *   policy's fallback storage. After any other failure the input is partly consumed.
  *
@@ -211,7 +213,7 @@ export function errorTypeOf(error: unknown): string {
   if (error instanceof CircuitOpenError) return 'CircuitOpen';
   if (error instanceof IdleTimeoutError) return 'IdleTimeout';
   if (error instanceof ObjectNotFound || error instanceof IntegrityError) return error.name;
-  if (error instanceof InvalidKey) return error.name;
+  if (error instanceof InvalidKey || error instanceof StorageBusy) return error.name;
   if (error instanceof StorageError && error.cause !== undefined) return errorKind(error.cause);
   if (error instanceof Error && error.name === 'TimeoutError') return 'Timeout';
   return errorKind(error);
@@ -395,6 +397,9 @@ export class ResilientStorage implements StorageAdapter {
     } else if (sourceError) {
       this.breaker.recordIgnored(trial);
       op.error(error, 'SourceError');
+    } else if (error instanceof StorageBusy) {
+      this.breaker.recordIgnored(trial);
+      op.error(error);
     } else if (countsAsSuccess(error)) {
       this.breaker.recordSuccess(trial);
       op.error(error);

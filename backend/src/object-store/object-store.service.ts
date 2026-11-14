@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { AppError, retryAfter } from '../common/app-error';
+import { AppError, categoryBusy, retryAfter } from '../common/app-error';
 import type { Category, StorageName } from '../common/domain';
 import { decryptStream, encryptStream } from '../crypto/envelope';
 import type { Keyring } from '../crypto/keys';
@@ -8,6 +8,7 @@ import {
   HashingStream,
   ObjectNotFound,
   type PutResult,
+  StorageBusy,
   StorageUnavailable,
   verifyStream,
 } from '../storage/base';
@@ -49,6 +50,27 @@ export function storageUnavailable(storage: StorageName): AppError {
   );
 }
 
+/** A storage without a free connection (StorageBusy) is overload: 503 CATEGORY_BUSY + Retry-After. */
+async function busyAsCategoryBusy<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof StorageBusy) throw categoryBusy();
+    throw error;
+  }
+}
+
+async function* busyAsCategoryBusyStream(
+  chunks: AsyncIterable<Buffer>,
+): AsyncGenerator<Buffer, void, undefined> {
+  try {
+    yield* chunks;
+  } catch (error) {
+    if (error instanceof StorageBusy) throw categoryBusy();
+    throw error;
+  }
+}
+
 /**
  * The backend's only door to the storages. Applies a category's placement (primary, then fallback
  * when the primary is unavailable), encrypts and decrypts (FGE1, src/crypto), records spans and the
@@ -68,6 +90,15 @@ export class ObjectStoreService {
    * again for the fallback when the primary failed after it had started reading.
    */
   async write(
+    category: Category,
+    key: string,
+    placement: Placement,
+    source: () => AsyncIterable<Uint8Array>,
+  ): Promise<WriteResult> {
+    return busyAsCategoryBusy(() => this.writeWithFallback(category, key, placement, source));
+  }
+
+  private async writeWithFallback(
     category: Category,
     key: string,
     placement: Placement,
@@ -106,6 +137,15 @@ export class ObjectStoreService {
    * and the client resends the part.
    */
   async writeOnce(
+    category: Category,
+    key: string,
+    placement: Placement,
+    body: AsyncIterable<Uint8Array>,
+  ): Promise<WriteResult> {
+    return busyAsCategoryBusy(() => this.writeBody(category, key, placement, body));
+  }
+
+  private async writeBody(
     category: Category,
     key: string,
     placement: Placement,
@@ -173,7 +213,7 @@ export class ObjectStoreService {
     const stored = withCategory(category, () =>
       this.registry.get(object.storage).getStream(object.key, { signal }),
     );
-    const verified = verifyStream(stored, object.storedSha256);
+    const verified = verifyStream(busyAsCategoryBusyStream(stored), object.storedSha256);
     return object.encrypted ? decryptStream(verified, this.requireKeyring()) : verified;
   }
 
