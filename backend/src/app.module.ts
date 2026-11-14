@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
 import { EventsModule } from './events/events.module';
 import { FilesModule } from './files/files.module';
+import { GuaranteesModule } from './guarantees/guarantees.module';
 import { HealthModule } from './health/health.module';
 import { MetersModule } from './meters/meters.module';
 import { MonitoringModule } from './monitoring/monitoring.controller';
@@ -36,6 +37,7 @@ import { UploadsModule } from './uploads/uploads.module';
     FilesModule,
     MetersModule,
     MonitoringModule,
+    GuaranteesModule,
     StatisticsModule,
     DemoModule,
   ],

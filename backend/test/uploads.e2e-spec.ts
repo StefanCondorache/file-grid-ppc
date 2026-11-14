@@ -225,6 +225,35 @@ describe('uploads, downloads and files', () => {
     expect((await complete(admin, uploadId, file, 2)).body.verdict).toBe('match');
   });
 
+  it('counts a resume when the uploader asks for the status of a started upload', async () => {
+    const file = bytes(5000);
+    const created = await create(admin, {
+      category: 'fault_records',
+      fileName: 'reluat.pdf',
+      fileSize: file.length,
+      mimeType: 'application/pdf',
+      metadata: FAULT_METADATA,
+    });
+    const { uploadId } = created.body;
+    const status = () =>
+      request(server()).get(`/api/v1/uploads/${uploadId}`).set(browser(admin));
+
+    await status(); // nothing received yet: not a resume
+    await putPart(admin, uploadId, 1, file);
+    await status();
+    const db = testDb();
+    try {
+      const row = await db
+        .selectFrom('upload_sessions')
+        .select('resume_count')
+        .where('id', '=', uploadId)
+        .executeTakeFirstOrThrow();
+      expect(row.resume_count).toBe(1);
+    } finally {
+      await db.destroy();
+    }
+  });
+
   it('returns the same session for a repeated Idempotency-Key', async () => {
     const body = {
       category: 'fault_records',

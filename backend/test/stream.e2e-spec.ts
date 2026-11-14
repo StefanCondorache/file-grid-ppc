@@ -117,6 +117,12 @@ describe('GET /stream (Server-Sent Events)', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('makes exactly one replica the leader for the periodic jobs', async () => {
+    const leaders = await Promise.all([a, b].map((app) => app.get(ClusterChannel).isLeader()));
+
+    expect(leaders.filter(Boolean)).toHaveLength(1);
+  });
+
   it('carries an event published on one replica to the clients of another', async () => {
     const onB = await open(urlB, { Cookie: admin });
     const onA = await open(urlA, { Cookie: admin });

@@ -29,6 +29,7 @@ import {
 } from './constants';
 
 const DATA_TABLES = [
+  'alerts',
   'operations',
   'audit_log',
   'meter_readings',

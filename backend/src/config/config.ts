@@ -45,6 +45,16 @@ const envSchema = z.object({
   STREAM_PING_S: z.coerce.number().min(0.1).max(300).default(20),
   STREAM_COUNTERS_INTERVAL_S: z.coerce.number().min(0.5).max(300).default(2),
   STREAM_MAX_CLIENTS: z.coerce.number().int().min(1).max(10_000).default(200),
+  // Business guarantees (GET /guarantees) and their alerts (GET /alerts).
+  GUARANTEE_EVAL_INTERVAL_S: z.coerce.number().min(0.5).max(3600).default(15),
+  GUARANTEE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(10_080).default(60),
+  GUARANTEE_AT_RISK_RATIO: z.coerce.number().gt(0).max(1).default(0.8),
+  GUARANTEE_METER_LOST_MAX: z.coerce.number().int().min(0).default(0),
+  GUARANTEE_FAULT_P95_MS: z.coerce.number().int().min(1).default(5000),
+  GUARANTEE_CONNECTION_ENCRYPTED_PCT: z.coerce.number().min(0).max(100).default(100),
+  GUARANTEE_CONNECTION_UNMASK_MAX: z.coerce.number().int().min(0).default(20),
+  GUARANTEE_DRONE_SUCCESS_MIN: z.coerce.number().min(0).max(1).default(0.95),
+  GUARANTEE_DRONE_SUCCESS_AT_RISK: z.coerce.number().min(0).max(1).default(0.99),
   // Envelope encryption keys (Secret filegrid-app-secrets); parsed and checked by src/crypto/keys.ts.
   FILEGRID_KEK: z.string().optional(),
   FILEGRID_KEK_ID: z.string().optional(),
@@ -75,8 +85,22 @@ export interface AppConfig {
     readonly countersIntervalMs: number;
     readonly maxClients: number;
   };
+  readonly guarantees: GuaranteeThresholds;
   /** The FILEGRID_KEK* variables, handed to Keyring.fromEnv (never logged). */
   readonly kekEnv: Readonly<Record<string, string | undefined>>;
+}
+
+export interface GuaranteeThresholds {
+  readonly evalIntervalMs: number;
+  readonly windowMinutes: number;
+  /** A metric at this fraction of its limit turns the guarantee `at_risk`. */
+  readonly atRiskRatio: number;
+  readonly meterLostMax: number;
+  readonly faultP95Ms: number;
+  readonly connectionEncryptedPct: number;
+  readonly connectionUnmaskMax: number;
+  readonly droneSuccessMin: number;
+  readonly droneSuccessAtRisk: number;
 }
 
 export class ConfigError extends Error {
@@ -150,6 +174,20 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       pingMs: Math.round(e.STREAM_PING_S * 1000),
       countersIntervalMs: Math.round(e.STREAM_COUNTERS_INTERVAL_S * 1000),
       maxClients: e.STREAM_MAX_CLIENTS,
+    },
+    guarantees: {
+      evalIntervalMs: Math.round(e.GUARANTEE_EVAL_INTERVAL_S * 1000),
+      windowMinutes: e.GUARANTEE_WINDOW_MINUTES,
+      atRiskRatio: e.GUARANTEE_AT_RISK_RATIO,
+      meterLostMax: e.GUARANTEE_METER_LOST_MAX,
+      faultP95Ms: e.GUARANTEE_FAULT_P95_MS,
+      connectionEncryptedPct: e.GUARANTEE_CONNECTION_ENCRYPTED_PCT,
+      connectionUnmaskMax: e.GUARANTEE_CONNECTION_UNMASK_MAX,
+      droneSuccessMin: e.GUARANTEE_DRONE_SUCCESS_MIN,
+      droneSuccessAtRisk: Math.max(
+        e.GUARANTEE_DRONE_SUCCESS_AT_RISK,
+        e.GUARANTEE_DRONE_SUCCESS_MIN,
+      ),
     },
     kekEnv: {
       FILEGRID_KEK: e.FILEGRID_KEK,

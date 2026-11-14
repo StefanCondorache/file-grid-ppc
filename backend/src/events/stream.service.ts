@@ -58,7 +58,8 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     this.unsubscribe();
     clearInterval(this.pingTimer);
     clearInterval(this.healthTimer);
-    for (const subscription of [...this.subscriptions]) subscription.client.close();
+    // close() removes the subscription; deleting the current element while iterating a Set is safe.
+    for (const subscription of this.subscriptions) subscription.client.close();
   }
 
   get size(): number {
