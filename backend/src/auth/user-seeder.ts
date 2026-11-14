@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from './password';
 
 interface SeedAccount {
   readonly username: string;
+  readonly displayName: string;
   readonly password: string;
   readonly role: Role;
 }
@@ -24,6 +25,7 @@ async function ensureUser(db: Db, account: SeedAccount): Promise<void> {
         .insertInto('users')
         .values({
           username: account.username,
+          display_name: account.displayName,
           password_hash: await hashPassword(account.password),
           role: account.role,
         })
@@ -43,25 +45,16 @@ async function ensureUser(db: Db, account: SeedAccount): Promise<void> {
 }
 
 export async function ensureSeedUsers(db: Db, config: AppConfig): Promise<void> {
-  const accounts: SeedAccount[] = [
-    { username: config.adminUsername, password: config.adminPassword, role: 'admin' },
-    ...(config.operatorPassword
-      ? [
-          {
-            username: config.operatorUsername,
-            password: config.operatorPassword,
-            role: 'operator' as const,
-          },
-        ]
-      : []),
-  ];
-  for (const account of accounts) {
-    await ensureUser(db, account);
-  }
+  await ensureUser(db, {
+    username: config.adminUsername,
+    displayName: 'Administrator',
+    password: config.adminPassword,
+    role: 'admin',
+  });
 }
 
 /**
- * Creates the admin (and optional operator) account from the env and re-syncs their passwords.
+ * Creates the admin account from the env (ADMIN_USERNAME/ADMIN_PASSWORD) and re-syncs their passwords.
  * The container runs migrations first, so the DB was just reachable; if it is not now, keep
  * serving (/readyz reports it) instead of crash-looping.
  */

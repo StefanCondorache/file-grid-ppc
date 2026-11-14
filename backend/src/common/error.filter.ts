@@ -6,48 +6,40 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { STATUS_CODES } from 'node:http';
 import { AppError, errorBody } from './app-error';
 
-const HTTP_CODES: Readonly<Record<number, string>> = {
-  400: 'bad_request',
-  401: 'unauthorized',
-  403: 'forbidden',
-  404: 'not_found',
-  405: 'method_not_allowed',
-  409: 'conflict',
-  413: 'payload_too_large',
-  415: 'unsupported_media_type',
-  422: 'validation_error',
-  429: 'too_many_requests',
-  503: 'service_unavailable',
+/** Codes and Romanian messages for errors that do not come from our own AppError. */
+const HTTP_ERRORS: Readonly<Record<number, readonly [string, string]>> = {
+  400: ['BAD_REQUEST', 'Cererea nu este validă.'],
+  401: ['UNAUTHENTICATED', 'Sesiunea lipsește sau a expirat.'],
+  403: ['FORBIDDEN', 'Nu aveți dreptul să faceți această acțiune.'],
+  404: ['NOT_FOUND', 'Resursa nu există.'],
+  405: ['METHOD_NOT_ALLOWED', 'Metoda nu este permisă.'],
+  409: ['CONFLICT', 'Cererea intră în conflict cu starea curentă.'],
+  413: ['PAYLOAD_TOO_LARGE', 'Corpul cererii este prea mare.'],
+  415: ['UNSUPPORTED_MEDIA_TYPE', 'Tipul conținutului nu este acceptat.'],
+  422: ['VALIDATION_ERROR', 'Datele trimise nu sunt valide.'],
+  429: ['RATE_LIMITED', 'Prea multe cereri. Încercați din nou mai târziu.'],
+  503: ['SERVICE_UNAVAILABLE', 'Serviciul este temporar indisponibil.'],
 };
 
-const BODY_PARSER_MESSAGES: Readonly<Record<string, string>> = {
-  'entity.parse.failed': 'Malformed JSON body',
-  'entity.too.large': 'Request body too large',
-  'encoding.unsupported': 'Unsupported content encoding',
+const BODY_PARSER_ERRORS: Readonly<Record<string, readonly [string, string]>> = {
+  'entity.parse.failed': ['MALFORMED_JSON', 'Corpul cererii nu este JSON valid.'],
+  'entity.too.large': ['PAYLOAD_TOO_LARGE', 'Corpul cererii este prea mare.'],
+  'encoding.unsupported': ['UNSUPPORTED_ENCODING', 'Codificarea conținutului nu este acceptată.'],
 };
 
 interface DescribedError {
   status: number;
   code: string;
   message: string;
-  details: unknown;
+  extras: Readonly<Record<string, unknown>>;
   headers: Readonly<Record<string, string>>;
 }
 
-function phrase(status: number): string {
-  return STATUS_CODES[status] ?? 'Error';
-}
-
-function httpExceptionMessage(exception: HttpException): string {
-  const body = exception.getResponse();
-  if (typeof body === 'string') return body;
-  const message = (body as { message?: unknown }).message;
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.map(String).join('; ');
-  return phrase(exception.getStatus());
+function fromStatus(status: number): DescribedError {
+  const [code, message] = HTTP_ERRORS[status] ?? ['HTTP_ERROR', 'Cererea nu a reușit.'];
+  return { status, code, message, extras: {}, headers: {} };
 }
 
 /** body-parser and other http-errors style failures carry a numeric status and a type. */
@@ -61,44 +53,31 @@ function describeHttpLike(error: unknown): DescribedError | undefined {
         ? candidate.statusCode
         : undefined;
   if (status === undefined || status < 400 || status >= 500) return undefined;
-  const message =
-    typeof candidate.type === 'string' ? BODY_PARSER_MESSAGES[candidate.type] : undefined;
-  return {
-    status,
-    code: HTTP_CODES[status] ?? 'http_error',
-    message: message ?? phrase(status),
-    details: null,
-    headers: {},
-  };
+  const known = typeof candidate.type === 'string' ? BODY_PARSER_ERRORS[candidate.type] : undefined;
+  return known ? { ...fromStatus(status), code: known[0], message: known[1] } : fromStatus(status);
 }
 
 export function describeError(exception: unknown): DescribedError {
   if (exception instanceof AppError) {
-    const { status, code, message, details, headers } = exception;
-    return { status, code, message, details, headers };
+    const { status, code, message, extras, headers } = exception;
+    return { status, code, message, extras, headers };
   }
   if (exception instanceof HttpException) {
-    const status = exception.getStatus();
-    return {
-      status,
-      code: HTTP_CODES[status] ?? 'http_error',
-      message: httpExceptionMessage(exception),
-      details: null,
-      headers: {},
-    };
+    // Nest's own exceptions (unknown route, wrapped body-parser errors) carry English text: replace it.
+    return describeHttpLike(exception.cause) ?? fromStatus(exception.getStatus());
   }
   return (
     describeHttpLike(exception) ?? {
       status: 500,
-      code: 'internal_error',
-      message: 'Internal server error',
-      details: null,
+      code: 'INTERNAL_ERROR',
+      message: 'A apărut o eroare internă. Folosiți ID-ul de urmărire pentru detalii.',
+      extras: {},
       headers: {},
     }
   );
 }
 
-/** Every error leaves the API as {"error": {code, message, trace_id, details}}. */
+/** Every error leaves the API as {code, message, traceId, ...extras}; 5xx never leak internals. */
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
   private readonly logger = new Logger('Errors');
@@ -117,6 +96,6 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     response
       .set(described.headers)
       .status(described.status)
-      .json(errorBody(described.code, described.message, described.details));
+      .json(errorBody(described.code, described.message, described.extras));
   }
 }

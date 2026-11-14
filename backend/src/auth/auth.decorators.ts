@@ -4,28 +4,31 @@ import {
   applyDecorators,
   createParamDecorator,
 } from '@nestjs/common';
-import { AppError } from '../common/app-error';
-import { AdminGuard, JwtAuthGuard } from './auth.guards';
-import type { AuthRequest, AuthUser } from './auth.types';
+import type { Capability } from '../common/domain';
+import { unauthenticated } from './auth.service';
+import { DemoModeGuard, MeterKeyGuard, RequireCapabilities, SessionGuard } from './auth.guards';
+import type { AuthRequest, Principal } from './auth.types';
 
-/** Any logged-in user (admin or operator). */
-export const Authenticated = (): MethodDecorator & ClassDecorator =>
-  applyDecorators(UseGuards(JwtAuthGuard));
+/** Any logged-in user whose active role has every listed capability. */
+export const Authenticated = (...capabilities: Capability[]): MethodDecorator & ClassDecorator =>
+  applyDecorators(RequireCapabilities(...capabilities), UseGuards(SessionGuard));
 
-/** Logged-in admins only. */
-export const AdminOnly = (): MethodDecorator & ClassDecorator =>
-  applyDecorators(UseGuards(JwtAuthGuard, AdminGuard));
+/** Demo-mode only (404 otherwise) and the demo_controls capability (admin). */
+export const DemoOnly = (): MethodDecorator & ClassDecorator =>
+  applyDecorators(RequireCapabilities('demo_controls'), UseGuards(DemoModeGuard, SessionGuard));
 
-export const CurrentUser = createParamDecorator(
-  (_: unknown, context: ExecutionContext): AuthUser => {
-    const user = context.switchToHttp().getRequest<AuthRequest>().user;
-    if (!user) throw new AppError(401, 'unauthorized', 'Missing bearer token');
-    return user;
+/** Requests from smart meters with a valid X-API-Key. */
+export const MeterAuthenticated = (): MethodDecorator & ClassDecorator =>
+  applyDecorators(UseGuards(MeterKeyGuard));
+
+export const CurrentPrincipal = createParamDecorator(
+  (_: unknown, context: ExecutionContext): Principal => {
+    const principal = context.switchToHttp().getRequest<AuthRequest>().principal;
+    if (!principal) throw unauthenticated();
+    return principal;
   },
 );
 
 export const MeterKeyId = createParamDecorator((_: unknown, context: ExecutionContext): string => {
-  const keyId = context.switchToHttp().getRequest<AuthRequest>().meterKeyId;
-  if (!keyId) throw new AppError(401, 'invalid_api_key', 'Missing or invalid meter API key');
-  return keyId;
+  return context.switchToHttp().getRequest<AuthRequest>().meterKeyId ?? 'unknown';
 });

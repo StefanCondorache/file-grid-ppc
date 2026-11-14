@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
+import { CSRF_HEADER } from './constants';
 import { createTestApp, resetDatabase } from './helpers';
 import { memoryLogDestination } from './log-capture';
 import { TestOnlyModule } from './test-only.module';
@@ -29,7 +30,7 @@ describe('health probes, trace id and error envelope', () => {
     const response = await request(app.getHttpServer()).get('/readyz');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'ready', database: 'ok' });
+    expect(response.body).toMatchObject({ status: 'ready', database: 'ok' });
   });
 
   it('generates a trace id when the client sends none', async () => {
@@ -61,48 +62,47 @@ describe('health probes, trace id and error envelope', () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({
-      error: {
-        code: 'not_found',
-        message: expect.any(String),
-        trace_id: 'trace-404',
-        details: null,
-      },
+      code: 'NOT_FOUND',
+      message: 'Resursa nu există.',
+      traceId: 'trace-404',
     });
   });
 
   it('turns unhandled errors into a 500 envelope without leaking the message', async () => {
     const response = await request(app.getHttpServer())
-      .get('/test-only/boom')
+      .get('/api/v1/test-only/boom')
       .set('X-Trace-Id', 'trace-500');
 
     expect(response.status).toBe(500);
     expect(response.headers['x-trace-id']).toBe('trace-500');
-    expect(response.body.error).toMatchObject({ code: 'internal_error', trace_id: 'trace-500' });
+    expect(response.body).toMatchObject({ code: 'INTERNAL_ERROR', traceId: 'trace-500' });
     expect(response.text).not.toContain('hunter2');
   });
 
   it('lists invalid fields without echoing the submitted values', async () => {
     const response = await request(app.getHttpServer())
-      .post('/test-only/validate')
+      .post('/api/v1/test-only/validate')
+      .set(CSRF_HEADER)
       .send({ username: 'ana', password: 's3cret-value', attempts: 'many' });
 
     expect(response.status).toBe(422);
-    expect(response.body.error.code).toBe('validation_error');
-    expect(response.body.error.details.map((detail: { path: string[] }) => detail.path)).toEqual([
-      ['attempts'],
+    expect(response.body.code).toBe('VALIDATION_ERROR');
+    expect(response.body.fieldErrors.map((error: { field: string }) => error.field)).toEqual([
+      'attempts',
     ]);
     expect(response.text).not.toContain('s3cret-value');
   });
 
   it('answers malformed JSON with a 400 envelope', async () => {
     const response = await request(app.getHttpServer())
-      .post('/test-only/validate')
+      .post('/api/v1/test-only/validate')
+      .set(CSRF_HEADER)
       .set('Content-Type', 'application/json')
       .send('{"username": ');
 
     expect(response.status).toBe(400);
-    expect(response.body.error.code).toBe('bad_request');
-    expect(response.body.error.trace_id).toMatch(HEX32);
+    expect(response.body.code).toBe('MALFORMED_JSON');
+    expect(response.body.traceId).toMatch(HEX32);
   });
 });
 
@@ -126,15 +126,15 @@ describe('request logging', () => {
 });
 
 describe('readiness without a database', () => {
-  it('reports 503 when the database is unreachable', async () => {
+  it('stays ready (so the pod keeps serving) and reports the database as down', async () => {
     const app = await createTestApp({
-      env: { DATABASE_URL: 'postgresql://nobody:x@127.0.0.1:1/nowhere' },
+      env: { FILEGRID_PG_DSN: 'postgresql://nobody:x@127.0.0.1:1/nowhere' },
     });
     try {
       const response = await request(app.getHttpServer()).get('/readyz');
 
-      expect(response.status).toBe(503);
-      expect(response.body).toEqual({ status: 'unavailable', database: 'error' });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ status: 'degraded', database: 'error' });
     } finally {
       await app.close();
     }

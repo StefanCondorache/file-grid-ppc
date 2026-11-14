@@ -24,9 +24,13 @@ export class LoginRateLimiter {
     const recent = this.recent(key);
     if (recent.length < this.maxFailures) return;
     const retryAfterS = Math.max(1, Math.ceil((recent[0] + this.windowMs - Date.now()) / 1000));
-    throw new AppError(429, 'too_many_attempts', 'Too many failed logins. Try again later.', null, {
-      'Retry-After': String(retryAfterS),
-    });
+    throw new AppError(
+      429,
+      'RATE_LIMITED',
+      'Prea multe încercări eșuate. Încercați din nou mai târziu.',
+      { retryAfterMs: retryAfterS * 1000 },
+      { 'Retry-After': String(retryAfterS) },
+    );
   }
 
   recordFailure(key: string): void {

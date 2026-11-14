@@ -1,8 +1,6 @@
-import { Body, Controller, Get, Module, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Module, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { AdminOnly, MeterKeyId } from '../src/auth/auth.decorators';
-import { MeterKeyGuard } from '../src/auth/auth.guards';
-import { AuthModule } from '../src/auth/auth.module';
+import { Authenticated, MeterAuthenticated, MeterKeyId } from '../src/auth/auth.decorators';
 import { ZodPipe } from '../src/common/zod.pipe';
 
 const credentialsSchema = z.object({
@@ -26,18 +24,18 @@ class TestOnlyController {
     return { ok: body.username };
   }
 
-  @Get('admin')
-  @AdminOnly()
+  @Get('policies-admin')
+  @Authenticated('edit_policies')
   adminOnly(): { ok: string } {
     return { ok: 'yes' };
   }
 
   @Get('meter')
-  @UseGuards(MeterKeyGuard)
-  meter(@MeterKeyId() keyId: string): { key_id: string } {
-    return { key_id: keyId };
+  @MeterAuthenticated()
+  meter(@MeterKeyId() keyId: string): { keyId: string } {
+    return { keyId };
   }
 }
 
-@Module({ imports: [AuthModule], controllers: [TestOnlyController] })
+@Module({ controllers: [TestOnlyController] })
 export class TestOnlyModule {}
