@@ -2,7 +2,7 @@ COMPOSE = docker compose -f infra/docker-compose.yml --env-file infra/.env
 
 CERT_MANAGER_VERSION = v1.21.3
 
-.PHONY: infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up
+.PHONY: infra-up infra-down infra-ps infra-logs k8s-tls-up tls-status tls-retry k8s-secrets k8s-storage-up storage-isolation-check
 
 infra-up:
 	./infra/gen-env.sh
@@ -57,3 +57,7 @@ k8s-storage-up: k8s-secrets
 	kubectl -n filegrid-storage delete job s3-init --ignore-not-found --wait=true
 	kubectl apply -f deploy/k8s/storage/s3-init-job.yaml
 	kubectl -n filegrid-storage wait --for=condition=complete job/s3-init --timeout=180s
+
+# Dovedeste NetworkPolicy-urile: pod etichetat in filegrid ajunge la storage-uri, cel neetichetat / din default nu.
+storage-isolation-check:
+	./scripts/storage-isolation-check.sh

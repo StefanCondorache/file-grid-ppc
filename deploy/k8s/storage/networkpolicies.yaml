@@ -1,0 +1,82 @@
+# Only FileGrid app pods (namespace filegrid, label filegrid.io/storage-client=true) may reach the storages.
+# Only ingress is restricted; egress (DNS etc.) stays open. Kubelet probes come from the node and are not
+# blocked by kube-router's policies (verified, see make storage-isolation-check / pods stay Ready).
+---
+# Default deny: every pod in filegrid-storage accepts no ingress unless another policy allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: filegrid-storage
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-postgres
+  namespace: filegrid-storage
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: filegrid
+          podSelector:
+            matchLabels:
+              filegrid.io/storage-client: "true"
+      ports:
+        - {protocol: TCP, port: 5432}
+---
+# s3-init (same namespace) also needs the S3 API to create the bucket.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-s3
+  namespace: filegrid-storage
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: s3
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: filegrid
+          podSelector:
+            matchLabels:
+              filegrid.io/storage-client: "true"
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: s3-init
+      ports:
+        - {protocol: TCP, port: 8333}
+---
+# FTP control port 21 plus the passive data range (clients connect straight to the pod IP, PUBLICHOST=podIP).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-ftp
+  namespace: filegrid-storage
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ftp
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: filegrid
+          podSelector:
+            matchLabels:
+              filegrid.io/storage-client: "true"
+      ports:
+        - {protocol: TCP, port: 21}
+        - {protocol: TCP, port: 21000, endPort: 21009}

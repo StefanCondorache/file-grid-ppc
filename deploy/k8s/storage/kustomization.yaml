@@ -8,3 +8,4 @@ resources:
   - postgres.yaml
   - s3.yaml
   - ftp.yaml
+  - networkpolicies.yaml
