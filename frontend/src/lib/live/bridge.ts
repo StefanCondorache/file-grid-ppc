@@ -3,7 +3,7 @@ import { qk, STREAM_FED_KEYS } from '@/lib/api/query-keys';
 import { ro } from '@/lib/i18n/ro';
 import type { StreamEvent } from './events';
 
-type Deps = { announce: (message: string) => void; uploadHint: (uploadId: string) => void };
+type Deps = { announce: (message: string) => void };
 type Row = Record<string, unknown>;
 
 const ANNOUNCE_WINDOW_MS = 5_000;
@@ -91,7 +91,7 @@ export function createBridge(qc: QueryClient, deps: Deps) {
         invalidateFilesThrottled();
         return;
       case 'upload.verified':
-        deps.uploadHint(String(d.uploadId));
+        // The upload engine confirms verification itself (status polling); nothing to refresh here.
         return;
       case 'policy.updated':
         invalidate(qk.policies.all);

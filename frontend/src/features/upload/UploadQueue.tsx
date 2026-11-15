@@ -121,8 +121,8 @@ function QueueRow({ item }: { item: UploadItemView }) {
   return (
     <li
       className={cn(
-        'flex flex-col gap-3 rounded-panel border border-border bg-surface p-4',
-        lost && 'border-(--fg-warn-border) shadow-[inset_4px_0_0_var(--fg-warn)]',
+        'flex flex-col gap-3 rounded-panel border p-4',
+        lost ? 'glass glass-warn' : 'border-border bg-surface',
         item.state === 'failed' && 'border-crit',
       )}
     >

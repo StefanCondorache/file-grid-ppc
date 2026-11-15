@@ -3,7 +3,6 @@ import type { components, paths } from './schema';
 type S = components['schemas'];
 
 export type { components, paths };
-export type ApiError_ = S['Error'];
 export type FieldError = S['FieldError'];
 export type Category = S['Category'];
 export type UploadCategory = S['UploadCategory'];

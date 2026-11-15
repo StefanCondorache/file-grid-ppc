@@ -22,11 +22,9 @@ const CATEGORY_DOT: Record<CategoryId, string> = {
 
 const CARD_STATE: Record<GuaranteeState, string> = {
   ok: 'glass-card',
-  at_risk: 'glass-card glass-warn border-2 border-(--fg-warn-border)',
+  at_risk: 'glass-card glass-warn',
   violated: 'glass-card glass-crit border-2 border-crit',
 };
-
-const EDGE: Record<Exclude<GuaranteeState, 'ok'>, string> = { at_risk: 'bg-(--fg-warn-border)', violated: 'attention bg-crit' };
 
 const clock = new Intl.DateTimeFormat('ro-RO', { timeZone: 'Europe/Bucharest', hour: '2-digit', minute: '2-digit' });
 
@@ -122,7 +120,7 @@ export function GuaranteeCard({ guarantee: g, headingLevel = 3 }: { guarantee: G
       data-category={g.category}
       className={cn('relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-hero tilt p-6 text-card-foreground', CARD_STATE[g.state])}
     >
-      {g.state !== 'ok' && <span data-status-edge aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-[6px]', EDGE[g.state])} />}
+      {g.state === 'violated' && <span data-status-edge aria-hidden="true" className="attention absolute inset-y-0 left-0 w-[6px] bg-crit" />}
       <div className="flex items-start justify-between gap-3">
         <Heading id={titleId} className="flex items-center gap-2 text-[17px] leading-7 font-bold">
           <span aria-hidden="true" className={cn('size-2.5 shrink-0 rounded-[3px]', CATEGORY_DOT[g.category])} />

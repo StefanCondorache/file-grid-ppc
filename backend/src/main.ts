@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Logger } from 'pino';
@@ -14,6 +15,8 @@ import { ROOT_LOGGER } from './observability/logger';
  * before anything closes (src/lifecycle/shutdown.ts), instead of Nest's enableShutdownHooks().
  */
 async function bootstrap(): Promise<void> {
+  // Local runs: read backend/.env when present (variables already set win; the container has none).
+  if (existsSync('.env')) process.loadEnvFile('.env');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   configureApp(app);
   const config = app.get<AppConfig>(APP_CONFIG);

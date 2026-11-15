@@ -25,9 +25,7 @@ const eslintConfig = defineConfig([
         { name: 'sessionStorage', message: 'SR-3: no tokens or PII in web storage.' }],
     },
   },
-  // Mocks may persist fake state in localStorage (never real data).
-  { files: ['src/mocks/**'], rules: { 'no-restricted-globals': 'off' } },
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'public/mockServiceWorker.js', 'src/lib/api/schema.d.ts']),
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'src/lib/api/schema.d.ts']),
 ]);
 
 export default eslintConfig;

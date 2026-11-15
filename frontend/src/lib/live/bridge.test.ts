@@ -8,7 +8,7 @@ const ev = (type: StreamEventType, data: unknown, id = 1): StreamEvent => ({ typ
 
 function setup() {
   const qc = new QueryClient();
-  const deps = { announce: vi.fn(), uploadHint: vi.fn() };
+  const deps = { announce: vi.fn() };
   return { qc, deps, bridge: createBridge(qc, deps) };
 }
 
@@ -39,8 +39,8 @@ describe('stream-to-cache bridge', () => {
     ]);
   });
 
-  it('invalidates on change events and hands upload results to the engine', () => {
-    const { qc, deps, bridge } = setup();
+  it('invalidates on change events', () => {
+    const { qc, bridge } = setup();
     const spy = vi.spyOn(qc, 'invalidateQueries');
     bridge.apply(ev('policy.updated', { category: 'fault', version: 4 }));
     bridge.apply(ev('file.integrity', { fileId: 'f9', state: 'corrupt' }));
@@ -48,7 +48,6 @@ describe('stream-to-cache bridge', () => {
     bridge.apply(ev('upload.verified', { uploadId: 'u7', verdict: 'match' }));
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
     expect(keys).toEqual(expect.arrayContaining([qk.policies.all, qk.files.detail('f9'), qk.demo.status]));
-    expect(deps.uploadHint).toHaveBeenCalledWith('u7');
   });
 
   it('coalesces fault announcements during a storm', () => {

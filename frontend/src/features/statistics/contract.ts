@@ -5,8 +5,8 @@
  *
  * Real-contract notes for the screens: `GET /statistics/period-comparison` takes `a` and `b` (not `periodA` /
  * `periodB`) and the real backend requires both, so the UI picks the default pair itself (last normal vs most recent
- * peak). `excludeGenerated` and `periodId` exist only in the proposal: the mock honours `excludeGenerated`, the real
- * backend ignores both and answers `periodId: null`.
+ * peak). `excludeGenerated` and `periodId` exist only in the proposal: the real backend ignores both and answers
+ * `periodId: null`.
  */
 import type { Zone } from '@/lib/api/types';
 import type { StorageId } from '@/lib/upload/types';
@@ -40,10 +40,6 @@ export type Period = {
   end: string | null;
 };
 
-export type PeriodList = {
-  data: Period[];
-};
-
 export type StoragePerformance = {
   storage: StorageId;
   samples: number;
@@ -53,7 +49,7 @@ export type StoragePerformance = {
   errorRate: number | null;
 };
 
-/** The real backend sends `primaryStorage` and `fastest`; the mock adds the runner-up and how many times faster. */
+/** The real backend sends `primaryStorage` and `fastest`; the proposal adds the runner-up and how many times faster. */
 export type StorageFitFacts = {
   primaryStorage: StorageId | null;
   fastest: StorageId | null;
@@ -88,7 +84,7 @@ export type ComparisonRow = {
   deltaPct: number | null;
 };
 
-/** The real backend sends `factor` and `isolated`; the mock adds which category the peak hit and by how much. */
+/** The real backend sends `factor` and `isolated`; the proposal adds which category the peak hit and by how much. */
 export type ComparisonFacts = {
   /** Load factor of the stormed category (ops/s in B ÷ ops/s in A). */
   factor: number | null;
@@ -106,7 +102,7 @@ export type PeriodComparison = {
   interpretation: Interpretation<ComparisonFacts & Record<string, unknown>>;
 };
 
-/** The real backend sends `zero` and `spike`; the mock also `negative` and `silent`. */
+/** The real backend sends `zero` and `spike`; the proposal also `negative` and `silent`. */
 export const ANOMALY_TYPES = ['zero', 'negative', 'spike', 'silent'] as const;
 export type AnomalyType = (typeof ANOMALY_TYPES)[number];
 

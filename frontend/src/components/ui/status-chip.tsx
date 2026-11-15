@@ -5,7 +5,7 @@ export type Tone = 'ok' | 'warn' | 'crit' | 'info' | 'neutral';
 
 const TONE_CLASS: Record<Tone, string> = {
   ok: 'bg-ok text-(--fg-on-ok)',
-  warn: 'bg-warn text-(--fg-on-warn) shadow-[inset_0_0_0_1.5px_var(--fg-warn-border)]',
+  warn: 'chip-warn',
   crit: 'bg-crit text-(--fg-on-crit)',
   info: 'bg-info-tint text-info-ink',
   neutral: 'bg-(--fg-neutral-tint) text-(--fg-neutral-ink)',

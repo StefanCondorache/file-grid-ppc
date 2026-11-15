@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { Announcer } from '@/components/a11y/Announcer';
 import { Ambient } from '@/components/Ambient';
-import { MockBootstrap } from './MockBootstrap';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -23,9 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ro" className={figtree.variable}>
       <body>
         <Ambient />
-        <MockBootstrap>
-          <Providers>{children}</Providers>
-        </MockBootstrap>
+        <Providers>{children}</Providers>
         <Announcer />
       </body>
     </html>
