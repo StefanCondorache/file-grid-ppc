@@ -168,7 +168,7 @@ export function LiveMapScreen() {
 
   const faultMarks = (faults.data ?? []).filter((f): f is FaultFile & { zone: Zone } => !!f.zone && ZONES.includes(f.zone));
   const anomalyMarks = grid.data?.anomalies ?? [];
-  const storm = !!mode.data && mode.data !== 'normal';
+  const storm = mode.data === 'peak';
   const c = counters.data;
 
   const toggle = (l: Layer) => setLayers((s) => ({ ...s, [l]: !s[l] }));
