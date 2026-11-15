@@ -10,6 +10,7 @@ export const audit = {
     fileId: 'ID fișier',
     from: 'De la',
     to: 'Până la',
+    apply: 'Aplică filtrele',
     reset: 'Șterge filtrele',
   },
   actions: {

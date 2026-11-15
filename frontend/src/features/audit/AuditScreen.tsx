@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -40,10 +41,18 @@ export function AuditScreen() {
     queryFn: () => unwrap(api.GET('/audit-events', { params: { query: filters as never } })) as Promise<{ data: AuditRow[]; meta: { total: number; hasMore: boolean } }>,
   });
 
+  // router.replace updates the URL asynchronously: a second change before the re-render builds on
+  // the query pushed last, not on the render's params (else picking an action, then a file id, lost the action).
+  const pushed = useRef<string | null>(null);
+  const current = params.toString();
+  useEffect(() => {
+    pushed.current = null;
+  }, [current]);
   const push = (next: Record<string, string>) => {
-    const q = new URLSearchParams(params.toString());
+    const q = new URLSearchParams(pushed.current ?? current);
     for (const [k, v] of Object.entries(next)) { if (v) q.set(k, v); else q.delete(k); }
     const s = q.toString();
+    pushed.current = s;
     router.replace(s ? `${pathname}?${s}` : pathname);
   };
 
@@ -53,7 +62,7 @@ export function AuditScreen() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="audit-title">
       <div>
-        <h1 id="audit-title" className="text-[22px] font-bold">{t.audit.title}</h1>
+        <h2 id="audit-title" className="text-[22px] font-bold">{t.audit.title}</h2>
         <p className="text-ink-2">{t.audit.intro}</p>
       </div>
       <AuditFilters values={values} onChange={(patch) => push({ ...patch, page: '' })} />
