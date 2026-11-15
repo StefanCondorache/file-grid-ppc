@@ -4,7 +4,7 @@ Source of requirements: `docs/brief/FileGrid_PPC.pdf`.
 
 Stack:
 - **Backend:** NestJS 12 (TypeScript, Node 26).
-- **Frontend:** React + Vite.
+- **Frontend:** Next.js 16 (App Router) + TypeScript (planned as React + Vite; see "Stare P3").
 - **Storage (already in `infra/`):** PostgreSQL, SeaweedFS (S3) and pure-ftpd (FTP).
 - **Observability:** Prometheus, Grafana and Loki.
 - **VPS:** k3s with Traefik and cert-manager on `ppc.filegrid.cc.cd`.
@@ -86,7 +86,7 @@ Codul P1 e pe `main`. Contractele de integrare sunt în README, secțiunea „Co
 - [x] RAM: rămân ~0,9 GiB liberi cu observabilitatea pornită. Puneți `resources.limits` pe backend/frontend/simulator (sunt deja în `deploy/k8s/app/`) și urmăriți `kubectl top pods -A`. **Făcut 14.11:** limite backend 384Mi (heap V8 192 MB), simulator 128Mi, frontend ridicat la 256Mi (cererea P3). Măsurat: backend ~170-180Mi, simulator ~40-50Mi, toate podurile ~1,35 GiB, ~1,2 GiB disponibili pe gazdă.
 - [x] P2: confirmați numele metricilor și valorile `outcome` din README (alertele și dashboard-ul depind de ele) și faptul că `filegrid_sim_readings_sent_total` numără citiri unice. **Confirmat** (vezi „P2 status” și `docs/api.md`); Prometheus scrapează backend-ul (fix Content-Type `a96d1fa`), iar `MeterReadingsLost` arată 0.
 - [ ] Opțional: webhook Discord/Telegram pentru alerte (vezi comentariul din `deploy/k8s/observability/prometheus-values.yaml`).
-- [ ] Deploy `p1/hardening` (împreună cu `p2/demo-fixes`, care adaugă gauge-ul `filegrid_meter_readings_lost` și `TRUSTED_PROXY_CIDRS` în backend): `sudo make up` de două ori; la a doua rulare toate release-urile helm trebuie să spună `skipping helm upgrade`. Apoi verificați header-ele (`curl -sI https://<DOMAIN>/`, `/api/v1/...`, `/grafana/login`), `/grafana/metrics` → 302, IP-ul real în auditul unui login și `make storage-isolation-check`.
+- [x] **Făcut 14.11 seara:** ambele branch-uri au intrat în `feat/handoff` (`e53e9c4`, `8c2e86c`), deployat pe VPS și apoi în `main` prin PR #8 (vezi „Stare după preluare”). Pasul inițial: deploy `p1/hardening` (împreună cu `p2/demo-fixes`, care adaugă gauge-ul `filegrid_meter_readings_lost` și `TRUSTED_PROXY_CIDRS` în backend): `sudo make up` de două ori; la a doua rulare toate release-urile helm trebuie să spună `skipping helm upgrade`. Apoi verificați header-ele (`curl -sI https://<DOMAIN>/`, `/api/v1/...`, `/grafana/login`), `/grafana/metrics` → 302, IP-ul real în auditul unui login și `make storage-isolation-check`.
 - [ ] Decizie: `sudo make k3s-secrets-encrypt` (criptarea Secret-elor în datastore-ul k3s; repornește k3s o dată, ~1 minut fără API). Până atunci Secret-ele stau necriptate pe discul VPS-ului.
 
 ## P2: Backend API, data, simulator
@@ -130,13 +130,13 @@ Tests: 138 backend (embedded Postgres; S3 and FTP adapters against in-process S3
 - [x] Test the S3/FTP adapters against the real storages in the cluster (14.11, through `kubectl port-forward`): health, 1 KB and 20 MiB objects with matching SHA-256, early stop, missing object, cleanup. Note: the first FTP operation of a process takes ~4-6 s (pure-ftpd login), later ones reuse the connection.
 - [x] Build the `backend/` and `simulator/` images and run `make app-up` on the VPS. Check `/readyz`, a login and an upload over HTTPS. **Done 14.11:** built and deployed by `sudo make up` (run twice, idempotent); over HTTPS: login (`__Host-` cookie), CSRF, one upload per category with matching SHA-256 after download, masked personal data, traces, 1,172/1,172 readings stored and 0 lost. Found and fixed on the VPS: `/metrics` was served as text/html, so Prometheus rejected the scrape (`a96d1fa`).
 - [x] Demo rehearsal: storm, stop S3 (fault records must move to the `db` fallback), corrupt a file then download it. **Done 14.11** through the demo API: 10x storm, S3 stopped (fault records on the `db` fallback, FTP and DB categories unaffected, 0 readings lost, `FileGridStorageDown(s3)` fired and cleared), S3 restarted, corrupted file answered `409 FILE_CORRUPT` and was marked corrupt.
-- [ ] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`.
+- [x] P3: switch the mocks to the real API. Category ids are P1's (`fault_records`, `s3`…); see "Differences from the frontend proposal" in `docs/api.md`. **Done 14.11 evening:** the frontend on the VPS runs with `NEXT_PUBLIC_API_MOCKS=0` against the NestJS backend (`feat/handoff`). Still open: regenerating the types from `docs-json` (see "State on 15.11.2026").
 - [x] Known limits from the code review: **fixed** (merged `ed83f8f`). A primary that is known down is skipped before the body is read; a full DB pool answers 503 `CATEGORY_BUSY` and no longer opens the circuit; the S3 read timeout runs only while waiting on S3; a slow FTP health login no longer counts as a failed probe.
-- [ ] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`. **Mostly done** (merged `ed83f8f`): SSE `/stream`, `/audit-events`, `/guarantees`, `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series and `Range` (206/416) are implemented and tested (199 backend tests). **Done 14.11 evening** (branch `p2/backend-tasks`, see below): `GET /api/v1/docs-json` and the `docs/api.md` sections.
+- [x] Optional: `GET /api/v1/stream` (SSE), `/api/docs-json` (Swagger), `/audit-events`, `/guarantees`, `/alerts`, downloads with `Range`. **Mostly done** (merged `ed83f8f`): SSE `/stream`, `/audit-events`, `/guarantees`, `/alerts` (+ acknowledge), `/metrics/matrix`, bulkhead series and `Range` (206/416) are implemented and tested (199 backend tests). **Done 14.11 evening** (branch `p2/backend-tasks`, see below): `GET /api/v1/docs-json` and the `docs/api.md` sections; in `main` since 15.11 (`7dfbd6e`).
 
 ### P2 parallel tasks (from the `feat/handoff` guide, 14.11.2026, evening; merged 15.11)
 
-All the P2 work of the guide is on **one branch, `p2/backend-tasks`** on `origin` (`StefanCondorache/file-grid-ppc`), cut from `main` after `feat/handoff` was merged into it (PR #8). It merges the five task branches below (now deleted) plus the fixes of 15.11, with no conflict left; open one PR from it towards `main`. Full backend suite on it: **286/286** (33 suites), typecheck and lint clean.
+All the P2 work of the guide is on **one branch, `p2/backend-tasks`** on `origin` (`StefanCondorache/file-grid-ppc`), cut from `main` after `feat/handoff` was merged into it (PR #8). It merges the five task branches below (now deleted) plus the fixes of 15.11, with no conflict left. Full backend suite on it: **286/286** (33 suites), typecheck and lint clean. **Merged into `main` on 15.11 (`7dfbd6e`).**
 
 | Guide task | Was branch | What it adds | Tests on that branch |
 |---|---|---|---|
@@ -209,21 +209,21 @@ Frontendul e **Next.js 16 (App Router) + TypeScript**, nu React + Vite. Codul e 
 
 Comutare mock / backend real: `NEXT_PUBLIC_API_MOCKS=1` (implicit în dev) sau `0` (NestJS). `NEXT_PUBLIC_API_MOCK_GROUPS=…` pune doar unele grupuri pe mock. Un build de producție cu mock-uri e refuzat dacă nu e setat explicit `FILEGRID_ALLOW_MOCKS=1`. Pe mock-uri, parola pentru toate cele 5 conturi demo e `demo-2026`.
 
-**Rămas de făcut (P3):**
-- [ ] 5.15 · Primul deploy pe VPS. **P1:** ridicați limita de memorie a frontend-ului de la 128Mi la 256Mi în `deploy/k8s/app/frontend/`. Imaginea ascultă pe 8080, ca uid 101.
-- [ ] 6b · Upload reluabil (bucăți, hash SHA-256 în worker, reluare după reload/offline, grilă de bucăți)
-- [ ] 6c · Fișiere, detaliu, integritate (hash client = server, „Fișier corupt detectat”), trasare, date personale mascate
-- [ ] 6d · Politici (editare live, diff, versiuni, conflict)
-- [ ] 6e · Garanții de business, banda de sănătate storage, alerte, matrice categorie × storage, grafic de izolare
-- [ ] 6f · Statistici S1/S2/S3 cu interpretare
-- [ ] 6g · Cameră de control demo (furtună, oprire S3, corupere fișier, simulator) + contoare live
-- [ ] 6h · Jurnal de audit, test de integrare între etape, pas final de accesibilitate, repetiții, video de rezervă
+**Rămas de făcut (P3):** (actualizat 15.11: 5.15 și 6b–6g sunt făcute în `feat/handoff`, deployate și în `main` prin PR #8; testele e2e ale fiecărei etape lipsesc, vezi „Stare după preluare”)
+- [x] 5.15 · Primul deploy pe VPS. **P1:** ridicați limita de memorie a frontend-ului de la 128Mi la 256Mi în `deploy/k8s/app/frontend/`. Imaginea ascultă pe 8080, ca uid 101. **Făcut 14.11** (limita 256Mi, frontend-ul servit pe `/`).
+- [x] 6b · Upload reluabil (bucăți, hash SHA-256 în worker, reluare după reload/offline, grilă de bucăți)
+- [x] 6c · Fișiere, detaliu, integritate (hash client = server, „Fișier corupt detectat”), trasare, date personale mascate (6c.8 parțial, vezi mai jos)
+- [x] 6d · Politici (editare live, diff, versiuni, conflict)
+- [x] 6e · Garanții de business, banda de sănătate storage, alerte, matrice categorie × storage, grafic de izolare
+- [x] 6f · Statistici S1/S2/S3 cu interpretare
+- [x] 6g · Cameră de control demo (furtună, oprire S3, corupere fișier, simulator) + contoare live
+- [ ] 6h · Jurnal de audit, test de integrare între etape, pas final de accesibilitate, repetiții, video de rezervă. **Parțial:** 6h.1 (jurnalul de audit) e făcut; integrarea, accesibilitatea finală, repetițiile și video-ul nu.
 
 **Am nevoie de la P2 (detalii în `docs/api/backend-sync-2026-11-14.md`):**
 - [x] Login: pe lângă JWT, setați și cookie-ul `__Host-` httpOnly. `EventSource` și link-urile de download nu pot trimite header-ul `Authorization`. **Făcut (P2):** sesiunea e cookie-ul `__Host-fg_session` (Secure, HttpOnly, SameSite=Strict) + verificare CSRF; bearer acceptat doar pentru scripturi.
 - [x] Cinci roluri (`teren`, `dispecerat`, `racordari`, `auditor`, `admin`) în loc de două. Demo-ul arată date personale mascate pentru `racordari` și dezvăluite doar de `auditor`. **Făcut (P2):** matricea din PRD FE-01, un cont demo per rol, comutator de rol pentru admin, `reveal` doar pentru `auditor`.
 - [x] Un singur set de nume de categorii, comun cu P1 (metrici, dashboard-uri). **Făcut (P2):** `meter_readings`, `fault_records`, `connection_documents`, `drone_videos` peste tot (API, metrici, alerte).
-- [ ] `@nestjs/swagger` cu `/api/docs-json`, ca să generăm tipurile din API-ul real. **Încă nefăcut** (planificat ca document OpenAPI static servit de backend, vezi planul de la final).
+- [x] `@nestjs/swagger` cu `/api/docs-json`, ca să generăm tipurile din API-ul real. **Făcut 15.11** (în `main`, `7dfbd6e`): document OpenAPI static servit la `GET /api/v1/docs-json`, cu un test care îl compară cu rutele Nest și cu răspunsurile reale. Tipurile frontend-ului nu au fost încă regenerate din el.
 - [x] Jurnalul operațiilor (trace, metrici), tag-ul `origin`, perioade etichetate (S2) și pragurile garanțiilor. **Făcut (P2):** `/traces/{id}`, `origin`, `/statistics/periods`, iar `/guarantees` are praguri din env (`GUARANTEE_*`, cu valori implicite).
 - [x] Confirmare: `GET /auth/me` nu prelungește sesiunea (doar `POST /auth/refresh` și activitatea reală). **Făcut (P2):** `/auth/me`, `/stream` și GET-urile de monitorizare cerute periodic nu mută fereastra de inactivitate.
 
@@ -448,7 +448,7 @@ Goal: close every open item above (P1, P2, P3), in this order. Everything below 
 - Not deployed: the VPS still runs backend `68972a4` and simulator `91a34b9`. The merged backend needs a redeploy; migration `0002` runs by itself when the container starts.
 - Branch `p2/demo-fixes` (verification fixes, not merged or deployed yet): S2 period ids stable while a storm runs; boot waits up to 90 s for the database (`/readyz` 503 `starting`) and migrates in-process; SIGTERM drains requests before the DB pool closes; `X-Forwarded-For` trusted only from `TRUSTED_PROXY_CIDRS` (audit records `clientIp`, migration `0003`); gauge `filegrid_meter_readings_lost`; failure counters exported at 0; `nosniff`/`no-referrer`/`no-store` headers; simulator logs `trace_id`.
 
-**Next, in order**
+**Next, in order** (status 15.11: items 1–5 done, 6 partly done (audit log only), 7 open; see "State on 15.11.2026")
 1. Backend leftovers:
    - write `docs/api.md` sections for `/metrics/matrix`, the bulkhead series, `Range`, the `/stream` payloads and the session rule for background GETs (`/stream` event names, `/audit-events`, `/guarantees` and `/alerts` are documented since branch `p2/demo-fixes`);
    - add `/api/docs-json` (a static OpenAPI document of the real API, plus a test that every Nest route is in it);
@@ -483,11 +483,36 @@ Tot ce urmează e în `feat/handoff` (pe GitHub) și rulează pe https://ppc.fil
 
 **Rămas de făcut**
 - [ ] Testare manuală în browser a ecranelor noi (s-au construit în mod rapid, fără review per task): upload, fișiere + detaliu + descărcare, politici, audit, `/demo`, `/meters`, `/observability`, statistici.
-- [ ] Revizia finală pe tot branch-ul (nu s-a făcut din lipsă de timp) și PR-ul `feat/handoff` → `main`.
+- [x] PR-ul `feat/handoff` → `main`: **făcut** (PR #8, `fab7975`).
+- [ ] Revizia finală pe tot frontend-ul (nu s-a făcut din lipsă de timp).
 - [ ] Teste Playwright e2e nescrise: 6b.13, 6c.10, 6d.4, 6e.7, 6f.6 (început, necomis), 6g.4; apoi 6h.0 (integrare) și 6h.2–6h.6.
-- [ ] 6c.8 parțial: lipsesc „verifică fără a salva” și salvarea în flux pentru fișiere > 64 MiB (acum le verifică serverul); „Restaurează din rezervă” se bazează pe câmpul `fallbackAvailable`, care nu e în `docs/api.md`.
+- [ ] 6c.8 parțial: lipsesc „verifică fără a salva” și salvarea în flux pentru fișiere > 64 MiB (acum le verifică serverul). `fallbackAvailable`: **rezolvat 15.11**, backend-ul trimite `false` la `409 FILE_CORRUPT` (nu există copie), iar ecranul arată „anunță echipa de storage”.
 - [ ] Furtuna din `/demo` e doar pe citiri de contor: backend-ul acceptă doar `meter_readings` la `POST /demo/storms`.
 - [ ] La 100 citiri/s backend-ul stă la ~39% CPU, deci HPA nu scalează în demo; pentru momentul „scalare” trebuie o furtună mai mare sau un prag mai mic.
-- [ ] Sarcini libere din ghid: dovada 1 GB pe backend-ul NestJS, pași de criptare/audit în trasări + trasări filtrate pe rol, webhook pentru alerte, scriptul demo-ului și slide-urile, testul pe o mașină curată. Pregătite dar nepornite: documentația API + `/api/v1/docs-json` (`p2/api-docs`) și seed-ul de date demo (`p2/demo-seed`).
+- [x] Sarcini libere din ghid, partea P2 (**în `main` din 15.11**, `7dfbd6e`): dovada 1 GB pe backend-ul NestJS (trecută pe VPS), pași de criptare/audit în trasări + trasări filtrate pe rol, documentația API + `/api/v1/docs-json`, seed-ul de date demo (`npm run seed:demo`, încă nerulat pe VPS).
+- [ ] Sarcini libere rămase: webhook pentru alerte, scriptul demo-ului și slide-urile, testul pe o mașină curată, rularea `seed:demo` pe VPS după deploy-ul final.
 - [ ] Criptarea Secret-urilor k3s: `make k3s-secrets-encrypt` e gata, dar repornește k3s (1–2 min), deci se rulează doar cu acordul echipei.
 - [ ] Minore: logout fără revocare pe server, CSP cu `unsafe-inline`, worker-ul MSW în imaginea de producție, prima operație FTP lentă (~2 s), `filegrid_storage_errors_total` neinițializat, `make up` afișează `configured` la ValidatingAdmissionPolicy deși nu se schimbă.
+
+## State on 15.11.2026 (`main` at `f4c84db`)
+
+Everything listed in this file as done is now on `main`: `feat/handoff` (PR #8), the frontend branch (PR #9, #10), the UI refresh (PR #11 + `8a58e4a`, `f4c84db`) and the P2 backend tasks (`7dfbd6e`).
+
+**Done on 15.11**
+- **P2 backend tasks merged into `main`** (`7dfbd6e`, from `p2/backend-tasks`): full traces (`api → policy → encryption → storage.put → audit → confirm`, one `upload.part` trace per part, role-filtered `GET /traces/{id}`), `GET /api/v1/docs-json` with its conformance test, `npm run seed:demo`, the 1 GB proof script (passed on the VPS), parts re-sent with the same hash are answered only after their body is read, abandoned uploads are swept (`UPLOAD_SESSION_TTL_HOURS`, `UPLOAD_SWEEP_INTERVAL_S`), `409 FILE_CORRUPT` with `fallbackAvailable: false`, downloads logged even when their audit insert fails, a failed encrypted write keeps its `encryption` span marked `error`. Backend suite on the branch: 286/286.
+- **Glass UI refresh** (PR #11, `feat/ui-glass-refresh`):
+  - `7e39e53` glass, soft-depth and motion tokens for both themes (backdrop gradient, glass fills/border/blur, raise/press/inset shadows, shimmer, durations), all new motion off under `prefers-reduced-motion`; shared classes `.glass`, `.soft-inset`, `.lift`, `.enter`, `.pop`, `.scrim`, `.skeleton`, `.table-scroll`, `.row-in`, `.pulse-ring`, `.attention`.
+  - `e61370e` raised buttons with press feedback; the small button keeps a 40 px hit area.
+  - `c2acd1b` glass sidebar, top bar and login card; page content rises on enter; the live dot pulses only on an open stream and stops when live updates are paused.
+  - `42f325f` glass dialogs and menus (scale + fade), skeleton shimmer, sticky table headers in a bounded scroll area, new live rows slide in, card lift, a violated guarantee's edge pulses three times.
+- **Glassmorphism + neumorphism across the screens** (`8a58e4a`): animated ambient backdrop (`components/Ambient.tsx`), new tokens in `styles/tokens.css`, glass cards on every feature screen (files, audit, policies, guarantees, meters, observability, demo, upload, shell). Contrast is guarded by `styles/tokens.contrast.test.ts`: every glass ink keeps ≥ 4.5:1 on every glass surface over every combination of backdrop blobs, in both themes (light and `dispecerat`).
+- **UI fixes** (`f4c84db`): panels use the shared `Card` component instead of ad-hoc `glass-card tilt-soft` sections (file detail, policies form, meters, observability, demo, trace, storage policy, version history); the audit filters sit in a glass card and use `rounded-control`; unused code removed (`ComingSoon`, `charts/Sparkline`, Tailwind aliases nobody used).
+
+**Not verified / not done yet**
+- [ ] Deploy `main` (`f4c84db`) on the VPS: backend (no new migration; the sweep env vars have defaults) and frontend images. This file does not record a deploy of anything newer than `feat/handoff`.
+- [ ] Run `npm run seed:demo` against the VPS after that deploy.
+- [ ] Frontend: regenerate the types from the real API (`API_SPEC=https://<host>/api/v1/docs-json npm run gen:api`) and fix the 27 type errors measured on 15.11 (mostly in `src/mocks/` and tests). In a screen: `src/features/audit/AuditTable.tsx` calls `roleLabel(e.actor.role)`, and `roleLabel` takes a `Role`, but a system actor's role can be `null`.
+- [ ] Browser check of the glass UI on the real stack: 1440×900, 1920×1080 (projector), 390×844, light and dark, and with reduced motion on; check the backdrop's CPU/GPU cost on the demo laptop.
+- [ ] Still open from "Stare după preluare": manual browser test of the new screens, final frontend review, the missing Playwright e2e tests (6b.13, 6c.10, 6d.4, 6e.7, 6f.6, 6g.4, 6h.0, 6h.2–6h.6), 6c.8 "verify without saving" and streamed save for files > 64 MiB, storm only on `meter_readings`, HPA not scaling at 100 readings/s, the minors list.
+- [ ] Still open for P1: alert webhook (Discord/Telegram), `sudo make k3s-secrets-encrypt` (needs the team's OK).
+- [ ] Final pass (M4): demo script and slides, backup video, a clean-machine `make up`, a full demo rehearsal on the VPS, then `FILEGRID_PASSWORDLESS_LOGIN="false"` and redeploy after the demo.
