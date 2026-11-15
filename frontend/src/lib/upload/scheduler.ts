@@ -38,7 +38,8 @@ export type ErrorClass =
   | { kind: 'reconcile' }
   | { kind: 'fatal'; reason: FailReason };
 
-export const MAX_ATTEMPTS = 10;
+/** ~15-30 min of jittered retries (30 s cap) before a part gives up: a flaky link recovers without a click. */
+export const MAX_ATTEMPTS = 60;
 export const CHECKSUM_LIMIT = 3;
 const MAX_PARALLEL = 6;
 const RETRYABLE_4XX = [408, 425, 429];

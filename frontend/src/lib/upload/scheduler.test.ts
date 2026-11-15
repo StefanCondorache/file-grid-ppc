@@ -3,7 +3,7 @@ import { ApiError } from '@/lib/api/errors';
 import type { PartSend, PartTransport } from './api';
 import { seededRng } from './backoff';
 import type { NetMonitor } from './net';
-import { classifyError, createScheduler, type ActiveUpload, type SchedulerSignal } from './scheduler';
+import { classifyError, createScheduler, MAX_ATTEMPTS, type ActiveUpload, type SchedulerSignal } from './scheduler';
 import { realClock } from './types';
 
 beforeEach(() => vi.useFakeTimers());
@@ -196,12 +196,12 @@ describe('part scheduler', () => {
     expect(r.last()).toMatchObject({ type: 'fatal', reason: 'file_changed' });
   });
 
-  it('fails with retries_exhausted after 10 attempts on one part', async () => {
+  it('fails with retries_exhausted after MAX_ATTEMPTS attempts on one part', async () => {
     const t = scriptedTransport(() => err(503, 'STORAGE_UNAVAILABLE'));
     const r = run(t.transport);
     r.s.start(upload(1, { maxParallel: 1 }));
-    await vi.advanceTimersByTimeAsync(30 * 60_000);
-    expect(t.calls).toHaveLength(10);
+    await vi.advanceTimersByTimeAsync(MAX_ATTEMPTS * 30_000 + 60_000);
+    expect(t.calls).toHaveLength(MAX_ATTEMPTS);
     expect(r.last()).toMatchObject({ type: 'fatal', reason: 'retries_exhausted' });
   });
 
