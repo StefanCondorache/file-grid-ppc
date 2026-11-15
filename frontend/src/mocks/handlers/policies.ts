@@ -65,8 +65,15 @@ const putHandler = http.put(apiUrl('/policies/:category'), async ({ params, requ
     fallbackStorage: next.fallbackStorage ? (next.fallbackStorage.toUpperCase() as Policy['fallbackStorage']) : null,
   });
   db.insert<VersionRow & Record<string, unknown>>('policyVersions', { category, version: next.version, policy: next, changedAt: next.updatedAt, changedBy: next.updatedBy, changes });
+  // Audited like the backend (action policy_update, the changed fields as details).
+  const traceId = trace();
+  const actor = userById(session.realUserId)!;
+  db.audit.append({
+    actor, actingAs: session.activeRole === actor.role ? null : session.activeRole, demo: false, action: 'policy_update', category, traceId,
+    details: changes.map((c) => `${c.field}: ${c.from ?? '–'} → ${c.to ?? '–'}`).join(', '),
+  });
   scenario.emit('policy.updated', { category, version: next.version });
-  return HttpResponse.json(next, { headers: { 'X-Trace-Id': trace() } });
+  return HttpResponse.json(next, { headers: { 'X-Trace-Id': traceId } });
 });
 
 const versionsHandler = http.get(apiUrl('/policies/:category/versions'), ({ params }) => {

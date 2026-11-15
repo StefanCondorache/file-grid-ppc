@@ -71,7 +71,7 @@ const form = {
     applicantName: 'Introdu numele solicitantului.',
     cnpFormat: 'Introdu un CNP din 13 cifre.',
     cnpFirstDigit: 'CNP-ul nu poate începe cu 0.',
-    cnpChecksum: 'CNP-ul nu este valid: ultima cifră (cifra de control) nu se potrivește cu celelalte. Verifică cifrele.',
+    cnpChecksum: 'CNP-ul nu este valid: ultima cifră (cifra de control) nu se potrivește. Verifică cifrele.',
     lineSection: 'Introdu linia sau tronsonul.',
     inspectionDate: 'Introdu data inspecției.',
     tooLong: (max: number) => `Cel mult ${max} ${characters[pluralRules.select(max) as keyof typeof characters] ?? characters.other}.`,
@@ -80,7 +80,7 @@ const form = {
 
 const categories: Record<UploadCategoryId, { title: string; hint: string; details: string; short: string }> = {
   drone_videos: { title: 'Video inspecție dronă', hint: '100\u00A0MB – 1\u00A0GB+', details: 'Detalii inspecție', short: 'Video dronă' },
-  fault_records: { title: 'Înregistrare de avarie', hint: '1–10\u00A0MB · disponibilă imediat pentru dispecerat', details: 'Detalii avarie', short: 'Avarii' },
+  fault_records: { title: 'Înregistrare de avarie', hint: '1–10\u00A0MB', details: 'Detalii avarie', short: 'Avarii' },
   connection_documents: { title: 'Document de racordare', hint: '0,1–10\u00A0MB · date personale', details: 'Detalii document', short: 'Documente racordare' },
 };
 
@@ -89,7 +89,6 @@ const storages: Record<StorageId, string> = { s3: 'S3', ftp: 'FTP', db: 'Postgre
 
 /** The Încărcare screen (SC-03). */
 const screen = {
-  intro: 'Transferul continuă singur dacă se pierde conexiunea. Amprenta SHA-256 dovedește că fișierul stocat este identic cu cel trimis.',
   category: 'Categorie',
   chosen: 'Fișiere alese',
   remove: 'Elimină',
@@ -101,7 +100,7 @@ const screen = {
   hint: (types: string, limit: string, version: number) => `${types} · maximum ${limit} (politica v${version})`,
   hintNoPolicy: 'limitele politicii se verifică la pornire',
   anyType: 'orice tip',
-  personalData: 'Numele și CNP-ul se trimit o singură dată, la pornirea încărcării, și sunt criptate pe server. Nu rămân în browser.',
+  personalData: 'Numele și CNP-ul sunt criptate pe server și nu rămân în browser.',
   enqueueFailed: 'Încărcarea nu a putut porni. Reîncarcă pagina și încearcă din nou.',
 };
 
@@ -119,21 +118,10 @@ const policy = {
   notEncrypted: 'Nu',
   maxSize: 'Dimensiune maximă',
   types: 'Tipuri acceptate',
-  frozen: 'Politica e fixată la pornirea încărcării: o modificare ulterioară nu afectează transferul în curs.',
+  frozen: 'Încărcările în curs păstrează politica de la pornire.',
   loading: 'Se încarcă politica…',
   unavailable: 'Politica nu a putut fi încărcată. Limitele ei se verifică oricum la pornirea încărcării.',
   tile: (storage: string, chunk: string, encrypted: boolean) => `${storage} · ${chunk} · criptat: ${encrypted ? 'da' : 'nu'}`,
-};
-
-/** "Ce se întâmplă dacă pică rețeaua" (beat 2 narration). */
-const network = {
-  title: 'Ce se întâmplă dacă pică rețeaua',
-  steps: [
-    'Ne oprim singuri și reîncercăm cu pauze tot mai lungi.',
-    'Revenim fără niciun clic când rețeaua funcționează din nou.',
-    'După reîncărcarea paginii continuăm de la ultima bucată confirmată.',
-    'La final comparăm amprenta calculată aici cu cea de pe server.',
-  ],
 };
 
 const seconds = (n: number) => count(n, { one: 'o secundă', few: '# secunde', other: '# de secunde' });
@@ -142,8 +130,8 @@ const seconds = (n: number) => count(n, { one: 'o secundă', few: '# secunde', o
 const queue = {
   title: 'Coada de încărcare',
   summary: (total: number, active: number) => `${files(total)} · ${active} în curs`,
-  empty: 'Niciun fișier în coadă. Fișierele alese apar aici, iar încărcarea continuă și dacă schimbi pagina.',
-  hashingNote: 'Calculăm amprenta SHA-256 aici, bucată cu bucată, fără să citim tot fișierul în memorie. Încărcarea pornește imediat după.',
+  empty: 'Niciun fișier în coadă.',
+  hashingNote: 'Încărcarea pornește imediat după calculul amprentei SHA-256.',
   hashingValue: 'Se calculează amprenta',
   partsConfirmed: (done: number, total: number) => `${formatInt(done)} din ${formatInt(total)} bucăți confirmate`,
   speed: (perSecond: string) => `${perSecond}/s`,
@@ -153,8 +141,8 @@ const queue = {
   offlineWait: 'reluăm automat când revine rețeaua',
   offlineSpoken: 'conexiune pierdută, reluăm automat când revine rețeaua',
   pausedFor: { user: 'oprită de tine', offline: 'fără rețea', session: 'sesiunea a expirat', logout: 'te-ai deconectat' },
-  needsFileReopen: 'Pagina a fost reîncărcată. Un clic redeschide fișierul; verificăm că este același și continuăm de unde am rămas.',
-  needsFileReselect: 'Pagina a fost reîncărcată. Alege din nou același fișier; verificăm că este identic și continuăm de la ultima bucată confirmată.',
+  needsFileReopen: 'Pagina a fost reîncărcată. Un clic redeschide fișierul și continuăm de unde am rămas.',
+  needsFileReselect: 'Pagina a fost reîncărcată. Alege din nou același fișier ca să continui.',
   clientHash: 'Amprentă SHA-256 (client):',
   bothHashes: 'Client = server:',
   startedAs: 'Pornit ca',
@@ -190,7 +178,6 @@ export const upload = {
   storages,
   screen,
   policy,
-  network,
   queue,
   tray: {
     storageUnavailable: (storage: string) => `${storage} nu este disponibil. Celelalte categorii funcționează normal. Reîncercăm automat.`,

@@ -19,7 +19,7 @@ export function PoliciesScreen() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-[28px] font-bold">{t.title}</h1>
+        <h2 className="text-[28px] font-bold">{t.title}</h2>
         <p className="text-ink-2">{t.intro}</p>
       </header>
       {q.isError && <ErrorState error={q.error} onRetry={() => void q.refetch()} />}

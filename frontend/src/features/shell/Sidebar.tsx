@@ -47,7 +47,8 @@ export function Sidebar({ me }: { me: Me }) {
       <span ref={indicatorRef} aria-hidden="true" className="nav-indicator" />
       <Link href="/" className="mb-5 flex items-center gap-2.5 px-2.5 text-sidebar-foreground no-underline">
         <Wordmark onDark />
-        <span className="hidden lg:block">
+        {/* Hidden visually on narrow screens, not from screen readers: it is the link's name. */}
+        <span className="sr-only lg:not-sr-only lg:block">
           <b className="block text-xl font-bold tracking-tight">FileGrid</b>
           <small className="block text-[11px] text-(--fg-on-chrome-2)">{t.shell.tagline}</small>
         </span>

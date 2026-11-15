@@ -13,16 +13,15 @@ export function ZoneSplit({ byZone }: { byZone: MeterCounters['byZone'] }) {
       <h3 id="zones-title" className="text-lg font-bold">
         {t.meters.zonesTitle}
       </h3>
+      {/* dt and dd sit directly in each group div (a valid dl); the bar is a second, hidden dd. */}
       <dl className="flex flex-col gap-3">
         {byZone.map((z) => (
-          <div key={z.zone} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="font-semibold">{t.live.zones[z.zone] ?? z.zone}</dt>
-              <dd className="text-sm tabular-nums text-ink-2">{t.meters.zone(formatInt(z.received), decimal(z.ratePerS))}</dd>
-            </div>
-            <div aria-hidden="true" className="h-2 overflow-hidden rounded-pill bg-sunken">
+          <div key={z.zone} className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-1">
+            <dt className="font-semibold">{t.live.zones[z.zone] ?? z.zone}</dt>
+            <dd className="text-sm tabular-nums text-ink-2">{t.meters.zone(formatInt(z.received), decimal(z.ratePerS))}</dd>
+            <dd aria-hidden="true" className="col-span-2 h-2 overflow-hidden rounded-pill bg-sunken">
               <div className="h-full bg-cat-meter" style={{ width: `${Math.round((z.received / total) * 100)}%` }} />
-            </div>
+            </dd>
           </div>
         ))}
       </dl>

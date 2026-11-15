@@ -44,7 +44,7 @@ function ResetControl() {
     );
   };
   return (
-    <Panel id="reset-title" title={t.reset.title} lead={t.reset.lead}>
+    <Panel id="reset-title" title={t.reset.title}>
       <div>
         <ConfirmAction variant="secondary" label={t.reset.action} title={t.reset.confirmTitle} body={t.reset.confirmBody} onConfirm={reset} />
       </div>

@@ -7,9 +7,9 @@ export function Forbidden({ roleLabel }: { roleLabel: string }) {
   const t = useT();
   return (
     <section className="flex flex-col items-start gap-3 rounded-panel glass-card p-6" aria-labelledby="forbidden-title">
-      <h1 id="forbidden-title" className="text-[22px] font-bold">
+      <h2 id="forbidden-title" className="text-[22px] font-bold">
         {t.common.forbiddenTitle}
-      </h1>
+      </h2>
       <p className="text-ink-2">{t.common.forbiddenBody(roleLabel)}</p>
       <Button asChild variant="secondary">
         <Link href="/">{t.common.backHome}</Link>

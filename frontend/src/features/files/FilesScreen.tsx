@@ -87,7 +87,7 @@ function FilesBody({ filters, go, reset }: BodyProps) {
   if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
   if (list.data.items.length === 0) {
     const filtered = activeFilterCount(filters) > 0 || filters.page > 1;
-    return filtered ? <FilteredEmpty title={t.files.empty} body={t.files.emptyBody} onReset={reset} /> : <EmptyState title={t.files.emptyNone} body={t.files.emptyNoneBody} />;
+    return filtered ? <FilteredEmpty title={t.files.empty} body={t.files.emptyBody} onReset={reset} /> : <EmptyState title={t.files.emptyNone} />;
   }
   const page = list.data;
   return (
@@ -110,9 +110,9 @@ function MeterReadingsBody({ filters, go }: BodyProps) {
     // The category is the view itself here, so it is not one of the filters to reset.
     const filtered = activeFilterCount(filters) > 1 || filters.page > 1;
     return filtered ? (
-      <FilteredEmpty title={m.empty} body={m.emptyBody} onReset={() => go({ ...DEFAULT_FILTERS, category: 'meter_readings' })} />
+      <FilteredEmpty title={m.empty} body={t.files.emptyBody} onReset={() => go({ ...DEFAULT_FILTERS, category: 'meter_readings' })} />
     ) : (
-      <EmptyState title={m.emptyNone} body={m.emptyNoneBody} />
+      <EmptyState title={m.emptyNone} />
     );
   }
   const page = list.data;

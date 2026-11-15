@@ -44,7 +44,6 @@ export function GuaranteesBoard() {
         <h2 id="board-title" className="text-[22px] font-bold">
           {t.monitoring.boardTitle}
         </h2>
-        <p className="text-ink-2">{t.monitoring.boardLead}</p>
       </div>
       {body}
     </section>

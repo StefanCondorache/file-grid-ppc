@@ -104,7 +104,6 @@ export function AlertsList() {
         <h2 id="alerts-title" className="text-[22px] font-bold">
           {m.alerts.listTitle}
         </h2>
-        <p className="text-ink-2">{m.alerts.listLead}</p>
       </div>
       {alerts.isPending && <span className="sr-only">{t.common.loading}</span>}
       {body}
