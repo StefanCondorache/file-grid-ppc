@@ -21,9 +21,9 @@ const CATEGORY_DOT: Record<CategoryId, string> = {
 };
 
 const CARD_STATE: Record<GuaranteeState, string> = {
-  ok: 'border border-border bg-card shadow-e1',
-  at_risk: 'border-2 border-(--fg-warn-border) bg-warn-tint shadow-e2',
-  violated: 'border-2 border-crit bg-crit-tint shadow-e2',
+  ok: 'glass-card',
+  at_risk: 'glass-card glass-warn border-2 border-(--fg-warn-border)',
+  violated: 'glass-card glass-crit border-2 border-crit',
 };
 
 const EDGE: Record<Exclude<GuaranteeState, 'ok'>, string> = { at_risk: 'bg-(--fg-warn-border)', violated: 'attention bg-crit' };
@@ -120,7 +120,7 @@ export function GuaranteeCard({ guarantee: g, headingLevel = 3 }: { guarantee: G
       aria-labelledby={titleId}
       data-state={g.state}
       data-category={g.category}
-      className={cn('relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-hero lift p-6 text-card-foreground', CARD_STATE[g.state])}
+      className={cn('relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-hero tilt p-6 text-card-foreground', CARD_STATE[g.state])}
     >
       {g.state !== 'ok' && <span data-status-edge aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-[6px]', EDGE[g.state])} />}
       <div className="flex items-start justify-between gap-3">

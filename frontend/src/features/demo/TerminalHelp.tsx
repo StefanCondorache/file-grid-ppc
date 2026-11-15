@@ -38,7 +38,7 @@ export const STORAGE_START_S3 = 'make chaos-storage-start S=s3';
 export function TerminalHelp() {
   const t = useT().demo.terminal;
   return (
-    <section aria-labelledby="terminal-title" className="flex flex-col gap-3 rounded-card border border-border bg-surface-2 p-5">
+    <section aria-labelledby="terminal-title" className="flex flex-col gap-3 rounded-card glass-card p-5">
       <h3 id="terminal-title" className="text-lg font-bold">
         {t.title}
       </h3>

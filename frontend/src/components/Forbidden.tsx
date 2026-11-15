@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 export function Forbidden({ roleLabel }: { roleLabel: string }) {
   const t = useT();
   return (
-    <section className="flex flex-col items-start gap-3 rounded-panel border border-border bg-surface-2 p-6" aria-labelledby="forbidden-title">
+    <section className="flex flex-col items-start gap-3 rounded-panel glass-card p-6" aria-labelledby="forbidden-title">
       <h1 id="forbidden-title" className="text-[22px] font-bold">
         {t.common.forbiddenTitle}
       </h1>

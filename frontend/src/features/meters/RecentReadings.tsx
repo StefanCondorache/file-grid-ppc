@@ -67,7 +67,7 @@ export function RecentReadings() {
   }
 
   return (
-    <section aria-labelledby="recent-title" aria-busy={readings.isPending} className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 shadow-e1">
+    <section aria-labelledby="recent-title" aria-busy={readings.isPending} className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-5">
       <h3 id="recent-title" className="text-lg font-bold">
         {m.recentTitle}
       </h3>

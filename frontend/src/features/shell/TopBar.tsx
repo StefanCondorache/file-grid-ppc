@@ -15,8 +15,8 @@ export function TopBar({ me, onLogout }: { me: Me; onLogout?: () => void }) {
   const t = useT();
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 glass border-b px-8">
-      <h1 className="text-[22px] font-bold tracking-tight">{titleFor(pathname)}</h1>
+    <header className="sticky top-0 z-10 flex h-16 items-center gap-3 glass border-b px-8">
+      <h1 className="text-gradient shrink-0 text-[22px] font-bold tracking-tight whitespace-nowrap">{titleFor(pathname)}</h1>
       <span className="flex-1" />
       <StorageHealthStrip />
       <LiveStatusPill />

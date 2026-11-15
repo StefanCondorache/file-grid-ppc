@@ -17,7 +17,7 @@ export function GuaranteesBoard() {
       guarantees.data.length === 0 ? (
         <EmptyState title={t.common.emptyTitle} body={t.monitoring.boardEmpty} />
       ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <ul className="enter grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {guarantees.data.map((g) => (
             <li key={g.category} className="flex">
               <GuaranteeCard guarantee={g} />
@@ -32,7 +32,7 @@ export function GuaranteesBoard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <span className="sr-only">{t.common.loading}</span>
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} aria-hidden="true" className="h-64 skeleton rounded-hero border border-border bg-surface-2" />
+          <div key={i} aria-hidden="true" className="h-64 skeleton rounded-hero glass-card" />
         ))}
       </div>
     );

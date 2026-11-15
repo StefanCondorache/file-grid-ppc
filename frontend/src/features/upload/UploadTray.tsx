@@ -59,7 +59,7 @@ export function UploadTray() {
         <div
           role="group"
           aria-label={u.queue.title}
-          className="fixed right-4 bottom-4 z-30 w-[min(92vw,360px)] rounded-card border border-border bg-card shadow-e3"
+          className="fixed right-4 bottom-4 z-30 w-[min(92vw,360px)] glass-strong glass-edge rounded-card border shadow-e3"
         >
           <button
             type="button"

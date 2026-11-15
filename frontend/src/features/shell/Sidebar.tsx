@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useLayoutEffect, useRef } from 'react';
 import { Wordmark } from '@/components/Wordmark';
 import type { Me } from '@/lib/api/types';
 import { cn } from '@/lib/cn';
@@ -13,8 +14,37 @@ export function Sidebar({ me }: { me: Me }) {
   const pathname = usePathname();
   const items = NAV.filter((n) => n.visible(me));
   const groups = [...new Set(items.map((n) => n.group))];
+  const navRef = useRef<HTMLElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+
+  // Decorative: slide the single glowing indicator onto the current item (re-measured on resize: group labels
+  // only show at lg). Hidden when no item is current.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const ind = indicatorRef.current;
+    if (!nav || !ind) return;
+    let frame = 0;
+    const place = () => {
+      const link = nav.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!link) {
+        delete ind.dataset.ready;
+        return;
+      }
+      ind.style.setProperty('--fg-nav-y', `${link.offsetTop}px`);
+      ind.style.setProperty('--fg-nav-h', `${link.offsetHeight}px`);
+      if (!('ready' in ind.dataset)) frame = requestAnimationFrame(() => (ind.dataset.ready = ''));
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+    };
+  }, [pathname]);
+
   return (
-    <nav aria-label={t.shell.mainNav} className="sticky top-0 flex h-screen w-[72px] flex-col glass-chrome px-3 py-5 text-sidebar-foreground lg:w-[264px]">
+    <nav ref={navRef} aria-label={t.shell.mainNav} className="sticky top-0 flex h-screen w-[72px] flex-col glass-chrome px-3 py-5 text-sidebar-foreground lg:w-[264px]">
+      <span ref={indicatorRef} aria-hidden="true" className="nav-indicator" />
       <Link href="/" className="mb-5 flex items-center gap-2.5 px-2.5 text-sidebar-foreground no-underline">
         <Wordmark onDark />
         <span className="hidden lg:block">
@@ -37,8 +67,8 @@ export function Sidebar({ me }: { me: Me }) {
                   href={n.href}
                   aria-current={current ? 'page' : undefined}
                   className={cn(
-                    'relative flex min-h-10 items-center gap-3 rounded-[10px] px-3 py-2.5 text-[15px] text-sidebar-foreground no-underline transition-colors duration-(--fg-dur-fast) hover:bg-(--fg-chrome-2)',
-                    current && 'bg-(--fg-chrome-2) font-semibold before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-1 before:rounded-r before:bg-brand-orange',
+                    'relative flex min-h-10 items-center gap-3 rounded-[10px] px-3 py-2.5 text-[15px] text-sidebar-foreground no-underline hover:bg-(--fg-chrome-2)',
+                    current && 'font-semibold',
                   )}
                 >
                   <n.icon aria-hidden="true" className="size-5 shrink-0" strokeWidth={1.75} />

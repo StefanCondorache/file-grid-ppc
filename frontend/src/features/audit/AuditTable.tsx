@@ -16,7 +16,7 @@ export function AuditTable({ events }: { events: AuditRow[] }) {
   const actions = a.actions as Record<string, string>;
   const outcomes = a.outcomes as Record<string, string>;
   return (
-    <div className="overflow-x-auto rounded-panel border border-border bg-surface">
+    <div className="overflow-x-auto rounded-panel glass-dense">
       <table className="w-full min-w-[760px] border-collapse text-left text-sm">
         <caption className="sr-only">{a.tableLabel}</caption>
         <thead className="bg-surface-2 text-ink-2">

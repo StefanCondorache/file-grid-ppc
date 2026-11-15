@@ -41,9 +41,9 @@ export function AlertsList() {
   if (alerts.data) {
     body =
       alerts.data.length === 0 ? (
-        <p className="rounded-panel border border-dashed border-input bg-surface-2 p-5 text-ink-2">{m.alerts.empty}</p>
+        <p className="rounded-panel glass-card glass-empty p-6 text-ink-2">{m.alerts.empty}</p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-border bg-surface">
+        <div className="overflow-x-auto rounded-card glass-dense">
           <table className="w-full border-collapse text-sm">
             <caption className="sr-only">{m.alerts.caption}</caption>
             <thead>
@@ -94,7 +94,7 @@ export function AlertsList() {
     body = <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} />;
   } else {
     body = (
-      <div aria-hidden="true" className="h-32 skeleton rounded-card border border-border bg-surface-2" />
+      <div aria-hidden="true" className="h-32 skeleton rounded-card glass-card" />
     );
   }
 

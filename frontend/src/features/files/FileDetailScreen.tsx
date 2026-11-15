@@ -123,7 +123,7 @@ function MetadataPanel({ file }: { file: FileDetail }) {
     { term: m.origin, value: <OriginTag origin={file.origin} /> },
   ];
   return (
-    <section aria-labelledby="file-meta-h" className="flex flex-col gap-3 rounded-card border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-meta-h" className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-6">
       <h2 id="file-meta-h" className="text-lg font-bold">
         {m.title}
       </h2>
@@ -149,7 +149,7 @@ function IntegrityPanel({ file }: { file: FileDetail }) {
   const t = useT();
   const d = t.files.detail.integrity;
   return (
-    <section aria-labelledby="file-integrity-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-integrity-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
       <h2 id="file-integrity-h" className="text-lg font-bold">
         {d.title}
       </h2>
@@ -173,7 +173,7 @@ function Header({ file }: { file: FileDetail }) {
   const d = t.files.detail;
   const when = formatDateTime(file.createdAt);
   return (
-    <section aria-labelledby="file-name-h" className="flex flex-col gap-3 rounded-hero border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-name-h" className="flex flex-col gap-3 rounded-hero glass-card tilt-soft p-6">
       <span className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-ink-2 uppercase">
         <span aria-hidden="true" className={cn('size-2.5 rounded-full', CATEGORY_DOT[file.category])} />
         {t.files.categoryOne[file.category] ?? file.category}
@@ -226,7 +226,7 @@ function Breadcrumb({ file }: { file: FileDetail }) {
 function TracePanel({ traceId }: { traceId: string }) {
   const t = useT();
   return (
-    <section aria-labelledby="file-trace-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-trace-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="file-trace-h" className="text-lg font-bold">
           {t.files.trace.title}
@@ -243,7 +243,7 @@ function TracePanel({ traceId }: { traceId: string }) {
 function CustodyPanel({ fileId }: { fileId: string }) {
   const t = useT();
   return (
-    <section aria-labelledby="file-custody-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-custody-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
       <h2 id="file-custody-h" className="text-lg font-bold">
         {t.files.custody.title}
       </h2>

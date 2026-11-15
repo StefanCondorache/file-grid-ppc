@@ -54,7 +54,7 @@ function ResetControl() {
 function ActionLog({ entries }: { entries: LogEntry[] }) {
   const t = useT().demo.log;
   return (
-    <section aria-labelledby="log-title" className="flex flex-col gap-2 rounded-card border border-border bg-card p-5 shadow-e1">
+    <section aria-labelledby="log-title" className="flex flex-col gap-2 rounded-card glass-card tilt-soft p-5">
       <h3 id="log-title" className="text-lg font-bold">
         {t.title}
       </h3>

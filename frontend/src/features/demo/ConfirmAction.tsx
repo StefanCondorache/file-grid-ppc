@@ -55,7 +55,7 @@ export function ConfirmAction({
             e.preventDefault();
             cancelRef.current?.focus();
           }}
-          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong rounded-card border p-6 shadow-e3"
+          className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong glass-edge rounded-card border p-6 shadow-e3"
         >
           <AlertDialog.Title className="text-xl font-bold">{title}</AlertDialog.Title>
           <AlertDialog.Description className="text-ink-2">{body}</AlertDialog.Description>

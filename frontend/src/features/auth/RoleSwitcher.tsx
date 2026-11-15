@@ -39,7 +39,7 @@ export function RoleSwitcher({ me }: { me: Me }) {
         <ChevronDown aria-hidden="true" className="size-4" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={6} className="pop glass-strong z-50 min-w-64 rounded-panel border p-1.5 shadow-e3">
+        <DropdownMenu.Content align="end" sideOffset={6} className="pop glass-strong glass-edge z-50 min-w-64 rounded-panel border p-1.5 shadow-e3">
           <DropdownMenu.RadioGroup value={me.activeRole} onValueChange={(v) => void switchTo(v as Role)}>
             {ROLE_OPTIONS.map((o) => (
               <DropdownMenu.RadioItem

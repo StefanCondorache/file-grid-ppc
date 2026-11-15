@@ -93,7 +93,7 @@ export function MetricsMatrix({ window: span }: { window: MatrixWindow }) {
     return (
       <div aria-busy="true" className="flex flex-col gap-2">
         <span className="sr-only">{catalog.common.loading}</span>
-        <div aria-hidden="true" className="h-[22rem] skeleton rounded-card border border-border bg-surface-2" />
+        <div aria-hidden="true" className="h-[22rem] skeleton rounded-card glass-card" />
       </div>
     );
   }
@@ -117,7 +117,7 @@ export function MetricsMatrix({ window: span }: { window: MatrixWindow }) {
         // scrollable-region-focusable): accessibility.md §5 asks for the matrix "wrapped in a focusable scroll region".
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={0}
-        className="overflow-x-auto rounded-card border border-border bg-surface"
+        className="overflow-x-auto rounded-card glass-dense"
       >
         <table className="w-full min-w-[36rem] border-collapse text-sm">
           <caption id={captionId} className="sr-only">

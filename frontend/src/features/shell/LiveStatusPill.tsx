@@ -17,10 +17,15 @@ export function LiveStatusPill() {
             : t.live.reconnecting(live.reconnectingInS);
   const ok = live === 'open' || live === 'polling';
   return (
-    <span role="status" className="hidden items-center gap-1.5 text-[13px] font-semibold text-ink-2 md:inline-flex">
+    <span
+      role="status"
+      data-pulse={live === 'open' && !paused ? '' : undefined}
+      className="live-pill hidden h-8 items-center gap-2 rounded-pill px-3 text-[13px] font-semibold text-ink-2 md:inline-flex"
+    >
       {/* The ring only pulses on a live stream, and stops with "Actualizări live" off (WCAG 2.2.2). */}
       <span
         aria-hidden="true"
+        data-dot={ok ? '' : undefined}
         className={cn('size-2 rounded-full', ok ? 'bg-ok' : 'bg-warn', live === 'open' && !paused && 'pulse-ring')}
       />
       {text}

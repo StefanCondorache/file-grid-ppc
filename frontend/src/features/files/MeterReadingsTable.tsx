@@ -51,7 +51,7 @@ export function MeterReadingsTable({ rows }: { rows: MeterReading[] }) {
   return (
     // A focusable scroll region keeps the page free of 2-D scrolling at 320 px (A11Y-23).
     // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-    <div role="region" aria-label={t.files.meter.tableRegion} tabIndex={0} className="table-scroll rounded-card border border-border bg-surface shadow-e1">
+    <div role="region" aria-label={t.files.meter.tableRegion} tabIndex={0} className="table-scroll rounded-card glass-dense">
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">{t.files.meter.caption}</caption>
         <thead className="bg-surface-2 text-[13px] text-ink-2">

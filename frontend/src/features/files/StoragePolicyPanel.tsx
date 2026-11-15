@@ -29,7 +29,7 @@ export function StoragePolicyPanel({ file }: { file: FileDetail }) {
   const category = t.files.categories[file.category] ?? file.category;
   const encryptionNote = file.encryptedAtRest ? file.encryptionAlgorithm : file.category === 'connection_documents' ? null : s.noPersonalData;
   return (
-    <section aria-labelledby="file-storage-h" className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+    <section aria-labelledby="file-storage-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
       <h2 id="file-storage-h" className="text-lg font-bold">
         {s.title}
       </h2>

@@ -52,7 +52,7 @@ function Pagination({ page, pageSize, total, shown, hasMore, onPage }: { page: n
 
 function LoadingRows({ label }: { label: string }) {
   return (
-    <div aria-busy="true" className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4">
+    <div aria-busy="true" className="flex flex-col gap-2 rounded-card glass-dense p-4">
       <span className="sr-only">{label}</span>
       {Array.from({ length: 6 }, (_, i) => (
         <div key={i} aria-hidden="true" className="h-10 rounded-control bg-sunken" />

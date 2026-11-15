@@ -87,7 +87,7 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
     );
 
   return (
-    <form role="search" aria-label={f.label} onSubmit={submitSearch} className="flex flex-col gap-4 rounded-card border border-border bg-surface p-5 shadow-e1">
+    <form role="search" aria-label={f.label} onSubmit={submitSearch} className="flex flex-col gap-4 rounded-card glass-card p-5">
       <div role="group" aria-label={f.category} className="flex flex-wrap gap-2">
         <button type="button" aria-pressed={!filters.category} className={pill(!filters.category)} onClick={() => onChange({ category: undefined })}>
           {f.all}
@@ -161,7 +161,7 @@ export function FiltersBar({ filters, categories, onChange, onReset }: { filters
               >
                 <span
                   aria-hidden="true"
-                  className={cn('block size-5 rounded-full bg-surface shadow-e1 transition-transform duration-(--fg-dur-fast)', generatedHidden ? 'translate-x-[22px]' : 'translate-x-0.5')}
+                  className={cn('block size-5 rounded-full bg-surface shadow-neu-sm transition-transform duration-(--fg-dur-fast)', generatedHidden ? 'translate-x-[22px]' : 'translate-x-0.5')}
                 />
               </button>
               <label htmlFor={switchId} className="text-sm font-semibold">

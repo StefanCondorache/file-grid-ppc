@@ -58,12 +58,14 @@
   --shadow-e1: var(--fg-shadow-e1);
   --shadow-e2: var(--fg-shadow-e2);
   --shadow-e3: var(--fg-shadow-e3);
-  --shadow-raise: var(--fg-shadow-raise);
-  --shadow-press: var(--fg-shadow-press);
-  --shadow-inset: var(--fg-shadow-inset);
+  --shadow-neu: var(--fg-neu-raise);
+  --shadow-neu-sm: var(--fg-neu-raise-sm);
+  --shadow-neu-press: var(--fg-neu-press);
+  --shadow-neu-inset: var(--fg-neu-inset);
 
   --ease-smooth: var(--fg-ease-smooth);
   --ease-sharp: var(--fg-ease-sharp);
+  --ease-spring: var(--fg-ease-spring);
 }
 
 :root {
@@ -71,11 +73,9 @@
 }
 
 html {
-  background: var(--fg-page);
+  background: var(--fg-backdrop-1);
 }
 
-/* The page plane stays on <html> (canvas); a static brand-tinted gradient sits on a fixed layer above it,
-   so glass surfaces have something to show and scrolling never repaints the gradient. */
 body {
   margin: 0;
   min-height: 100vh;
@@ -85,79 +85,278 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-body::before {
-  content: "";
+/* ---- backdrop: four large blurred brand blobs drifting on 22–39 s loops, plus grain (markup: Ambient.tsx).
+   Fixed, behind everything, compositor-only (transform). The blobs are what every glass surface blurs. ---- */
+.backdrop {
   position: fixed;
   inset: 0;
   z-index: -1;
+  overflow: hidden;
   pointer-events: none;
-  background: var(--fg-backdrop);
+  background: linear-gradient(160deg, var(--fg-backdrop-1), var(--fg-backdrop-2));
+}
+.backdrop > i {
+  position: absolute;
+  width: var(--fg-blob-size);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--fg-blob) calc(var(--fg-blob-alpha) * 100%), transparent), transparent);
+  filter: blur(var(--fg-blob-blur));
+  will-change: transform;
+}
+.backdrop > i:nth-child(1) { --fg-blob: var(--fg-blob-1); top: -24vmax; left: -18vmax; animation: fg-drift-1 var(--fg-dur-drift-1) ease-in-out infinite alternate; }
+.backdrop > i:nth-child(2) { --fg-blob: var(--fg-blob-2); right: -22vmax; bottom: -30vmax; animation: fg-drift-2 var(--fg-dur-drift-2) ease-in-out infinite alternate; }
+.backdrop > i:nth-child(3) { --fg-blob: var(--fg-blob-3); top: -28vmax; right: -14vmax; animation: fg-drift-3 var(--fg-dur-drift-3) ease-in-out infinite alternate; }
+.backdrop > i:nth-child(4) { --fg-blob: var(--fg-blob-4); bottom: -34vmax; left: 4vmax; animation: fg-drift-4 var(--fg-dur-drift-4) ease-in-out infinite alternate; }
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--fg-grain);
 }
 
+/* ---- text straight on the backdrop gets a page-coloured halo; every surface below resets it ---- */
+.enter { text-shadow: var(--fg-halo); }
+:is(button, input, select, textarea, [role="switch"], .text-gradient) { text-shadow: none; }
+
+/* ---- focus: the two-tone ring stays (works on every surface) and now glows ---- */
 :focus-visible {
   outline: 3px solid var(--fg-focus-outer);
   outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--fg-focus-inner);
+  box-shadow: 0 0 0 2px var(--fg-focus-inner), 0 0 22px 6px var(--fg-focus-glow);
+}
+:is(input, select, textarea):focus-visible {
+  box-shadow: var(--fg-neu-inset), 0 0 0 2px var(--fg-focus-inner), 0 0 22px 6px var(--fg-focus-glow);
 }
 
-/* ---- soft depth: every text field, select and toggle reads as gently pressed in (its border stays) ---- */
+/* ---- neumorphic fields: every text field, select and switch track reads as pressed in (its border stays) ---- */
 @layer base {
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"]),
   select,
   textarea,
   [role="switch"] {
-    box-shadow: var(--fg-shadow-inset);
+    box-shadow: var(--fg-neu-inset);
   }
 }
 
 @layer components {
-  /* ---- glass: only large layers (chrome, dialogs, menus, login card). Never tables, rows or data cards. ---- */
+  /* ---- glass. Every surface swaps in its own inks (--fg-glass-ink-*): the contrast test proves ≥ 4.5:1 over the
+     worst backdrop (all blobs stacked at peak). Opacity: .5 cards/chrome, .62 dialogs+menus, .72 data tables. ---- */
   .glass,
   .glass-strong,
-  .glass-chrome {
+  .glass-chrome,
+  .glass-card,
+  .glass-dense {
+    --fg-ink-2: var(--fg-glass-ink-2);
+    --fg-ink-3: var(--fg-glass-ink-3);
+    --fg-link: var(--fg-glass-link);
+    --fg-glass-a: var(--fg-glass-alpha);
+    background-color: color-mix(in srgb, var(--fg-glass-tint) calc(var(--fg-glass-a) * 100%), transparent);
     -webkit-backdrop-filter: var(--fg-glass-filter);
     backdrop-filter: var(--fg-glass-filter);
+    border-color: var(--fg-glass-border);
+    text-shadow: none;
   }
-  .glass { background-color: var(--fg-glass); border-color: var(--fg-glass-border); }
-  .glass-strong { background-color: var(--fg-glass-strong); border-color: var(--fg-glass-border); }
-  .glass-chrome { background-color: var(--fg-glass-chrome); }
+  .glass-strong { --fg-glass-a: var(--fg-glass-strong-alpha); }
+  .glass-dense { --fg-glass-a: var(--fg-glass-dense-alpha); }
+  /* sidebar: frosted like the rest, so its text uses the ink family instead of on-chrome white */
+  .glass-chrome {
+    --fg-on-chrome: var(--fg-ink);
+    --fg-on-chrome-2: var(--fg-glass-ink-2);
+    --fg-chrome-2: var(--fg-hover-tint);
+    box-shadow: inset -1px 0 0 var(--fg-glass-border), var(--fg-shadow-e2);
+  }
+  .glass-card,
+  .glass-dense {
+    border-width: 1px;
+    border-style: solid;
+    box-shadow: var(--fg-shadow-e2);
+  }
+  /* status-tinted glass (guarantee at risk / violated): same blur, the status tint instead of white */
+  .glass-warn { --fg-glass-tint: var(--fg-warn-tint); --fg-glass-a: .82; }
+  .glass-crit { --fg-glass-tint: var(--fg-crit-tint); --fg-glass-a: .82; }
 
-  .soft-inset { box-shadow: var(--fg-shadow-inset); }
-
-  /* ---- hover lift for cards/KPI tiles: moves with `translate`, the deeper shadow fades in on a pseudo layer ---- */
-  .lift {
+  /* specular edge: a 1px gradient ring (masked pseudo) that catches light top-left and bottom-right */
+  .glass-card,
+  .glass-edge {
     position: relative;
     isolation: isolate;
-    transition: translate var(--fg-dur-fast) var(--fg-ease-smooth);
   }
-  .lift::after {
+  .glass-card::before,
+  .glass-edge::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--fg-specular);
+    -webkit-mask: var(--fg-mask-solid) content-box, var(--fg-mask-solid);
+    -webkit-mask-composite: xor;
+    mask: var(--fg-mask-solid) content-box exclude, var(--fg-mask-solid);
+    pointer-events: none;
+  }
+  /* empty state: glass card with an inner dashed outline */
+  .glass-empty { outline: 1.5px dashed var(--fg-glass-dash); outline-offset: -10px; }
+
+  /* ---- tilt + sheen: cards lift and lean toward the cursor; a soft light follows it (vars set by Ambient.tsx) ---- */
+  .tilt,
+  .tilt-soft {
+    --fg-tilt-max: var(--fg-tilt);
+    position: relative;
+    isolation: isolate;
+    transition: transform var(--fg-dur-spring) var(--fg-ease-smooth);
+  }
+  .tilt-soft { --fg-tilt-max: var(--fg-tilt-soft); }
+  .tilt::after,
+  .tilt-soft::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    box-shadow: var(--fg-shadow-e2);
+    background: radial-gradient(var(--fg-sheen-size) circle at calc(var(--fg-px, .5) * 100%) calc(var(--fg-py, .5) * 100%), var(--fg-sheen), transparent 70%);
+    box-shadow: var(--fg-hover-glow);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--fg-dur-fast) var(--fg-ease-smooth);
+    transition: opacity var(--fg-dur-normal) var(--fg-ease-smooth);
   }
   @media (hover: hover) {
-    .lift:hover { translate: 0 var(--fg-lift); }
-    .lift:hover::after { opacity: 1; }
+    .tilt:hover,
+    .tilt-soft:hover {
+      transform: perspective(1000px)
+        rotateX(calc((0.5 - var(--fg-py, .5)) * var(--fg-tilt-max)))
+        rotateY(calc((var(--fg-px, .5) - 0.5) * var(--fg-tilt-max)))
+        translateY(var(--fg-lift));
+    }
+    .tilt:hover::after,
+    .tilt-soft:hover::after { opacity: 1; }
   }
 
-  /* ---- page enter: direct children fade and rise once when mounted (route change, loaded content) ---- */
+  /* ---- buttons: neumorphic raise, shimmer sweep on hover, springy press. Only transform/opacity animate.
+     The sweep band is masked top/bottom, so no overflow clip is needed (the sm ::after hit area keeps working). ---- */
+  .btn {
+    isolation: isolate;
+    transition: transform var(--fg-dur-spring) var(--fg-ease-spring);
+  }
+  .btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(105deg, transparent 38%, var(--fg-shine, var(--fg-btn-shine-soft)) 50%, transparent 62%);
+    -webkit-mask-image: var(--fg-mask-vfade);
+    mask-image: var(--fg-mask-vfade);
+    opacity: 0;
+    translate: -40% 0;
+    pointer-events: none;
+  }
+  .btn:active { transform: scale(var(--fg-press-scale)); transition-duration: var(--fg-dur-instant); }
+  .btn-raised { box-shadow: var(--fg-neu-raise); }
+  .btn-raised:active { box-shadow: var(--fg-neu-press); }
+  .btn-primary {
+    --fg-shine: var(--fg-btn-shine);
+    background-image: var(--fg-action-gradient);
+    box-shadow: var(--fg-neu-raise), var(--fg-action-glow);
+  }
+  .btn-primary:active { background-image: var(--fg-action-gradient-hover); box-shadow: var(--fg-neu-press); }
+  @media (hover: hover) {
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: scale(var(--fg-press-scale)); }
+    .btn:hover::before { animation: fg-sweep var(--fg-dur-sweep) var(--fg-ease-smooth); }
+    .btn-raised:hover { box-shadow: var(--fg-neu-raise-hover); }
+    .btn-raised:active { box-shadow: var(--fg-neu-press); }
+    .btn-primary:hover { background-image: var(--fg-action-gradient-hover); box-shadow: var(--fg-neu-raise-hover), var(--fg-action-glow); }
+    .btn-primary:active { box-shadow: var(--fg-neu-press); }
+  }
+
+  /* ---- neumorphic toggles ---- */
+  .neu-raise { box-shadow: var(--fg-neu-raise); }
+  .neu-press { box-shadow: var(--fg-neu-press); }
+
+  /* ---- live status: a frosted pill whose glow ring pulses while the stream is live and not paused ---- */
+  .live-pill {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--fg-pill-tint);
+    border: 1px solid var(--fg-glass-border);
+    box-shadow: var(--fg-neu-raise-sm);
+  }
+  .live-pill[data-pulse]::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: 0 0 0 2px var(--fg-live-glow), 0 0 16px 3px var(--fg-live-glow);
+    pointer-events: none;
+    animation: fg-ring var(--fg-dur-pulse) var(--fg-ease-smooth) infinite;
+  }
+  .live-pill [data-dot] { box-shadow: 0 0 8px 1px var(--fg-live-glow); }
+
+  /* ---- sidebar: one glowing indicator slides to the active item (position set by Sidebar.tsx) ---- */
+  .nav-indicator {
+    position: absolute;
+    top: 0;
+    left: var(--fg-space-3);
+    right: var(--fg-space-3);
+    height: var(--fg-nav-h, 0px);
+    transform: translateY(var(--fg-nav-y, 0px));
+    border-radius: 10px;
+    background: var(--fg-nav-active);
+    box-shadow: var(--fg-nav-shadow);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .nav-indicator[data-ready] {
+    opacity: 1;
+    transition: transform var(--fg-dur-spring) var(--fg-ease-spring), opacity var(--fg-dur-fast) var(--fg-ease-smooth);
+  }
+  .nav-indicator::before {
+    content: "";
+    position: absolute;
+    top: var(--fg-space-2);
+    bottom: var(--fg-space-2);
+    left: calc(var(--fg-space-3) * -1);
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: var(--fg-brand-orange);
+    box-shadow: 0 0 12px 2px var(--fg-nav-glow);
+  }
+
+  /* ---- gradient headings: brand gradient clipped to the text, hue drifts slowly (filter only) ---- */
+  .text-gradient {
+    background-image: var(--fg-text-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: fg-hue var(--fg-dur-hue) ease-in-out infinite alternate;
+  }
+
+  /* ---- page enter: direct children fade, rise and sharpen one after another ---- */
   .enter > * { animation: fg-rise var(--fg-dur-enter) var(--fg-ease-smooth) backwards; }
   .enter > :nth-child(2) { animation-delay: var(--fg-stagger); }
   .enter > :nth-child(3) { animation-delay: calc(var(--fg-stagger) * 2); }
-  .enter > :nth-child(n + 4) { animation-delay: calc(var(--fg-stagger) * 3); }
+  .enter > :nth-child(4) { animation-delay: calc(var(--fg-stagger) * 3); }
+  .enter > :nth-child(5) { animation-delay: calc(var(--fg-stagger) * 4); }
+  .enter > :nth-child(6) { animation-delay: calc(var(--fg-stagger) * 5); }
+  .enter > :nth-child(n + 7) { animation-delay: calc(var(--fg-stagger) * 6); }
 
-  /* ---- dialogs and popovers (Radix data-state; Presence waits for the exit animation) ---- */
-  .pop { transform-origin: var(--radix-popper-transform-origin, center); }
+  /* ---- dialogs and menus scale + blur in from their trigger. Menus/tooltips use Radix's popper origin;
+     centred dialogs grow out of the last click/keypress point (--fg-origin-*, set by Ambient.tsx). ---- */
+  .pop {
+    transform-origin: var(--radix-popper-transform-origin, calc(var(--fg-origin-x, 50vw) - 50vw + 50%) calc(var(--fg-origin-y, 50vh) - 50vh + 50%));
+  }
+  .pop:is([role="dialog"], [role="alertdialog"]) { --fg-pop-from: var(--fg-dialog-scale); }
   .pop:is([data-state="open"], [data-state="delayed-open"], [data-state="instant-open"]) {
-    animation: fg-pop-in var(--fg-dur-pop) var(--fg-ease-smooth);
+    animation: fg-pop-in var(--fg-dur-pop) var(--fg-ease-pop);
   }
   .pop[data-state="closed"] { animation: fg-pop-out var(--fg-dur-quick) var(--fg-ease-sharp) forwards; }
+  .scrim {
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    backdrop-filter: blur(6px) saturate(140%);
+  }
   .scrim[data-state="open"] { animation: fg-fade-in var(--fg-dur-pop) var(--fg-ease-smooth); }
   .scrim[data-state="closed"] { animation: fg-fade-out var(--fg-dur-quick) var(--fg-ease-sharp) forwards; }
 
@@ -193,27 +392,44 @@ body::before {
   .attention { animation: fg-breathe calc(var(--fg-dur-pulse) * 0.6) ease-in-out 3; }
 }
 
+/* No blur support, or the user asked for less transparency: every glass surface becomes the solid surface. */
 @supports not (backdrop-filter: blur(1px)) {
-  .glass, .glass-strong { background-color: var(--fg-surface); }
-  .glass-chrome { background-color: var(--fg-chrome); }
+  .glass, .glass-strong, .glass-chrome, .glass-card, .glass-dense { background-color: var(--fg-surface); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-strong, .glass-chrome, .glass-card, .glass-dense {
+    background-color: var(--fg-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  .text-gradient { background: none; color: CanvasText; -webkit-text-fill-color: CanvasText; }
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .glass, .glass-strong { background-color: var(--fg-surface); }
-  .glass-chrome { background-color: var(--fg-chrome); }
-}
+/* "Actualizări live" off (WCAG 2.2.2) freezes the endless decorative motion too (data-motion set by Ambient.tsx). */
+:root[data-motion="paused"] :is(.backdrop > i, .text-gradient) { animation-play-state: paused; }
 
 /* Durations/distances are zeroed in tokens.css; keyframe animations are dropped outright so Radix never waits. */
 @media (prefers-reduced-motion: reduce) {
-  .enter > *, .pop, .scrim, .skeleton::after, .row-in, .pulse-ring::after, .attention { animation: none !important; }
+  .enter > *, .pop, .scrim, .skeleton::after, .row-in, .pulse-ring::after, .attention,
+  .backdrop > i, .text-gradient, .btn::before, .live-pill::after { animation: none !important; }
+  .tilt, .tilt-soft, .btn { transition: none; }
 }
 
-@keyframes fg-rise { from { opacity: 0; translate: 0 var(--fg-rise); } }
-@keyframes fg-pop-in { from { opacity: 0; scale: var(--fg-pop-scale); } }
-@keyframes fg-pop-out { to { opacity: 0; scale: var(--fg-pop-scale); } }
+@keyframes fg-rise { from { opacity: 0; translate: 0 var(--fg-rise); filter: blur(var(--fg-enter-blur)); } }
+@keyframes fg-pop-in { from { opacity: 0; scale: var(--fg-pop-from, var(--fg-pop-scale)); filter: blur(var(--fg-pop-blur)); } }
+@keyframes fg-pop-out { to { opacity: 0; scale: var(--fg-pop-from, var(--fg-pop-scale)); filter: blur(var(--fg-pop-blur)); } }
 @keyframes fg-fade-in { from { opacity: 0; } }
 @keyframes fg-fade-out { to { opacity: 0; } }
 @keyframes fg-shimmer { to { translate: 100% 0; } }
+@keyframes fg-sweep { 0% { opacity: 0; translate: -40% 0; } 25% { opacity: 1; } 100% { opacity: 0; translate: 40% 0; } }
 @keyframes fg-row-in { from { opacity: 0; translate: 0 calc(var(--fg-rise) * -1); } }
 @keyframes fg-ping { from { opacity: 0.55; scale: 1; } to { opacity: 0; scale: 2.6; } }
+@keyframes fg-ring { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.12, 1.5); } }
 @keyframes fg-breathe { 50% { opacity: 0.45; } }
+@keyframes fg-hue { to { filter: hue-rotate(var(--fg-hue-shift)); } }
+@keyframes fg-drift-1 { 50% { transform: translate3d(22vmax, 14vmax, 0) scale(1.15); } 100% { transform: translate3d(10vmax, 30vmax, 0) scale(0.92); } }
+@keyframes fg-drift-2 { 50% { transform: translate3d(-26vmax, -10vmax, 0) scale(0.9); } 100% { transform: translate3d(-12vmax, -28vmax, 0) scale(1.12); } }
+@keyframes fg-drift-3 { 50% { transform: translate3d(-18vmax, 24vmax, 0) scale(1.2); } 100% { transform: translate3d(-34vmax, 8vmax, 0) scale(1); } }
+@keyframes fg-drift-4 { 50% { transform: translate3d(28vmax, -18vmax, 0) scale(1.1); } 100% { transform: translate3d(44vmax, -6vmax, 0) scale(0.95); } }

@@ -334,7 +334,7 @@ function CancelButton({ id, buttonId, nameId, displayName }: { id: string; butto
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="scrim fixed inset-0 z-40 bg-(--fg-scrim)" />
-        <AlertDialog.Content className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong rounded-card border p-6 shadow-e3">
+        <AlertDialog.Content className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong glass-edge rounded-card border p-6 shadow-e3">
           <AlertDialog.Title className="text-xl font-bold break-words">
             {u.queue.cancelTitle} <SafeName name={displayName} className="max-w-full align-bottom" />?
           </AlertDialog.Title>

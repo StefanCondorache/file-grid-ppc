@@ -12,7 +12,7 @@ export function TraceScreen({ traceId }: { traceId: string }) {
   return (
     <div className="flex flex-col gap-5">
       <h2 className="text-[28px] leading-tight font-bold tracking-tight">{t.files.trace.pageTitle}</h2>
-      <section className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-e1">
+      <section className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
         <TraceWaterfall traceId={traceId} />
       </section>
       {fileId && (

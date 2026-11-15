@@ -29,7 +29,6 @@
   --fg-chrome-2: #2E3546;            /* chrome hover / active row */
   --fg-on-chrome: #FFFFFF;           /* 14.56 */
   --fg-on-chrome-2: #B9C0CC;         /* 7.96 */
-  --fg-scrim: rgba(35, 41, 54, .55);
 
   /* ---- ink ---- */
   --fg-ink: #232936;                 /* 14.56 on white */
@@ -121,10 +120,7 @@
   --fg-radius-chip: 6px;      /* status chips: deliberately NOT pill, so status never looks like a button */
   --fg-radius-chunk: 2px;
 
-  /* ---- elevation ---- */
-  --fg-shadow-e1: 0 1px 2px rgba(35, 41, 54, .06), 0 1px 1px rgba(35, 41, 54, .04);
-  --fg-shadow-e2: 0 4px 14px rgba(35, 41, 54, .08), 0 1px 2px rgba(35, 41, 54, .06);
-  --fg-shadow-e3: 0 18px 44px rgba(35, 41, 54, .20), 0 2px 6px rgba(35, 41, 54, .08);
+  /* elevation (--fg-shadow-e1…e3) lives with the glass tokens below: coloured glows, not grey shadows */
 
   /* ---- motion (motion-foundations tokens, CSS-only; no motion/react dependency) ---- */
   --fg-dur-instant: 80ms;   /* focus, tooltip */
@@ -133,32 +129,102 @@
   --fg-dur-slow: 600ms;     /* only: status change pulse on a guarantee card (once) */
   --fg-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --fg-ease-sharp: cubic-bezier(0.4, 0, 0.2, 1);
-  --fg-dur-quick: 120ms;    /* popover/dialog exit */
-  --fg-dur-pop: 180ms;      /* popover/dialog enter */
-  --fg-dur-enter: 240ms;    /* page content rise on route enter */
+  --fg-dur-quick: 160ms;    /* popover/dialog exit */
+  --fg-dur-pop: 340ms;      /* popover/dialog enter: scale + blur in from the trigger */
+  --fg-dur-enter: 560ms;    /* page content: fade + rise + blur-to-sharp */
   --fg-dur-shimmer: 1400ms; /* skeleton sweep */
-  --fg-dur-pulse: 2000ms;   /* live dot ring; critical edge */
-  --fg-stagger: 40ms;       /* delay between entering page sections */
-  --fg-rise: 6px;           /* page content rises this far */
-  --fg-lift: -2px;          /* card hover lift */
-  --fg-press: 1px;          /* button press depth */
-  --fg-pop-scale: 0.96;     /* dialog/popover start scale */
+  --fg-dur-pulse: 2000ms;   /* live dot ring, live pill glow ring; critical edge */
+  --fg-dur-spring: 420ms;   /* button release, card tilt, nav indicator slide */
+  --fg-dur-sweep: 750ms;    /* button shimmer on hover */
+  --fg-dur-hue: 14s;        /* gradient heading hue drift */
+  --fg-dur-drift-1: 26s;    /* backdrop blobs: four co-prime loops so the mesh never repeats visibly */
+  --fg-dur-drift-2: 34s;
+  --fg-dur-drift-3: 39s;
+  --fg-dur-drift-4: 22s;
+  --fg-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);   /* overshoots ~10 %, then settles */
+  --fg-ease-pop: cubic-bezier(0.2, 1.25, 0.32, 1);       /* gentler overshoot for dialogs/menus */
+  --fg-stagger: 50ms;       /* delay between entering page sections */
+  --fg-rise: 14px;          /* page content rises this far */
+  --fg-enter-blur: 8px;     /* …and sharpens from this blur */
+  --fg-lift: -4px;          /* card hover lift */
+  --fg-tilt: 6deg;          /* stat tiles: max tilt toward the cursor */
+  --fg-tilt-soft: 1.2deg;   /* large cards (forms, charts): barely tilt, still lift + sheen */
+  --fg-press-scale: 0.95;   /* button press */
+  --fg-pop-scale: 0.9;      /* menu/tooltip start scale */
+  --fg-dialog-scale: 0.7;   /* dialog start scale (grows out of the click point) */
+  --fg-pop-blur: 10px;
+  --fg-hue-shift: -32deg;
 
-  /* ---- backdrop + glass (2026-11-15). Glass only on chrome, dialogs, popovers, login card; data stays solid. ---- */
-  --fg-backdrop:
-    radial-gradient(1100px 620px at 0% 0%, rgba(0, 160, 220, .10), transparent 65%),
-    radial-gradient(900px 520px at 100% 0%, rgba(255, 75, 0, .07), transparent 60%),
-    linear-gradient(180deg, #F5F5F5 0%, #EEF0F3 100%);
-  --fg-glass: rgba(255, 255, 255, .78);          /* top bar: ink stays ≥ 13:1 over the blurred page */
-  --fg-glass-strong: rgba(255, 255, 255, .9);    /* dialogs, menus, login card */
-  --fg-glass-chrome: rgba(35, 41, 54, .9);       /* sidebar: on-chrome text stays ≥ 10:1 */
-  --fg-glass-border: rgba(35, 41, 54, .12);
-  --fg-glass-filter: blur(16px) saturate(140%);
+  /* ---- backdrop: animated mesh (2026-11-15 v2). tokens.contrast.test.ts stacks every blob at peak alpha under
+     each glass surface and requires ≥ 4.5:1 for all glass inks, so these values are load-bearing. ---- */
+  --fg-backdrop-1: #F3F1FA;   /* base gradient, lilac-white → */
+  --fg-backdrop-2: #FBF4EF;   /* warm white */
+  --fg-blob-1: #00A0DC;       /* brand cyan */
+  --fg-blob-2: #FF4B00;       /* brand orange */
+  --fg-blob-3: #7C4DFF;       /* accent violet */
+  --fg-blob-4: #E0359B;       /* accent magenta */
+  --fg-blob-alpha: 0.45;      /* peak (centre) opacity of each blob */
+  --fg-blob-size: 64vmax;
+  --fg-blob-blur: 40px;
+  --fg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --fg-mask-solid: linear-gradient(#000 0 0);
+  --fg-mask-vfade: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+  /* text sitting straight on the backdrop (section titles, leads) gets a page-coloured halo for contrast */
+  --fg-halo: 0 0 1px rgba(250, 248, 255, .95), 0 0 5px rgba(250, 248, 255, .9), 0 0 14px rgba(250, 248, 255, .75);
 
-  /* ---- soft depth ---- */
-  --fg-shadow-raise: inset 0 1px 0 rgba(255, 255, 255, .22), 0 1px 2px rgba(35, 41, 54, .12), 0 3px 8px -3px rgba(35, 41, 54, .14);
-  --fg-shadow-press: inset 0 1px 3px rgba(35, 41, 54, .22);
-  --fg-shadow-inset: inset 0 1px 2px rgba(35, 41, 54, .08), inset 0 0 0 1px rgba(35, 41, 54, .02);
+  /* ---- glass ---- */
+  --fg-glass-tint: #FFFFFF;
+  --fg-glass-alpha: 0.5;          /* cards, stat tiles, empty states, top bar, sidebar, footer */
+  --fg-glass-strong-alpha: 0.62;  /* dialogs and menus (they sit on the scrim), login card, upload tray */
+  --fg-glass-dense-alpha: 0.72;   /* data tables */
+  --fg-glass-ink-2: #373D44;      /* inks swapped in on every glass surface (worst case ≥ 4.5:1, see test) */
+  --fg-glass-ink-3: #434A55;
+  --fg-glass-link: #1233C4;
+  --fg-glass-blur: 32px;
+  --fg-glass-filter: blur(var(--fg-glass-blur)) saturate(180%);
+  --fg-glass-border: rgba(255, 255, 255, .6);
+  --fg-glass-dash: rgba(35, 41, 54, .28);
+  --fg-specular: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, .35) 18%, rgba(255, 255, 255, 0) 42%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, .35) 84%, rgba(255, 255, 255, .9) 100%);
+  --fg-sheen: rgba(255, 255, 255, .55);
+  --fg-sheen-size: 420px;
+  --fg-hover-tint: rgba(255, 255, 255, .5);
+  --fg-hover-glow: 0 22px 50px -16px rgba(124, 77, 255, .42), 0 12px 30px -14px rgba(0, 160, 220, .38);
+  --fg-scrim-tint: #141828;
+  --fg-scrim-alpha: 0.3;
+  --fg-scrim: color-mix(in srgb, var(--fg-scrim-tint) calc(var(--fg-scrim-alpha) * 100%), transparent);
+
+  /* ---- elevation: inner top highlight + soft violet/cyan glow ---- */
+  --fg-shadow-e1: inset 0 1px 0 rgba(255, 255, 255, .4), 0 1px 2px rgba(60, 40, 120, .08), 0 6px 18px -6px rgba(124, 77, 255, .22);
+  --fg-shadow-e2: inset 0 1px 0 rgba(255, 255, 255, .4), 0 0 0 .5px rgba(60, 40, 120, .08), 0 14px 36px -10px rgba(124, 77, 255, .28), 0 8px 24px -12px rgba(0, 160, 220, .26);
+  --fg-shadow-e3: inset 0 1px 0 rgba(255, 255, 255, .45), 0 4px 10px rgba(60, 40, 120, .08), 0 30px 70px -18px rgba(124, 77, 255, .42), 0 18px 40px -20px rgba(0, 160, 220, .34);
+
+  /* ---- neumorphic controls: two-tone raised / pressed ---- */
+  --fg-neu-light: rgba(255, 255, 255, .95);
+  --fg-neu-dark: rgba(76, 64, 140, .36);
+  --fg-neu-raise: -4px -4px 10px var(--fg-neu-light), 5px 6px 14px var(--fg-neu-dark), inset 0 1px 0 rgba(255, 255, 255, .5);
+  --fg-neu-raise-hover: -4px -4px 12px var(--fg-neu-light), 6px 8px 18px var(--fg-neu-dark), inset 0 1px 0 rgba(255, 255, 255, .6);
+  --fg-neu-raise-sm: -2px -2px 5px var(--fg-neu-light), 2px 3px 7px var(--fg-neu-dark);
+  --fg-neu-press: inset 3px 3px 7px var(--fg-neu-dark), inset -3px -3px 7px var(--fg-neu-light);
+  --fg-neu-inset: inset 2px 2px 5px var(--fg-neu-dark), inset -2px -2px 5px var(--fg-neu-light);
+
+  /* ---- accents ---- */
+  --fg-action-2: #C0185E;    /* gradient partner of the action orange: white text 5.9 */
+  --fg-action-2-hover: #A3124F;
+  --fg-action-gradient: linear-gradient(120deg, var(--fg-action) 0%, var(--fg-action-2) 100%);
+  --fg-action-gradient-hover: linear-gradient(120deg, var(--fg-action-hover) 0%, var(--fg-action-2-hover) 100%);
+  --fg-action-glow: 0 8px 22px -6px rgba(208, 64, 0, .55), 0 4px 14px -6px rgba(192, 24, 94, .45);
+  --fg-btn-shine: rgba(255, 255, 255, .6);         /* sweep on filled buttons */
+  --fg-btn-shine-soft: rgba(124, 77, 255, .22);    /* sweep on white buttons */
+  --fg-text-grad-1: #B03600;  /* gradient headings: large text, each stop ≥ 3:1 on the worst glass */
+  --fg-text-grad-2: #9C1068;
+  --fg-text-grad-3: #4B30C2;
+  --fg-text-gradient: linear-gradient(100deg, var(--fg-text-grad-1) 0%, var(--fg-text-grad-2) 50%, var(--fg-text-grad-3) 100%);
+  --fg-focus-glow: rgba(22, 63, 232, .45);
+  --fg-live-glow: rgba(11, 122, 62, .5);
+  --fg-pill-tint: rgba(255, 255, 255, .55);
+  --fg-nav-active: rgba(255, 255, 255, .7);
+  --fg-nav-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 6px 18px -6px rgba(255, 75, 0, .35), 0 2px 6px rgba(60, 40, 120, .1);
+  --fg-nav-glow: rgba(255, 75, 0, .7);
   --fg-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, .6), transparent);
 }
 
@@ -173,7 +239,6 @@
   --fg-chrome-2: #1A2030;
   --fg-on-chrome: #EEF1F5;
   --fg-on-chrome-2: #AEB6C4;
-  --fg-scrim: rgba(0, 0, 0, .6);
 
   --fg-ink: #EEF1F5;          /* 15.06 on #171C26 */
   --fg-ink-2: #AEB6C4;        /* 8.36 */
@@ -218,30 +283,65 @@
   --fg-grid: #232A38;
   --fg-axis: #3A4356;
 
-  --fg-shadow-e1: 0 0 0 1px #262D3B;
-  --fg-shadow-e2: 0 0 0 1px #2C3445, 0 6px 18px rgba(0, 0, 0, .35);
-  --fg-shadow-e3: 0 0 0 1px #2C3445, 0 20px 48px rgba(0, 0, 0, .55);
+  --fg-shadow-e1: inset 0 1px 0 rgba(255, 255, 255, .12), 0 0 0 1px rgba(255, 255, 255, .04), 0 6px 18px -6px rgba(124, 77, 255, .3);
+  --fg-shadow-e2: inset 0 1px 0 rgba(255, 255, 255, .14), 0 0 0 1px rgba(255, 255, 255, .05), 0 16px 40px -12px rgba(124, 77, 255, .4), 0 10px 28px -14px rgba(0, 160, 220, .34), 0 4px 12px rgba(0, 0, 0, .35);
+  --fg-shadow-e3: inset 0 1px 0 rgba(255, 255, 255, .16), 0 0 0 1px rgba(255, 255, 255, .06), 0 32px 80px -20px rgba(124, 77, 255, .55), 0 20px 44px -20px rgba(0, 160, 220, .4), 0 8px 24px rgba(0, 0, 0, .5);
 
-  --fg-backdrop:
-    radial-gradient(1100px 620px at 0% 0%, rgba(26, 147, 192, .12), transparent 65%),
-    radial-gradient(900px 520px at 100% 0%, rgba(255, 90, 31, .06), transparent 60%),
-    linear-gradient(180deg, #0F131A 0%, #0B0F15 100%);
-  --fg-glass: rgba(23, 28, 38, .78);
-  --fg-glass-strong: rgba(23, 28, 38, .9);
-  --fg-glass-chrome: rgba(11, 14, 20, .86);
-  --fg-glass-border: rgba(174, 182, 196, .16);
+  /* deep, saturated mesh (never grey) */
+  --fg-backdrop-1: #070A12;
+  --fg-backdrop-2: #0B0A18;
+  --fg-blob-1: #0B6FA8;       /* deep cyan */
+  --fg-blob-2: #C2410C;       /* ember orange */
+  --fg-blob-3: #5B21B6;       /* deep violet */
+  --fg-blob-4: #A3195B;       /* deep magenta */
+  --fg-blob-alpha: 0.6;
+  --fg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --fg-halo: 0 0 1px rgba(6, 8, 14, .95), 0 0 5px rgba(6, 8, 14, .9), 0 0 14px rgba(6, 8, 14, .75);
 
-  --fg-shadow-raise: inset 0 1px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .5);
-  --fg-shadow-press: inset 0 1px 3px rgba(0, 0, 0, .55);
-  --fg-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, .45);
+  --fg-glass-tint: #121726;
+  --fg-glass-alpha: 0.42;
+  --fg-glass-strong-alpha: 0.6;
+  --fg-glass-dense-alpha: 0.7;
+  --fg-glass-ink-2: #C9D0DA;
+  --fg-glass-ink-3: #B3BBC8;
+  --fg-glass-link: #A9B9FF;
+  --fg-glass-border: rgba(255, 255, 255, .13);
+  --fg-glass-dash: rgba(238, 241, 245, .3);
+  --fg-specular: linear-gradient(135deg, rgba(255, 255, 255, .55) 0%, rgba(255, 255, 255, .14) 18%, rgba(255, 255, 255, 0) 42%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, .12) 84%, rgba(255, 255, 255, .4) 100%);
+  --fg-sheen: rgba(255, 255, 255, .09);
+  --fg-hover-tint: rgba(255, 255, 255, .07);
+  --fg-hover-glow: 0 24px 56px -16px rgba(124, 77, 255, .6), 0 14px 34px -14px rgba(0, 160, 220, .5);
+  --fg-scrim-tint: #000000;
+  --fg-scrim-alpha: 0.45;
+
+  --fg-neu-light: rgba(255, 255, 255, .1);
+  --fg-neu-dark: rgba(0, 0, 0, .75);
+  --fg-neu-raise: -4px -4px 10px var(--fg-neu-light), 5px 6px 14px var(--fg-neu-dark), inset 0 1px 0 rgba(255, 255, 255, .12);
+  --fg-neu-raise-hover: -4px -4px 12px var(--fg-neu-light), 6px 8px 18px var(--fg-neu-dark), inset 0 1px 0 rgba(255, 255, 255, .14);
+
+  --fg-action-2: #FF4F8B;     /* dark text on it 6.6 */
+  --fg-action-2-hover: #FF73A4;
+  --fg-action-glow: 0 8px 24px -6px rgba(255, 90, 31, .6), 0 4px 16px -6px rgba(255, 79, 139, .5);
+  --fg-btn-shine: rgba(255, 255, 255, .5);
+  --fg-btn-shine-soft: rgba(255, 255, 255, .13);
+  --fg-text-grad-1: #FF8A5C;
+  --fg-text-grad-2: #F27BC0;
+  --fg-text-grad-3: #B8A2FF;
+  --fg-focus-glow: rgba(110, 139, 255, .6);
+  --fg-live-glow: rgba(61, 214, 140, .55);
+  --fg-pill-tint: rgba(255, 255, 255, .06);
+  --fg-nav-active: rgba(255, 255, 255, .1);
+  --fg-nav-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 6px 22px -6px rgba(255, 90, 31, .5);
+  --fg-nav-glow: rgba(255, 90, 31, .85);
   --fg-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, .06), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --fg-dur-fast: 0ms; --fg-dur-normal: 120ms; --fg-dur-slow: 0ms;
-    /* new motion off: no travel, no scale, no stagger (keyframe animations are also dropped in globals.css) */
-    --fg-dur-pop: 0ms; --fg-dur-quick: 0ms; --fg-dur-enter: 0ms; --fg-stagger: 0ms;
-    --fg-rise: 0px; --fg-lift: 0px; --fg-press: 0px; --fg-pop-scale: 1;
+    /* motion off: no travel, tilt, scale, blur or stagger (keyframe animations are also dropped in globals.css) */
+    --fg-dur-pop: 0ms; --fg-dur-quick: 0ms; --fg-dur-enter: 0ms; --fg-stagger: 0ms; --fg-dur-spring: 0ms;
+    --fg-rise: 0px; --fg-enter-blur: 0px; --fg-lift: 0px; --fg-tilt: 0deg; --fg-tilt-soft: 0deg;
+    --fg-press-scale: 1; --fg-pop-scale: 1; --fg-dialog-scale: 1; --fg-pop-blur: 0px;
   }
 }

@@ -5,15 +5,15 @@ import { cn } from '@/lib/cn';
 
 // Orange (primary) means "act" and is used for nothing else; status never uses a pill (direction.md §3).
 export const buttonVariants = cva(
-  // Slightly raised, presses down on :active (translate only); the border keeps a visible edge in both themes.
-  'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border-[1.5px] border-transparent font-semibold transition-[color,background-color,border-color,translate] duration-(--fg-dur-fast) ease-(--fg-ease-smooth) active:translate-y-(--fg-press) disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none [&_svg]:size-4 [&_svg]:shrink-0',
+  // `btn` (globals.css): neumorphic raise, shimmer sweep on hover, springy press; the border keeps a visible edge.
+  'btn relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border-[1.5px] border-transparent font-semibold disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-foreground shadow-raise hover:bg-(--fg-action-hover) active:bg-(--fg-action-press) active:shadow-press',
-        secondary: 'border-ink bg-surface text-ink shadow-raise hover:bg-surface-2 active:shadow-press',
+        primary: 'btn-raised btn-primary bg-primary text-primary-foreground',
+        secondary: 'btn-raised border-ink bg-surface text-ink hover:bg-surface-2',
         quiet: 'bg-transparent px-2.5 text-ink hover:bg-surface-2 active:bg-sunken',
-        danger: 'border-crit bg-surface text-crit-ink shadow-raise hover:bg-crit-tint active:shadow-press',
+        danger: 'btn-raised border-crit bg-surface text-crit-ink hover:bg-crit-tint',
       },
       size: {
         // 32 px to the eye, 40 px to the pointer (invisible hit area).

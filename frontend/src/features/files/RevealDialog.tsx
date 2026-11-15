@@ -144,7 +144,7 @@ export function RevealDialog({ fileId }: { fileId: string }) {
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="scrim fixed inset-0 z-40 bg-(--fg-scrim)" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,500px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong rounded-card border p-6 shadow-e3">
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex w-[min(92vw,500px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 pop glass-strong glass-edge rounded-card border p-6 shadow-e3">
           <Dialog.Title className="text-xl font-bold">{r.title}</Dialog.Title>
           <Dialog.Description className="text-sm text-ink-2">{r.body}</Dialog.Description>
           <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">

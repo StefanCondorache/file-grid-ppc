@@ -8,7 +8,7 @@ export function ZoneSplit({ byZone }: { byZone: MeterCounters['byZone'] }) {
   const t = useT();
   const total = byZone.reduce((n, z) => n + z.received, 0) || 1;
   return (
-    <section aria-labelledby="zones-title" className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 shadow-e1">
+    <section aria-labelledby="zones-title" className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-5">
       <h3 id="zones-title" className="text-lg font-bold">
         {t.meters.zonesTitle}
       </h3>
