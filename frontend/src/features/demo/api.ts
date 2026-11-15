@@ -13,7 +13,7 @@ type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 type Fn = (path: string, init?: { body?: unknown; params?: unknown }) => Promise<{ data?: unknown; error?: unknown; response: Response }>;
 
 /**
- * One call to the real backend through the typed client's transport (CSRF header, hybrid mocks), for the demo routes
+ * One call to the real backend through the typed client's transport (CSRF header), for the demo routes
  * whose real paths differ from the generated proposal schema (e.g. `POST /demo/storages/{storage}/{action}`).
  */
 export function call<T>(method: Method, path: string, body?: unknown): Promise<T> {

@@ -69,8 +69,8 @@ follows P1's contracts in the README ("Contracte pentru P2/P3").
   still gets `401 INVALID_CREDENTIALS`. The rate limit, cookie, CSRF, expiries and capabilities do not change;
   the audit rows are marked `demo: true`, `details: "passwordless"`. With demo mode off the flag is ignored
   and the backend logs a warning at start. Set it to `false` to require passwords again (no code change).
-- **Roles:** `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. The capability matrix is the one in
-  `docs/frontend/prd.md` FE-01, enforced in `backend/src/common/domain.ts`.
+- **Roles:** `teren`, `dispecerat`, `racordari`, `auditor`, `admin`. The capability matrix is enforced in
+  `backend/src/common/domain.ts` and mirrored in `frontend/src/lib/auth/capabilities.ts`.
 - **Visibility:** a file the active role may not see answers 404.
 - **Uploads and role switches:** an upload is bound to the real user, so switching role never breaks one.
 

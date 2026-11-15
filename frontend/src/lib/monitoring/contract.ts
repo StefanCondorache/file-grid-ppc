@@ -94,14 +94,6 @@ export interface SimulatorStatus {
   ackedUnique: number;
 }
 
-/** The `demo.storm` event. */
-export interface StormEvent {
-  category: CategoryId;
-  factor: number;
-  state: 'started' | 'stopped';
-  endsAt: string | null;
-}
-
 export type MatrixWindow = '5m' | '1h' | '24h';
 
 export interface MetricsCell {
@@ -126,16 +118,3 @@ export interface MetricsMatrix {
 
 export type SeriesWindow = '5m' | '15m' | '1h';
 
-export interface BulkheadPoint {
-  t: string;
-  p95Ms: number | null;
-  opsPerS: number;
-}
-
-/** GET /metrics/bulkhead?window=: p95 per category on one time axis, plus this replica's compartments. */
-export interface BulkheadResponse {
-  window: SeriesWindow;
-  stepS: number;
-  series: { category: CategoryId; points: BulkheadPoint[] }[];
-  data: { category: CategoryId; active: number; queued: number }[];
-}

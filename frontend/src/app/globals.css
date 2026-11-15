@@ -155,6 +155,16 @@ body {
   /* status-tinted glass (guarantee at risk / violated): same blur, the status tint instead of white */
   .glass-warn { --fg-glass-tint: var(--fg-warn-tint); --fg-glass-a: .82; }
   .glass-crit { --fg-glass-tint: var(--fg-crit-tint); --fg-glass-a: .82; }
+  /* warning chip: translucent yellow over a blur, a light top highlight and a soft yellow rim (no dark outline) */
+  .chip-warn {
+    color: var(--fg-warn-ink);
+    background-color: color-mix(in srgb, var(--fg-warn) var(--fg-warn-glass-a), transparent);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
+    backdrop-filter: blur(8px) saturate(160%);
+    box-shadow:
+      inset 0 1px 0 var(--fg-glass-border),
+      inset 0 0 0 1px color-mix(in srgb, var(--fg-warn) 55%, transparent);
+  }
 
   /* specular edge: a 1px gradient ring (masked pseudo) that catches light top-left and bottom-right */
   .glass-card,

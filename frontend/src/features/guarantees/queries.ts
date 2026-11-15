@@ -14,7 +14,7 @@ import {
   type GuaranteeStatus,
 } from '@/lib/monitoring/contract';
 
-/** The OpenAPI proposal's category ids, accepted while mocks or baselines still send them (docs/api.md differences). */
+/** The OpenAPI proposal's category ids, still accepted (docs/api.md differences). */
 const LEGACY_CATEGORY: Record<string, CategoryId> = {
   meter: 'meter_readings',
   fault: 'fault_records',

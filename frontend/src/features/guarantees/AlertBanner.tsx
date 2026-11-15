@@ -46,7 +46,7 @@ export function AlertBanner() {
             aria-label={t.alerts.region}
             className={cn(
               'flex flex-wrap items-center gap-x-6 gap-y-3 border-b px-8 py-3 text-ink',
-              tone === 'crit' ? 'border-crit bg-crit-tint' : 'border-(--fg-warn-border) bg-warn-tint',
+              tone === 'crit' ? 'border-crit bg-crit-tint' : 'glass glass-warn',
             )}
           >
             <ul className="flex min-w-0 flex-1 flex-col gap-2">

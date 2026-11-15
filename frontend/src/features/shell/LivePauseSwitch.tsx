@@ -29,7 +29,7 @@ export function LivePauseSwitch() {
       onClick={toggle}
       className={cn(
         'relative inline-flex h-8 items-center gap-1.5 rounded-pill after:absolute after:-inset-1 after:rounded-pill border-[1.5px] px-3 text-sm font-semibold whitespace-nowrap btn',
-        paused ? 'neu-press border-(--fg-warn-border) bg-warn-tint text-warn-ink' : 'neu-raise border-border bg-surface text-ink hover:bg-surface-2',
+        paused ? 'neu-press border-warn/50 bg-warn-tint text-warn-ink' : 'neu-raise border-border bg-surface text-ink hover:bg-surface-2',
       )}
     >
       {paused ? <Play aria-hidden="true" className="size-4" /> : <Pause aria-hidden="true" className="size-4" />}

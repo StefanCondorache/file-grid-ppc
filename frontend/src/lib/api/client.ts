@@ -4,17 +4,11 @@ import { csrfHeaders } from './csrf';
 import { ApiError, networkError, toApiError } from './errors';
 import type { paths } from './schema';
 
-let apiFetch: (request: Request) => Promise<Response> = (request) => fetch(request);
-
-/** Hybrid mock mode (Task 5.10) swaps the transport; components never know. */
-export function setApiFetch(fn: (request: Request) => Promise<Response>): void {
-  apiFetch = fn;
-}
-
 export const api = createClient<paths>({
   baseUrl: absoluteBase(),
   credentials: 'same-origin',
-  fetch: (request: Request) => apiFetch(request),
+  // Resolved per call so the global fetch can be swapped (tests).
+  fetch: (request: Request) => fetch(request),
 });
 
 api.use({

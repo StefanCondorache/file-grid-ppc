@@ -19,9 +19,9 @@ import {
  * OQ-7: the Romanian interpretation and recommendation under each statistics chart. The backend's `text` and
  * `recommendation` win, each on its own, when present (the real backend leaves `recommendation` null when nothing needs
  * changing). Otherwise they are templated from `facts`, with the numbers taken from the same answer the chart draws, so
- * the sentence quotes what the chart shows. The real backend sends fewer facts than the mock (no S1 `runnerUp` or
+ * the sentence quotes what the chart shows. The real backend sends fewer facts than the proposal (no S1 `runnerUp` or
  * `speedup`, no S2 `mostAffected`, and its S2 `factor` is the meter rate), so the missing ones are derived from the
- * measurements by the mock's rules.
+ * measurements.
  */
 export type Interpreted = { text: string; recommendation: string };
 
@@ -138,7 +138,7 @@ export function interpretS2(cmp: PeriodComparison): Interpreted {
   };
   const rise = (category: StatsCategoryId) => p95(category)?.deltaPct ?? 0;
 
-  // The mock names the stormed category; otherwise it is the one whose p95 rose most.
+  // The proposal names the stormed category; otherwise it is the one whose p95 rose most.
   const affected: StatsCategoryId | null =
     facts.mostAffected && slower(facts.mostAffected)
       ? facts.mostAffected

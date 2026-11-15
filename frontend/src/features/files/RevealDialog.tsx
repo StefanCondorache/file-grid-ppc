@@ -25,7 +25,7 @@ function RevealedValues({ values, secondsLeft, onExtend, onHide, extending }: {
   const warn = secondsLeft <= REVEAL_WARNING_SECONDS;
   const rows: [string, string | null][] = [[r.name, values.applicantName], [r.cnp, values.cnp], [r.address, values.address]];
   return (
-    <section aria-labelledby="reveal-values-h" className="flex flex-col gap-3 rounded-control border-[1.5px] border-warn bg-warn-tint p-4">
+    <section aria-labelledby="reveal-values-h" className="flex flex-col gap-3 rounded-control border glass glass-warn p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id="reveal-values-h" className="font-bold">
           {r.revealedTitle}

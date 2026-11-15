@@ -10,11 +10,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && node scripts/check-diacritics.mjs && node scripts/check-colors.mjs",
-    "e2e": "playwright test",
     "gen:api": "node scripts/gen-api.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test",
-    "image:real": "docker build -t filegrid-frontend:real .",
-    "image:fullmock": "docker build --build-arg NEXT_PUBLIC_API_MOCKS=1 --build-arg FILEGRID_ALLOW_MOCKS=1 -t filegrid-frontend:fullmock ."
+    "verify": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
     "@hookform/resolvers": "7.0.6",
@@ -36,9 +33,6 @@
     "zustand": "5.1.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.14.0",
-    "@mswjs/source": "0.5.0",
-    "@playwright/test": "1.65.1",
     "@tailwindcss/turbopack": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -52,16 +46,10 @@
     "eslint-plugin-jsx-a11y": "6.10.2",
     "fake-indexeddb": "6.2.8",
     "jsdom": "31.0.1",
-    "msw": "2.15.0",
     "openapi-typescript": "7.13.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "5.1.0",
     "yaml": "2.9.1"
-  },
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
   }
 }

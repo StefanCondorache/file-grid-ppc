@@ -14,7 +14,7 @@ const CIRCUITS: readonly CircuitState[] = ['closed', 'half_open', 'open'];
 type Loose = Record<string, unknown>;
 const isObject = (v: unknown): v is Loose => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** The real ids (`s3`, `ftp`, `db`) and, while mocks or baselines still send them, the proposal's labels (`S3`, `DB`). */
+/** The real ids (`s3`, `ftp`, `db`) and the proposal's labels (`S3`, `DB`). */
 function toStorageId(raw: unknown): StorageId | null {
   const id = typeof raw === 'string' ? raw.toLowerCase() : '';
   return STRIP_ORDER.find((s) => s === id) ?? null;

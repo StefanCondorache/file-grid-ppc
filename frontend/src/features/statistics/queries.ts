@@ -209,8 +209,8 @@ export function toGridInsights(raw: unknown): GridInsights {
 }
 
 /**
- * The generated client still types the S2 query with the proposal's `periodA` / `periodB`; the real backend (and the
- * mock) read `a` and `b`.
+ * The generated client still types the S2 query with the proposal's `periodA` / `periodB`; the real backend reads
+ * `a` and `b`.
  */
 type ComparisonQuery = NonNullable<operations['statistics_periodComparison']['parameters']['query']>;
 const comparisonQuery = (a: string, b: string) => ({ a, b }) as ComparisonQuery;

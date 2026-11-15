@@ -1,4 +1,4 @@
-/** Live stream event names and envelope (BA-60, frontend-architecture §4). Production code and mocks share this. */
+/** Live stream event names and envelope (BA-60, frontend-architecture §4). */
 export const STREAM_EVENT_TYPES = [
   'ping',
   'meters.counters',
