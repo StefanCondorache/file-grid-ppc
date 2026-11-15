@@ -12,13 +12,6 @@ import { liveHandle } from '@/lib/live/registry';
 import { connectStream } from '@/lib/live/stream';
 import { useAppStore } from '@/stores/app-store';
 
-let uploadHint: (uploadId: string) => void = () => {};
-
-/** The upload engine (6b) registers how it reacts to `upload.verified` hints. */
-export function setUploadHint(fn: (uploadId: string) => void): void {
-  uploadHint = fn;
-}
-
 /** Mounts the single live connection for the session (frontend-architecture §4). Renders nothing. */
 export function LiveBridge() {
   const qc = useQueryClient();
@@ -28,7 +21,7 @@ export function LiveBridge() {
   const bridgeRef = useRef<Bridge | null>(null);
 
   useEffect(() => {
-    const bridge = createBridge(qc, { announce: (m) => announce(m), uploadHint: (id) => uploadHint(id) });
+    const bridge = createBridge(qc, { announce: (m) => announce(m) });
     bridgeRef.current = bridge;
     if (typeof EventSource === 'undefined') {
       setLive('polling');

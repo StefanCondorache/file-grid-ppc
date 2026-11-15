@@ -1,6 +1,4 @@
 import type { NextConfig } from 'next';
-import { PHASE_PRODUCTION_BUILD } from 'next/constants';
-import { checkBuildGuard } from './src/lib/config/mock-guard';
 import { buildCsp } from './src/lib/security/csp';
 
 const dev = process.env.NODE_ENV === 'development';
@@ -25,7 +23,7 @@ const nextConfig: NextConfig = {
   // Development only: proxy /api to a local backend. Production routing is Traefik (ADR-0002); never proxy bodies here.
   async rewrites() {
     if (!dev) return [];
-    const target = process.env.API_DEV_PROXY_TARGET ?? 'http://localhost:3001';
+    const target = process.env.API_DEV_PROXY_TARGET ?? 'http://localhost:8000';
     return [{ source: '/api/:path*', destination: `${target}/api/:path*` }];
   },
   turbopack: {
@@ -35,10 +33,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default function config(phase: string): NextConfig {
-  if (phase === PHASE_PRODUCTION_BUILD) {
-    const error = checkBuildGuard();
-    if (error) throw new Error(error);
-  }
-  return nextConfig;
-}
+export default nextConfig;

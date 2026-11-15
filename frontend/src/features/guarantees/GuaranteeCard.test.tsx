@@ -79,10 +79,12 @@ describe('GuaranteeCard', () => {
     expect(within(card).getByText(`țintă ≤ 2${NBSP}s`, exact)).toBeInTheDocument();
   });
 
-  it('gives the at-risk card the 6 px status edge, and the OK card none', () => {
+  it('gives only the violated card the 6 px status edge (at risk is the yellow glass tint alone)', () => {
     const { rerender } = render(<GuaranteeCard guarantee={fault('ok', 600)} />);
     expect(screen.getByRole('article').querySelector('[data-status-edge]')).toBeNull();
     rerender(<GuaranteeCard guarantee={fault('at_risk')} />);
+    expect(screen.getByRole('article').querySelector('[data-status-edge]')).toBeNull();
+    rerender(<GuaranteeCard guarantee={fault('violated')} />);
     const edge = screen.getByRole('article').querySelector('[data-status-edge]');
     expect(edge).toHaveClass('w-[6px]');
     expect(edge).toHaveAttribute('aria-hidden', 'true');

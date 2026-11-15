@@ -23,7 +23,7 @@ const ICON: Record<ChipState, LucideIcon> = { ok: Check, degraded: TriangleAlert
 /** OK chips stay quiet (outlined) so a red or yellow one stands out; status is still icon + word, 6 px radius. */
 const CHIP: Record<ChipState, string> = {
   ok: 'border border-border bg-surface text-ink',
-  degraded: 'bg-warn text-(--fg-on-warn) shadow-[inset_0_0_0_1.5px_var(--fg-warn-border)]',
+  degraded: 'chip-warn',
   down: 'bg-crit text-(--fg-on-crit)',
   pending: 'bg-(--fg-neutral-tint) text-(--fg-neutral-ink)',
   unknown: 'bg-(--fg-neutral-tint) text-(--fg-neutral-ink)',

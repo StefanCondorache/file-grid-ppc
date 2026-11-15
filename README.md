@@ -153,7 +153,7 @@ await withCategory('fault_records', async () => {
 - Metrici: `filegrid_sim_readings_sent_total` (citiri unice) și `filegrid_sim_readings_acked_total`.
 
 **Frontend (P3)**
-- Imaginea `frontend/Dockerfile` e nginx non-root (uid 101) pe portul 8080 și servește build-ul React.
+- Imaginea `frontend/Dockerfile` rulează serverul Next.js standalone, non-root (uid 101), pe portul 8080.
 - Rute pe domeniu: `/` → frontend, `/api` → backend, `/grafana` → Grafana (dashboard-ul `/grafana/d/filegrid-overview`).
 
 **Pornire și demo (P1)**

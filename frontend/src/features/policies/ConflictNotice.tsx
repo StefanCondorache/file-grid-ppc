@@ -9,7 +9,7 @@ import type { DiffRow } from './DiffDialog';
 export function ConflictNotice({ current, rows, onReload }: { current: PolicyView; rows: DiffRow[]; onReload: () => void }) {
   const t = useT().policies;
   return (
-    <section role="alert" className="flex flex-col gap-3 rounded-panel border border-warn-border bg-warn-tint p-4 text-warn-ink">
+    <section role="alert" className="flex flex-col gap-3 rounded-panel border glass glass-warn p-4 text-warn-ink">
       <h2 className="flex items-center gap-2 text-lg font-bold">
         <TriangleAlert aria-hidden="true" className="size-5" />
         {t.conflictTitle}

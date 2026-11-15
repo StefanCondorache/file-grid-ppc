@@ -59,6 +59,7 @@
   --fg-warn: #FFDA00;          --fg-on-warn: #232936;     /* 10.60; border below */
   --fg-warn-border: #7A5C00;
   --fg-warn-tint: #FFF6CC;     --fg-warn-ink: #5C4400;    /* 8.46 */
+  --fg-warn-glass-a: 40%;      /* glassy warning chip: how much yellow washes over the blur */
   --fg-crit: #B3123F;          --fg-on-crit: #FFFFFF;     /* 6.83; crimson, hue ≈345° vs action ≈18° */
   --fg-crit-tint: #FBE7EC;     --fg-crit-ink: #8E0E32;    /* 7.85 */
   --fg-info: #00729E;          --fg-on-info: #FFFFFF;     /* 5.38 */
@@ -264,6 +265,7 @@
   --fg-warn: #F2C200;         --fg-on-warn: #0D0F14;   /* 11.40 */
   --fg-warn-border: #F2C200;
   --fg-warn-tint: #2B2508;    --fg-warn-ink: #F5D54D;
+  --fg-warn-glass-a: 20%;     /* less wash on dark so the yellow ink keeps its contrast */
   --fg-crit: #FF6B8B;         --fg-on-crit: #0D0F14;   /* 7.05; pink-crimson, never orange */
   --fg-crit-tint: #2E1219;    --fg-crit-ink: #FF9DB2;
   --fg-info: #4FC3F7;         --fg-on-info: #0D0F14;

@@ -114,11 +114,6 @@ export interface PartReceipt {
   alreadyReceived: boolean;
 }
 
-export interface CompleteRequest {
-  sha256: string;
-  partCount: number;
-}
-
 /** GET /policies/{category} (the fields the upload screen reads). */
 export interface PolicyView {
   category: UploadCategoryId | 'meter_readings';
