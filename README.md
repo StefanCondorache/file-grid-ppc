@@ -21,7 +21,7 @@ Internet ──HTTPS──▶ Traefik (k3s; Let's Encrypt prin cert-manager; HTT
 
 ### VPS sau Ubuntu curat (k3s)
 
-Cerințe: Ubuntu 24.04 cu acces root (sau sudo), `git` și `make`; minimum 2 vCPU, 4 GB RAM și 30 GB disc; acces HTTPS de ieșire către `get.k3s.io` și `github.com` (k3s), `raw.githubusercontent.com` și `get.helm.sh` (Helm), `charts.jetstack.io` și `quay.io` (cert-manager), `docker.io` (imaginile storage-urilor) și API-ul ACME Let's Encrypt.
+Cerințe: Ubuntu 24.04 cu acces root (sau sudo), `git` și `make` (Docker, curl, jq și openssl le instalează `make up` dacă lipsesc); minimum 2 vCPU, 4 GB RAM și 30 GB disc; acces HTTPS de ieșire către `get.k3s.io` și `github.com` (k3s), `raw.githubusercontent.com` și `get.helm.sh` (Helm), `charts.jetstack.io` și `quay.io` (cert-manager), `docker.io` (imaginile storage-urilor) și API-ul ACME Let's Encrypt.
 
 Doar pentru certificatul public Let's Encrypt mai trebuie: porturile 80 și 443 accesibile din Internet și înregistrarea DNS A `ppc.filegrid.cc.cd` → IP-ul mașinii (sau alt domeniu, vezi mai jos). Fără ele `make up` se termină normal, iar aplicația răspunde local cu certificatul implicit al Traefik: `curl -k --resolve ppc.filegrid.cc.cd:443:127.0.0.1 https://ppc.filegrid.cc.cd/` (sau o intrare în `/etc/hosts` pe mașina de pe care testați; `make status` afișează indiciul cât timp certificatul nu e emis).
 

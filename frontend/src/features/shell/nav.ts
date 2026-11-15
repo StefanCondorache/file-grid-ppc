@@ -1,4 +1,4 @@
-import { Activity, ChartColumn, ClipboardList, Files, Gauge, House, SlidersHorizontal, Upload, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, ChartColumn, ClipboardList, Files, Gauge, House, MapPinned, SlidersHorizontal, Upload, Zap, type LucideIcon } from 'lucide-react';
 import type { Me } from '@/lib/api/types';
 import { can } from '@/lib/auth/capabilities';
 import { ro } from '@/lib/i18n/ro';
@@ -9,6 +9,7 @@ const any = (me: Me, ...caps: Parameters<typeof can>[1][]) => caps.some((c) => c
 
 export const NAV: NavItem[] = [
   { href: '/', label: ro.shell.nav.guarantees, icon: House, group: 'monitoring', visible: () => true },
+  { href: '/map', label: ro.shell.nav.map, icon: MapPinned, group: 'monitoring', visible: (me) => can(me, 'view_statistics') },
   { href: '/meters', label: ro.shell.nav.meters, icon: Gauge, group: 'monitoring', visible: (me) => can(me, 'view_meters') },
   { href: '/observability', label: ro.shell.nav.observability, icon: Activity, group: 'monitoring', visible: (me) => can(me, 'view_observability') },
   { href: '/statistics', label: ro.shell.nav.statistics, icon: ChartColumn, group: 'monitoring', visible: (me) => can(me, 'view_statistics') },

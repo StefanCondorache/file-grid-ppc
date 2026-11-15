@@ -45,6 +45,8 @@ for tool in curl openssl jq; do
   command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
 [ -s /etc/ssl/certs/ca-certificates.crt ] || missing+=(ca-certificates)
+# Docker builds the app images (scripts/k8s-app-images.sh, which uses buildx flags): Ubuntu's docker.io + docker-buildx
+command -v docker >/dev/null 2>&1 || missing+=(docker.io docker-buildx)
 if [ "${#missing[@]}" -gt 0 ]; then
   command -v apt-get >/dev/null 2>&1 || die "missing: ${missing[*]} (no apt-get here; install them first)"
   log "installing ${missing[*]} (apt)"

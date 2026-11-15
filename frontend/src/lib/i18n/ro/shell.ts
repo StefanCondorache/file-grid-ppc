@@ -5,6 +5,7 @@ export const shell = {
     meters: 'Contoare live',
     observability: 'Observabilitate',
     statistics: 'Statistici',
+    map: 'Hartă live',
     upload: 'Încărcare',
     files: 'Fișiere',
     policies: 'Politici',

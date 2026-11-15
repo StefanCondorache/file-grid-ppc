@@ -14,8 +14,8 @@ for c in backend frontend simulator; do
     continue
   fi
   command -v docker >/dev/null || {
-    echo "docker is required to build $c/Dockerfile (prerequisite of make up / make app-images, not installed by" >&2
-    echo "host-bootstrap.sh: install Docker Engine for Ubuntu from docs.docker.com/engine/install/ubuntu, then rerun)" >&2
+    echo "docker is required to build $c/Dockerfile (make up installs docker.io + docker-buildx via host-bootstrap.sh; or install" >&2
+    echo "Docker Engine for Ubuntu from docs.docker.com/engine/install/ubuntu), then rerun" >&2
     exit 1
   }
   img="filegrid-$c:$TAG"
