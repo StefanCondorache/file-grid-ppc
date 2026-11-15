@@ -37,7 +37,7 @@ test('beat 7: admin moves fault records to FTP live, with diff and confirm', asy
 test('the auditor sees the policy read-only', async ({ page }) => {
   await loginAs(page, 'auditor');
   await openFaultPolicy(page, 'Vezi');
-  await expect(page.getByText(/doar de citire/)).toBeVisible();
+  await expect(page.getByText('Doar administratorul poate modifica politicile.')).toBeVisible();
   for (const select of await page.getByRole('combobox').all()) await expect(select).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Revizuiește modificările' })).toHaveCount(0);
   await expectNoAxeViolations(page);
