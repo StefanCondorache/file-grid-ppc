@@ -169,7 +169,7 @@ export function LiveMapScreen() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold">{t.title}</h1>
+        <h2 className="text-xl font-bold">{t.title}</h2>
         <span className={`map-live-pill ${storm ? 'map-live-pill-storm' : ''}`}>
           <span className="map-live-dot" aria-hidden="true" />
           {storm ? t.storm : t.live}
