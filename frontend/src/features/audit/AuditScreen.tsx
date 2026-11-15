@@ -54,13 +54,12 @@ export function AuditScreen() {
     <section className="flex flex-col gap-4" aria-labelledby="audit-title">
       <div>
         <h1 id="audit-title" className="text-[22px] font-bold">{t.audit.title}</h1>
-        <p className="text-ink-2">{t.audit.intro}</p>
       </div>
       <AuditFilters values={values} onChange={(patch) => push({ ...patch, page: '' })} />
       {list.isPending && <p role="status">{t.common.loading}</p>}
       {list.isError && <ErrorState error={list.error} onRetry={() => void list.refetch()} />}
       {list.data && (list.data.data.length === 0
-        ? <EmptyState title={t.audit.empty} body={t.audit.emptyBody} />
+        ? <EmptyState title={t.audit.empty} />
         : (
           <>
             <AuditTable events={list.data.data} />

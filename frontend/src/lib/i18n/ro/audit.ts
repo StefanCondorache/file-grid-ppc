@@ -1,6 +1,5 @@
 export const audit = {
   title: 'Jurnal de audit',
-  intro: 'Cine a făcut ce și când. Jurnalul este doar pentru citire.',
   columns: { who: 'Cine', what: 'Ce', when: 'Când', reason: 'Motiv', trace: 'ID urmărire', ip: 'Adresă IP' },
   filters: {
     label: 'Filtre',
@@ -31,8 +30,7 @@ export const audit = {
   demoRole: 'Rol demo',
   actingAs: (role: string) => `Rol demo: ${role}`,
   noReason: '—',
-  empty: 'Niciun eveniment',
-  emptyBody: 'Nu există evenimente pentru filtrele alese.',
+  empty: 'Niciun eveniment pentru filtrele alese',
   tableLabel: 'Evenimente de audit',
   total: (n: number) => `${n} evenimente`,
   prev: 'Pagina anterioară',

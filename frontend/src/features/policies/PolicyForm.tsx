@@ -122,7 +122,6 @@ function Editor({ category, policy, editable }: { category: PolicyCategory; poli
           <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.maxConcurrency) ? '' : draft.maxConcurrency} onChange={(e) => set('maxConcurrency', num(e.target.value))} />
           {fieldError('maxConcurrency')}
         </label>
-        <p className="text-sm text-ink-2">{t.inFlightNote}</p>
         {editable && (
           <div>
             <Button type="submit" disabled={rows.length === 0 || Object.keys(errors).length > 0}>{t.review}</Button>

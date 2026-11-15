@@ -10,5 +10,5 @@ export const errors = {
   RATE_LIMITED: 'Prea multe cereri. Încearcă din nou peste câteva secunde.',
   STORAGE_UNAVAILABLE: 'Storage-ul nu este disponibil. Celelalte categorii funcționează normal.',
   FILE_CORRUPT: 'Fișier corupt detectat.',
-  NOT_MOCKED: 'Endpoint-ul nu are încă date simulate.',
+  NOT_MOCKED: 'Nu este disponibil în modul demo.',
 } as const;
