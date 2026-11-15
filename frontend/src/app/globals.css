@@ -418,7 +418,7 @@ body {
 .map-county-active { transition: fill var(--fg-dur-slow) var(--fg-ease-smooth), opacity var(--fg-dur-normal); cursor: pointer; }
 .map-zone-name { font-size: 22px; font-weight: 800; letter-spacing: 0.08em; fill: var(--fg-ink); paint-order: stroke; stroke: var(--fg-surface); stroke-width: 5px; }
 .map-zone-rate { font-size: 16px; font-weight: 700; fill: var(--fg-ink-2); paint-order: stroke; stroke: var(--fg-surface); stroke-width: 4px; }
-.map-spark { fill: var(--fg-brand-cyan); transform-box: fill-box; transform-origin: center; animation: map-spark 1.6s ease-out forwards; pointer-events: none; }
+.map-spark { fill: var(--fg-surface); stroke: var(--fg-brand-cyan); stroke-width: 1.5px; transform-box: fill-box; transform-origin: center; animation: map-spark 1.6s ease-out forwards; pointer-events: none; }
 .map-fault { fill: var(--fg-crit); stroke: var(--fg-surface); stroke-width: 1.5px; cursor: pointer; }
 .map-fault-pulse { fill: var(--fg-crit); transform-box: fill-box; transform-origin: center; animation: map-pulse 1.8s ease-out infinite; pointer-events: none; }
 .map-anomaly { fill: var(--fg-warn); stroke: var(--fg-surface); stroke-width: 1px; }

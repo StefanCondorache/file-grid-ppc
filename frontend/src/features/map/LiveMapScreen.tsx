@@ -23,6 +23,13 @@ const COUNTIES_OF: Record<Zone, County[]> = {
 };
 const SEQ = ['var(--fg-seq-1)', 'var(--fg-seq-2)', 'var(--fg-seq-3)', 'var(--fg-seq-4)', 'var(--fg-seq-5)'];
 
+/** Where each zone's name sits: above Banat and Dobrogea, left of Bucharest (its markers crowd the centre). */
+const LABEL_AT: Record<Zone, { dx: number; dy: number; anchor: 'middle' | 'end' }> = {
+  banat: { dx: 0, dy: -75, anchor: 'middle' },
+  muntenia: { dx: -45, dy: 10, anchor: 'end' },
+  dobrogea: { dx: 30, dy: -70, anchor: 'middle' },
+};
+
 type Layer = 'consumption' | 'faults' | 'anomalies' | 'readings';
 type Spark = { id: number; x: number; y: number };
 type FaultFile = { id: string; displayName: string; zone: Zone | null; createdAt: string };
@@ -222,23 +229,8 @@ export function LiveMapScreen() {
                 </title>
               </path>
             ))}
-            {ZONES.map((zone) => {
-              const list = COUNTIES_OF[zone];
-              const x = list.reduce((s, k) => s + k.cx, 0) / list.length;
-              const y = Math.min(...list.map((k) => k.cy)) - 26;
-              return (
-                <g key={zone} className="map-zone-label" pointerEvents="none">
-                  <text x={x} y={y} textAnchor="middle" className="map-zone-name">
-                    {(ro.live.zones[zone] ?? zone).toUpperCase()}
-                  </text>
-                  <text x={x} y={y + 22} textAnchor="middle" className="map-zone-rate">
-                    {t.rate(rates[zone])}
-                  </text>
-                </g>
-              );
-            })}
             {layers.readings &&
-              sparks.map((s) => <circle key={s.id} cx={s.x} cy={s.y} r={3.2} className="map-spark" />)}
+              sparks.map((s) => <circle key={s.id} cx={s.x} cy={s.y} r={3.4} className="map-spark" filter="url(#map-glow)" />)}
             {layers.anomalies &&
               anomalyMarks.slice(0, 40).map((a, i) => {
                 const p = placeOf(a.zone, a.meterId);
@@ -263,6 +255,24 @@ export function LiveMapScreen() {
                   </Link>
                 );
               })}
+            {ZONES.map((zone) => {
+              const list = COUNTIES_OF[zone];
+              const cx = list.reduce((s, k) => s + k.cx, 0) / list.length;
+              const cy = list.reduce((s, k) => s + k.cy, 0) / list.length;
+              const pos = LABEL_AT[zone];
+              const x = pos.anchor === 'end' ? Math.min(...list.map((k) => k.cx)) + pos.dx : cx + pos.dx;
+              const y = pos.anchor === 'end' ? cy + pos.dy : Math.min(...list.map((k) => k.cy)) + pos.dy;
+              return (
+                <g key={zone} className="map-zone-label" pointerEvents="none">
+                  <text x={x} y={y} textAnchor={pos.anchor} className="map-zone-name">
+                    {(ro.live.zones[zone] ?? zone).toUpperCase()}
+                  </text>
+                  <text x={x} y={y + 22} textAnchor={pos.anchor} className="map-zone-rate">
+                    {t.rate(rates[zone])}
+                  </text>
+                </g>
+              );
+            })}
           </svg>
           <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-[var(--fg-ink-2)]">
             <span className="flex items-center gap-1">
@@ -308,11 +318,11 @@ export function LiveMapScreen() {
               </div>
               <div className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
                 <div>
-                  <div className="text-base font-bold tabular-nums">{rates[zone]}</div>
+                  <div className="text-base font-bold tabular-nums">{rates[zone].toLocaleString('ro-RO', { maximumFractionDigits: 1 })}</div>
                   {t.perSecond}
                 </div>
                 <div>
-                  <div className="text-base font-bold tabular-nums">{consumption[zone]?.toFixed(2) ?? '—'}</div>
+                  <div className="text-base font-bold tabular-nums">{consumption[zone]?.toFixed(2).replace('.', ',') ?? '—'}</div>
                   {t.avgKwh}
                 </div>
                 <div>

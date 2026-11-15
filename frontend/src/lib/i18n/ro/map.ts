@@ -8,7 +8,7 @@ export const map = {
   layers: 'Straturi hartă',
   layer: { consumption: 'Consum mediu', faults: 'Avarii', anomalies: 'Contoare anormale', readings: 'Citiri live' },
   mapLabel: 'Harta României cu zonele de distribuție, avariile și citirile de contor în timp real',
-  rate: (n: number) => `${n} citiri/s`,
+  rate: (n: number) => `${n.toLocaleString('ro-RO', { maximumFractionDigits: 1 })} citiri/s`,
   countyTitle: (county: string, zone: string, avg: number | null) => `${county} · ${zone}\nConsum mediu acum: ${kwh(avg)} pe citire`,
   countyOutside: (county: string) => `${county} · în afara zonelor deservite`,
   anomalyTitle: (meter: string, type: string, value: number | null) =>
