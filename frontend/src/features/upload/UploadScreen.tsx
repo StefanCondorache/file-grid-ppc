@@ -117,7 +117,6 @@ export function UploadScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="max-w-3xl text-ink-2">{u.screen.intro}</p>
       <CategoryPicker categories={allowed} value={category} onChange={choose} policies={policies.data ?? {}} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
         <div className="flex min-w-0 flex-col gap-6">
@@ -148,7 +147,6 @@ export function UploadScreen() {
         </div>
         <aside className="flex flex-col gap-6">
           <PolicySummary category={category} policy={policy} loading={policies.isPending} />
-          <NetworkCard />
         </aside>
       </div>
     </div>
@@ -170,28 +168,5 @@ function ChosenFile({ file, onRemove }: { file: File; onRemove(): void }) {
         {u.screen.remove}
       </Button>
     </li>
-  );
-}
-
-/** What the transfer does on a bad network, in four steps (beat 2 narration). */
-function NetworkCard() {
-  const u = useT().upload;
-  const titleId = useId();
-  return (
-    <Card aria-labelledby={titleId} className="flex flex-col gap-4">
-      <h2 id={titleId} className="text-lg font-bold">
-        {u.network.title}
-      </h2>
-      <ol className="flex flex-col gap-3">
-        {u.network.steps.map((step, i) => (
-          <li key={step} className="flex items-start gap-3">
-            <span aria-hidden="true" className="grid size-[26px] shrink-0 place-items-center rounded-full bg-sunken text-[13px] font-bold">
-              {i + 1}
-            </span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
-    </Card>
   );
 }

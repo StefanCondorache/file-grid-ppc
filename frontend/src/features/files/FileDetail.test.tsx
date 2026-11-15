@@ -121,7 +121,6 @@ describe('File detail (SC-05)', () => {
     expect(within(panel).getByText('Stocat pe FTP · politica v3')).toBeInTheDocument();
     expect(definitionOf(panel, 'Stocat pe')).toHaveTextContent(/^FTP/);
     expect(definitionOf(panel, 'Rezervă folosită')).toHaveTextContent(/^Da/);
-    expect(within(panel).getByText('Locația exactă din storage nu este afișată niciodată: accesul se face doar prin FileGrid.')).toBeInTheDocument();
     // The fallback write carries its badge in the detail too (FE-08).
     expect(screen.getByText('FTP · rezervă')).toBeInTheDocument();
 

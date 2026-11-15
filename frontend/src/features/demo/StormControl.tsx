@@ -58,7 +58,7 @@ export function StormControl({ status, simulator }: { status: DemoStatus | undef
   const rate = (s: unknown) => decimal(toSimulator(s)?.ratePerS ?? 0);
 
   return (
-    <Panel id="storm-title" title={t.storm.title} lead={t.storm.lead}>
+    <Panel id="storm-title" title={t.storm.title}>
       <div className="flex flex-wrap items-center gap-3">
         <StatusChip tone={storm ? 'warn' : 'neutral'} label={storm ? t.storm.active : t.storm.inactive} />
         {simulator && <span className="text-sm tabular-nums text-ink-2">{t.simulator.current(t.simulator.modes[simulator.mode], decimal(simulator.ratePerS))}</span>}

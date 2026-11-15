@@ -51,7 +51,7 @@ describe('metadata schemas', () => {
       Object.fromEntries((r.error?.issues ?? []).map((i) => [i.path.join('.'), i.message]));
 
     expect(issues(connectionMetadataSchema.safeParse({ kind: 'connection', requestNumber: 'RC-1', documentType: 'cerere', applicantName: 'Ion Popescu', cnp: WRONG_CONTROL, zone: '' }))).toEqual({
-      cnp: 'CNP-ul nu este valid: ultima cifră (cifra de control) nu se potrivește cu celelalte. Verifică cifrele.',
+      cnp: 'CNP-ul nu este valid: ultima cifră (cifra de control) nu se potrivește. Verifică cifrele.',
     });
     expect(issues(connectionMetadataSchema.safeParse({ kind: 'connection', requestNumber: '', documentType: '', applicantName: '', cnp: '123', zone: '' }))).toEqual({
       requestNumber: 'Introdu numărul cererii.',

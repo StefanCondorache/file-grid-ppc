@@ -14,7 +14,7 @@ export const common = {
   errorCode: 'Cod',
   forbiddenTitle: 'Nu ai acces la această pagină',
   forbiddenBody: (role: string) =>
-    `Rolul activ (${role}) nu are acces aici. Alege alt rol sau întoarce-te la Garanții de business.`,
+    `Rolul activ (${role}) nu are acces aici. Alege alt rol.`,
   backHome: 'Înapoi la Garanții',
   emptyTitle: 'Nimic de afișat încă',
 } as const;

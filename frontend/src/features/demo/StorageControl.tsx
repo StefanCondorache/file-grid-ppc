@@ -22,7 +22,7 @@ export function StorageControl() {
   const health = useStorageHealth();
 
   return (
-    <Panel id="storage-title" title={d.storage.title} lead={d.storage.lead}>
+    <Panel id="storage-title" title={d.storage.title}>
       <ul className="flex flex-col gap-4">
         {CONTROLLED.map((s) => {
           const name = d.storages[s];
