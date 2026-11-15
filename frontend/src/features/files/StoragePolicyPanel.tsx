@@ -1,4 +1,3 @@
-import { ShieldOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '@/lib/i18n';
 import { formatInt } from '@/lib/i18n/format';
@@ -40,10 +39,6 @@ export function StoragePolicyPanel({ file }: { file: FileDetail }) {
         <Fact term={s.encryption} value={file.encryptedAtRest ? s.yes : s.no} note={encryptionNote} />
         <Fact term={s.fallbackUsed} value={file.usedFallback ? s.yes : s.no} note={file.usedFallback ? s.fallbackAuto : null} />
       </dl>
-      <p className="flex items-start gap-2 text-[13px] text-ink-2">
-        <ShieldOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        {s.locationNote}
-      </p>
     </section>
   );
 }
