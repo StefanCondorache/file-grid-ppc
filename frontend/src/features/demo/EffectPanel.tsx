@@ -15,7 +15,6 @@ export function EffectPanel() {
           <h2 id="effect-title" className="text-[22px] font-bold">
             {t.title}
           </h2>
-          <p className="text-ink-2">{t.lead}</p>
         </div>
         <StorageHealthStrip />
       </div>

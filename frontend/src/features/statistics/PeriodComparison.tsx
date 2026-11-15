@@ -72,7 +72,6 @@ export function PeriodComparison({ a, b }: { a: string | null; b: string | null 
   return (
     <Card aria-labelledby={titleId} className="flex flex-col gap-5">
       <header className="flex flex-col gap-0.5">
-        <span className="text-[13px] font-bold tracking-(--fg-tracking-caps) text-ink-2 uppercase">{s.eyebrow}</span>
         <h2 id={titleId} className="text-[22px] font-bold">
           {s.title}
         </h2>

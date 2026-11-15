@@ -1,7 +1,7 @@
 /** Cameră de control (slice 6g): demo actions against the real backend. Numbers arrive pre-formatted. */
 export const demo = {
   title: 'Cameră de control',
-  lead: 'Butoanele de aici acționează pe backend-ul real. Fiecare acțiune cere confirmare și intră în jurnalul de audit.',
+  lead: 'Fiecare acțiune intră în jurnalul de audit.',
   cancel: 'Anulează',
   running: 'Se execută…',
   storages: { s3: 'S3', ftp: 'FTP', db: 'Postgres' },
@@ -13,7 +13,6 @@ export const demo = {
   },
   storm: {
     title: 'Furtună de citiri (×10)',
-    lead: 'Simulatorul de contoare trimite de 10 ori mai multe citiri. Urmărește garanția „Citiri contoare” și graficul de izolare.',
     duration: 'Durată',
     durations: { '60': '1 minut', '120': '2 minute', '300': '5 minute' },
     start: 'Pornește furtuna',
@@ -44,19 +43,17 @@ export const demo = {
   },
   storage: {
     title: 'Oprește sau pornește un storage',
-    lead: 'Oprirea scalează podul la 0 replici. Încărcările noi merg pe storage-ul de rezervă din politică.',
     stop: (s: string) => `Oprește ${s}`,
     start: (s: string) => `Pornește ${s}`,
     confirmStopTitle: (s: string) => `Oprești ${s}?`,
-    confirmStopBody: (s: string) => `Podul ${s} este scalat la 0. Categoriile care scriu pe ${s} trec pe storage-ul de rezervă.`,
+    confirmStopBody: (s: string) => `Categoriile care scriu pe ${s} trec pe storage-ul de rezervă.`,
     confirmStartTitle: (s: string) => `Pornești ${s}?`,
-    confirmStartBody: (s: string) => `Podul ${s} este scalat la 1 și revine în câteva secunde.`,
-    stopped: (s: string) => `${s} oprit (0 replici). Banda de stare se actualizează în câteva secunde.`,
-    started: (s: string) => `${s} pornit (1 replică). Banda de stare se actualizează în câteva secunde.`,
+    confirmStartBody: (s: string) => `${s} revine în câteva secunde.`,
+    stopped: (s: string) => `${s} oprit.`,
+    started: (s: string) => `${s} pornit.`,
   },
   corrupt: {
     title: 'Corupe un fișier',
-    lead: 'Se inversează un octet din obiectul stocat. Următoarea descărcare sau verificare detectează corupția.',
     file: 'Fișier',
     pick: 'Alege un fișier',
     none: 'Nu există încă fișiere de corupt. Încarcă unul din pagina Încărcare.',
@@ -71,7 +68,7 @@ export const demo = {
   },
   terminal: {
     title: 'Din terminal',
-    lead: 'Rețeaua degradată (tc netem) nu are buton în API: cere root pe nodul k3s. Rulează pe VPS, din directorul proiectului:',
+    lead: 'Rulează pe VPS, din directorul proiectului:',
     netemOn: 'Rețea lentă pe S3 (300 ms, 5 % pachete pierdute)',
     netemOff: 'Rețea normală pe S3',
     netemFtp: 'Rețea lentă pe FTP',
@@ -81,7 +78,6 @@ export const demo = {
   },
   reset: {
     title: 'Revino la normal',
-    lead: 'Oprește furtuna, pune simulatorul pe ritm normal și pornește S3 și FTP.',
     action: 'Resetează demo-ul',
     confirmTitle: 'Resetezi demo-ul?',
     confirmBody: 'Furtuna se oprește, simulatorul revine la ritm normal, iar S3 și FTP sunt pornite.',
@@ -90,7 +86,6 @@ export const demo = {
   },
   effect: {
     title: 'Efectul, pe același ecran',
-    lead: 'Garanțiile, starea storage-urilor și izolarea pe categorii se actualizează live după fiecare acțiune.',
   },
   errors: {
     STORM_ALREADY_RUNNING: 'O furtună rulează deja.',

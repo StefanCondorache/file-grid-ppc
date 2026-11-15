@@ -1,7 +1,6 @@
 /** Contoare live (slice 6g): counters, rate, zones and recent readings. Numbers arrive pre-formatted. */
 export const meters = {
   title: 'Contoare live',
-  lead: 'Citirile trimise de simulatorul de contoare, numărate de server: nicio citire pierdută, niciun duplicat stocat.',
   readSummary: 'Citește rezumatul',
   summary: (received: string, lost: string) => `${received} primite, ${lost} pierdute`,
   summaryUnknown: (received: string) => `${received} primite, pierderi necunoscute (simulatorul nu răspunde)`,

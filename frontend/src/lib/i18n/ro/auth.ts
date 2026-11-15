@@ -3,7 +3,6 @@ import type { Role } from '@/lib/api/types';
 export const auth = {
   title: 'Intră în cont',
   welcome: 'Bun venit în FileGrid',
-  welcomeBody: 'Fișierele de teren ale rețelei, într-un singur loc: încărcate sigur, verificate și ușor de găsit.',
   roleLabel: 'Rol',
   passwordLabel: 'Parolă',
   submit: 'Intră în cont',
@@ -11,7 +10,7 @@ export const auth = {
   passwordRequired: 'Introdu parola.',
   passwordlessNote: 'Mod demo: autentificare fără parolă.',
   expired: 'Sesiunea a expirat. Intră din nou în cont.',
-  secureNote: 'Conexiune securizată (HTTPS). Fiecare autentificare apare în jurnalul de audit.',
+  secureNote: 'Fiecare autentificare apare în jurnalul de audit.',
   activeRole: (label: string) => `Rol activ: ${label}`,
   logout: 'Deconectare',
   roles: {

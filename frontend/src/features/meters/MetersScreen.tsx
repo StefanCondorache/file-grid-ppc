@@ -53,7 +53,6 @@ export function MetersScreen() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-3xl flex-col gap-1">
           <h2 className="text-[22px] font-bold">{t.meters.title}</h2>
-          <p className="text-ink-2">{t.meters.lead}</p>
         </div>
         <Button variant="secondary" disabled={!c} onClick={() => c && announce(summaryOf(c), 'polite')}>
           {t.meters.readSummary}

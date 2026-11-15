@@ -1,7 +1,7 @@
 /** Policy screens (slice 6d). */
 export const policies = {
   title: 'Politici de stocare',
-  intro: 'Fiecare categorie are propria politică. O modificare se aplică imediat fișierelor noi.',
+  intro: 'O modificare se aplică imediat fișierelor noi.',
   categories: {
     meter_readings: 'Citiri contoare',
     fault_records: 'Înregistrări defecte',
@@ -20,7 +20,7 @@ export const policies = {
   edit: 'Modifică',
   view: 'Vezi',
   back: 'Toate politicile',
-  readOnly: 'Ai drepturi doar de citire. Doar administratorul poate modifica politicile.',
+  readOnly: 'Doar administratorul poate modifica politicile.',
   inFlightNote: 'Încărcările în curs păstrează politica de la pornire.',
   review: 'Revizuiește modificările',
   save: 'Salvează',

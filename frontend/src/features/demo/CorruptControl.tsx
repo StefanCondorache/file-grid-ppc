@@ -76,7 +76,7 @@ export function CorruptControl() {
     );
 
   return (
-    <Panel id="corrupt-title" title={d.corrupt.title} lead={d.corrupt.lead}>
+    <Panel id="corrupt-title" title={d.corrupt.title}>
       {files.isSuccess && list.length === 0 ? (
         <p className="text-sm text-ink-2">{d.corrupt.none}</p>
       ) : (

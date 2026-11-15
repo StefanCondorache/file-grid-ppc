@@ -114,7 +114,7 @@ describe('ControlRoom', () => {
     renderAs('admin');
     await user.click(await screen.findByRole('button', { name: 'Oprește S3' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Oprește S3' }));
-    expect(await screen.findByText(/S3 oprit \(0 replici\)/)).toBeInTheDocument();
+    expect(await screen.findByText('S3 oprit.')).toBeInTheDocument();
     expect(scenario.storageHealth().find((h) => h.storage === 's3')?.status).toBe('down');
 
     server.use(http.post(apiUrl('/demo/storages/:storage/:action'), () => HttpResponse.json({ code: 'CHAOS_UNAVAILABLE', message: 'x', traceId: 't' }, { status: 503 })));
