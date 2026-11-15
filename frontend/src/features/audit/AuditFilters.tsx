@@ -5,7 +5,7 @@ import { useT } from '@/lib/i18n';
 
 export type AuditFilterValues = { action: string; actor: string; fileId: string; from: string; to: string };
 
-const input = 'h-10 rounded-input border border-input bg-surface px-3 text-ink';
+const input = 'h-10 rounded-control border border-input bg-surface px-3 text-ink';
 
 export function AuditFilters({ values, onChange }: { values: AuditFilterValues; onChange: (patch: Partial<AuditFilterValues>) => void }) {
   const t = useT();
@@ -18,7 +18,7 @@ export function AuditFilters({ values, onChange }: { values: AuditFilterValues; 
   );
   const dirty = Object.values(values).some(Boolean);
   return (
-    <form role="search" aria-label={f.label} className="flex flex-wrap items-end gap-3" onSubmit={(e) => e.preventDefault()}>
+    <form role="search" aria-label={f.label} className="flex flex-wrap items-end gap-3 rounded-card glass-card p-5" onSubmit={(e) => e.preventDefault()}>
       <label className="flex flex-col gap-1 text-sm font-semibold">
         {f.action}
         <select className={input} value={values.action} onChange={(e) => onChange({ action: e.target.value })}>

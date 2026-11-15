@@ -2,6 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { Card } from '@/components/ui/card';
 import { useT } from '@/lib/i18n';
 import { TraceWaterfall, useTrace } from './TraceWaterfall';
 
@@ -12,9 +13,9 @@ export function TraceScreen({ traceId }: { traceId: string }) {
   return (
     <div className="flex flex-col gap-5">
       <h2 className="text-[28px] leading-tight font-bold tracking-tight">{t.files.trace.pageTitle}</h2>
-      <section className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
+      <Card className="flex flex-col gap-4">
         <TraceWaterfall traceId={traceId} />
-      </section>
+      </Card>
       {fileId && (
         <Link href={`/files/${encodeURIComponent(fileId)}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-link hover:underline">
           <ArrowLeft aria-hidden="true" className="size-4" />

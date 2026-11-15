@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ErrorState } from '@/components/ErrorState';
+import { Card } from '@/components/ui/card';
 import { useT } from '@/lib/i18n';
 import { formatInt } from '@/lib/i18n/format';
 import { useRecentReadings } from './queries';
@@ -67,11 +68,11 @@ export function RecentReadings() {
   }
 
   return (
-    <section aria-labelledby="recent-title" aria-busy={readings.isPending} className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-5">
+    <Card aria-labelledby="recent-title" aria-busy={readings.isPending} className="flex flex-col gap-3 p-5">
       <h3 id="recent-title" className="text-lg font-bold">
         {m.recentTitle}
       </h3>
       {body}
-    </section>
+    </Card>
   );
 }

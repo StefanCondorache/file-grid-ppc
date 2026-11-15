@@ -34,7 +34,7 @@ export function CategoryPicker({
           return (
             <label
               key={category}
-              className="flex cursor-pointer items-start gap-3.5 rounded-card border-[1.5px] border-border bg-surface p-4 transition-colors duration-(--fg-dur-fast) hover:bg-surface-2 has-[:checked]:border-2 has-[:checked]:border-primary has-[:checked]:bg-accent has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
+              className="glass-card tilt-soft flex cursor-pointer items-start gap-3.5 rounded-card p-4 has-[:checked]:border-2 has-[:checked]:border-primary has-[:checked]:bg-accent has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
             >
               <input
                 type="radio"

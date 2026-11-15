@@ -1,5 +1,6 @@
 import { ShieldOff } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Card } from '@/components/ui/card';
 import { useT } from '@/lib/i18n';
 import { formatInt } from '@/lib/i18n/format';
 import type { FileDetail } from './queries';
@@ -29,7 +30,7 @@ export function StoragePolicyPanel({ file }: { file: FileDetail }) {
   const category = t.files.categories[file.category] ?? file.category;
   const encryptionNote = file.encryptedAtRest ? file.encryptionAlgorithm : file.category === 'connection_documents' ? null : s.noPersonalData;
   return (
-    <section aria-labelledby="file-storage-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-storage-h" className="flex flex-col gap-4">
       <h2 id="file-storage-h" className="text-lg font-bold">
         {s.title}
       </h2>
@@ -44,6 +45,6 @@ export function StoragePolicyPanel({ file }: { file: FileDetail }) {
         <ShieldOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {s.locationNote}
       </p>
-    </section>
+    </Card>
   );
 }

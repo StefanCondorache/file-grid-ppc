@@ -1,6 +1,7 @@
 'use client';
 
 import { ErrorState } from '@/components/ErrorState';
+import { Card } from '@/components/ui/card';
 import { formatDateTime } from '@/lib/i18n/format';
 import { useT } from '@/lib/i18n';
 import { usePolicyHistory } from './queries';
@@ -10,7 +11,7 @@ export function VersionHistory({ category }: { category: PolicyCategory }) {
   const t = useT().policies;
   const q = usePolicyHistory(category);
   return (
-    <section className="flex flex-col gap-3" aria-labelledby="history-title">
+    <Card className="flex flex-col gap-3" aria-labelledby="history-title">
       <h2 id="history-title" className="text-lg font-bold">{t.history}</h2>
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => void q.refetch()} />
@@ -30,6 +31,6 @@ export function VersionHistory({ category }: { category: PolicyCategory }) {
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

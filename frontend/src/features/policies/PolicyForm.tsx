@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ErrorState } from '@/components/ErrorState';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useMe } from '@/features/auth/queries';
 import { ApiError } from '@/lib/api/errors';
 import { can } from '@/lib/auth/capabilities';
@@ -81,54 +82,56 @@ function Editor({ category, policy, editable }: { category: PolicyCategory; poli
         />
       )}
       {serverError !== null && <ErrorState error={serverError} />}
-      <form
-        className="grid max-w-xl gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (editable && rows.length > 0 && Object.keys(errors).length === 0) setConfirming(true);
-        }}
-      >
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">{t.primary}</span>
-          <select className={FIELD} disabled={!editable} value={draft.primaryStorage} onChange={(e) => set('primaryStorage', e.target.value as PolicyDraft['primaryStorage'])}>
-            {STORAGE_IDS.map((s) => <option key={s} value={s}>{STORAGE_LABEL[s]}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">{t.fallback}</span>
-          <select className={FIELD} disabled={!editable} value={draft.fallbackStorage ?? ''} onChange={(e) => set('fallbackStorage', (e.target.value || null) as PolicyDraft['fallbackStorage'])}>
-            <option value="">{t.noFallback}</option>
-            {STORAGE_IDS.map((s) => <option key={s} value={s}>{STORAGE_LABEL[s]}</option>)}
-          </select>
-          {fieldError('fallbackStorage')}
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" className="size-5" disabled={!editable || encLocked} checked={draft.encryptionAtRest} onChange={(e) => set('encryptionAtRest', e.target.checked)} />
-          <span className="font-semibold">{t.encryption}</span>
-        </label>
-        {encLocked && <p className="-mt-2 text-sm text-ink-2">{t.encryptionLocked}</p>}
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">{t.chunk}</span>
-          <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.chunkMiB) ? '' : draft.chunkMiB} onChange={(e) => set('chunkMiB', num(e.target.value))} />
-          {fieldError('chunkMiB')}
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">{t.parallel}</span>
-          <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.maxParallel) ? '' : draft.maxParallel} onChange={(e) => set('maxParallel', num(e.target.value))} />
-          {fieldError('maxParallel')}
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">{t.concurrency}</span>
-          <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.maxConcurrency) ? '' : draft.maxConcurrency} onChange={(e) => set('maxConcurrency', num(e.target.value))} />
-          {fieldError('maxConcurrency')}
-        </label>
-        <p className="text-sm text-ink-2">{t.inFlightNote}</p>
-        {editable && (
-          <div>
-            <Button type="submit" disabled={rows.length === 0 || Object.keys(errors).length > 0}>{t.review}</Button>
-          </div>
-        )}
-      </form>
+      <Card>
+        <form
+          className="grid max-w-xl gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (editable && rows.length > 0 && Object.keys(errors).length === 0) setConfirming(true);
+          }}
+        >
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">{t.primary}</span>
+            <select className={FIELD} disabled={!editable} value={draft.primaryStorage} onChange={(e) => set('primaryStorage', e.target.value as PolicyDraft['primaryStorage'])}>
+              {STORAGE_IDS.map((s) => <option key={s} value={s}>{STORAGE_LABEL[s]}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">{t.fallback}</span>
+            <select className={FIELD} disabled={!editable} value={draft.fallbackStorage ?? ''} onChange={(e) => set('fallbackStorage', (e.target.value || null) as PolicyDraft['fallbackStorage'])}>
+              <option value="">{t.noFallback}</option>
+              {STORAGE_IDS.map((s) => <option key={s} value={s}>{STORAGE_LABEL[s]}</option>)}
+            </select>
+            {fieldError('fallbackStorage')}
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" className="size-5" disabled={!editable || encLocked} checked={draft.encryptionAtRest} onChange={(e) => set('encryptionAtRest', e.target.checked)} />
+            <span className="font-semibold">{t.encryption}</span>
+          </label>
+          {encLocked && <p className="-mt-2 text-sm text-ink-2">{t.encryptionLocked}</p>}
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">{t.chunk}</span>
+            <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.chunkMiB) ? '' : draft.chunkMiB} onChange={(e) => set('chunkMiB', num(e.target.value))} />
+            {fieldError('chunkMiB')}
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">{t.parallel}</span>
+            <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.maxParallel) ? '' : draft.maxParallel} onChange={(e) => set('maxParallel', num(e.target.value))} />
+            {fieldError('maxParallel')}
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">{t.concurrency}</span>
+            <input type="number" className={FIELD} disabled={!editable} value={Number.isNaN(draft.maxConcurrency) ? '' : draft.maxConcurrency} onChange={(e) => set('maxConcurrency', num(e.target.value))} />
+            {fieldError('maxConcurrency')}
+          </label>
+          <p className="text-sm text-ink-2">{t.inFlightNote}</p>
+          {editable && (
+            <div>
+              <Button type="submit" disabled={rows.length === 0 || Object.keys(errors).length > 0}>{t.review}</Button>
+            </div>
+          )}
+        </form>
+      </Card>
       <DiffDialog open={confirming} rows={rows} saving={save.isPending} onConfirm={() => void confirm()} onCancel={() => setConfirming(false)} />
       <VersionHistory category={category} />
     </div>

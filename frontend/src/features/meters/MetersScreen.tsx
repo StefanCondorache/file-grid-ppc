@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { ErrorState } from '@/components/ErrorState';
 import { Forbidden } from '@/components/Forbidden';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useMe } from '@/features/auth/queries';
 import { roleLabel } from '@/features/auth/roles';
 import { ReportContext, useSimulator } from '@/features/demo/api';
@@ -64,12 +65,12 @@ export function MetersScreen() {
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <RateKpi ratePerS={c?.ratePerS ?? null} simulator={simulator.data} />
-          <section aria-labelledby="counters-title" data-testid="meter-counters" className="flex flex-col gap-2 rounded-card border border-border bg-card p-5 shadow-e1">
+          <Card aria-labelledby="counters-title" data-testid="meter-counters" className="flex flex-col gap-2 p-5">
             <h3 id="counters-title" className="text-lg font-bold">
               {t.meters.countersTitle}
             </h3>
             <MeterCounters counters={{ received: c?.received ?? null, unique: c?.unique ?? null, duplicatesRejected: c?.duplicatesRejected ?? null, lost: c ? c.lost : null }} />
-          </section>
+          </Card>
           <ZoneSplit byZone={c?.byZone ?? []} />
         </div>
       )}

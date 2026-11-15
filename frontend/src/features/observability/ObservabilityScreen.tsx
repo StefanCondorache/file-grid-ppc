@@ -34,19 +34,19 @@ export function ObservabilityScreen() {
 
   return (
     <div className="flex flex-col gap-10">
-    <section aria-labelledby="matrix-title" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="flex max-w-3xl flex-col gap-1">
-          <h2 id="matrix-title" className="text-[22px] font-bold">
-            {t.matrixTitle}
-          </h2>
-          <p className="text-ink-2">{t.matrixLead}</p>
+      <section aria-labelledby="matrix-title" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="flex max-w-3xl flex-col gap-1">
+            <h2 id="matrix-title" className="text-[22px] font-bold">
+              {t.matrixTitle}
+            </h2>
+            <p className="text-ink-2">{t.matrixLead}</p>
+          </div>
+          <WindowSelect value={matrixWindow} windows={MATRIX_WINDOWS} onChange={setWindow} />
         </div>
-        <WindowSelect value={matrixWindow} windows={MATRIX_WINDOWS} onChange={setWindow} />
-      </div>
-      <MetricsMatrix window={matrixWindow} />
-    </section>
-    <BulkheadChart />
+        <MetricsMatrix window={matrixWindow} />
+      </section>
+      <BulkheadChart />
     </div>
   );
 }

@@ -1,24 +1,12 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
 
-/* ---- Tailwind v4 mapping (shadcn/ui-compatible names where they exist) ---- */
+/* ---- Tailwind v4 mapping: only the aliases components use (bg-surface, text-ink-2, rounded-card, …) ---- */
 @theme inline {
-  --color-background: var(--fg-page);
-  --color-foreground: var(--fg-ink);
-  --color-card: var(--fg-surface);
   --color-card-foreground: var(--fg-ink);
-  --color-popover: var(--fg-surface);
-  --color-popover-foreground: var(--fg-ink);
   --color-primary: var(--fg-action);
   --color-primary-foreground: var(--fg-on-action);
-  --color-secondary: var(--fg-surface-sunken);
-  --color-secondary-foreground: var(--fg-ink);
-  --color-muted: var(--fg-surface-2);
-  --color-muted-foreground: var(--fg-ink-2);
   --color-accent: var(--fg-brand-orange-tint);
-  --color-accent-foreground: var(--fg-ink);
-  --color-destructive: var(--fg-crit);
-  --color-destructive-foreground: var(--fg-on-crit);
   --color-border: var(--fg-line);
   --color-input: var(--fg-line-input);
   --color-ring: var(--fg-focus-outer);
@@ -33,9 +21,7 @@
   --color-ink-2: var(--fg-ink-2);
   --color-ink-3: var(--fg-ink-3);
   --color-link: var(--fg-link);
-  --color-brand-orange: var(--fg-brand-orange);
   --color-brand-cyan: var(--fg-brand-cyan);
-  --color-ppc-blue: var(--fg-brand-ppc-blue);
   --color-ok: var(--fg-ok);           --color-ok-tint: var(--fg-ok-tint);       --color-ok-ink: var(--fg-ok-ink);
   --color-warn: var(--fg-warn);       --color-warn-tint: var(--fg-warn-tint);   --color-warn-ink: var(--fg-warn-ink);
   --color-crit: var(--fg-crit);       --color-crit-tint: var(--fg-crit-tint);   --color-crit-ink: var(--fg-crit-ink);
@@ -55,17 +41,11 @@
   --radius-control: var(--fg-radius-control);
   --radius-chip: var(--fg-radius-chip);
 
-  --shadow-e1: var(--fg-shadow-e1);
   --shadow-e2: var(--fg-shadow-e2);
   --shadow-e3: var(--fg-shadow-e3);
-  --shadow-neu: var(--fg-neu-raise);
   --shadow-neu-sm: var(--fg-neu-raise-sm);
-  --shadow-neu-press: var(--fg-neu-press);
-  --shadow-neu-inset: var(--fg-neu-inset);
 
   --ease-smooth: var(--fg-ease-smooth);
-  --ease-sharp: var(--fg-ease-sharp);
-  --ease-spring: var(--fg-ease-spring);
 }
 
 :root {

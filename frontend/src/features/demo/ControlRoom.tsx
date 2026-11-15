@@ -3,6 +3,7 @@
 import { CircleCheck, CircleX } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Forbidden } from '@/components/Forbidden';
+import { Card } from '@/components/ui/card';
 import { useMe } from '@/features/auth/queries';
 import { roleLabel } from '@/features/auth/roles';
 import { announce } from '@/lib/a11y/announcer';
@@ -54,7 +55,7 @@ function ResetControl() {
 function ActionLog({ entries }: { entries: LogEntry[] }) {
   const t = useT().demo.log;
   return (
-    <section aria-labelledby="log-title" className="flex flex-col gap-2 rounded-card glass-card tilt-soft p-5">
+    <Card aria-labelledby="log-title" className="flex flex-col gap-2 p-5">
       <h3 id="log-title" className="text-lg font-bold">
         {t.title}
       </h3>
@@ -74,7 +75,7 @@ function ActionLog({ entries }: { entries: LogEntry[] }) {
           ))}
         </ol>
       )}
-    </section>
+    </Card>
   );
 }
 

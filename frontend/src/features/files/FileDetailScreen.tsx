@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { SafeName } from '@/components/SafeName';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Tag } from '@/components/ui/tag';
 import { CustodyTimeline } from '@/features/integrity/CustodyTimeline';
 import { TraceWaterfall } from '@/features/integrity/TraceWaterfall';
@@ -123,7 +124,7 @@ function MetadataPanel({ file }: { file: FileDetail }) {
     { term: m.origin, value: <OriginTag origin={file.origin} /> },
   ];
   return (
-    <section aria-labelledby="file-meta-h" className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-meta-h" className="flex flex-col gap-3">
       <h2 id="file-meta-h" className="text-lg font-bold">
         {m.title}
       </h2>
@@ -141,7 +142,7 @@ function MetadataPanel({ file }: { file: FileDetail }) {
           <RevealDialog fileId={file.id} />
         </>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -149,7 +150,7 @@ function IntegrityPanel({ file }: { file: FileDetail }) {
   const t = useT();
   const d = t.files.detail.integrity;
   return (
-    <section aria-labelledby="file-integrity-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-integrity-h" className="flex flex-col gap-4">
       <h2 id="file-integrity-h" className="text-lg font-bold">
         {d.title}
       </h2>
@@ -164,7 +165,7 @@ function IntegrityPanel({ file }: { file: FileDetail }) {
           d.neverVerified
         )}
       </p>
-    </section>
+    </Card>
   );
 }
 
@@ -173,7 +174,7 @@ function Header({ file }: { file: FileDetail }) {
   const d = t.files.detail;
   const when = formatDateTime(file.createdAt);
   return (
-    <section aria-labelledby="file-name-h" className="flex flex-col gap-3 rounded-hero glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-name-h" hero className="flex flex-col gap-3">
       <span className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-ink-2 uppercase">
         <span aria-hidden="true" className={cn('size-2.5 rounded-full', CATEGORY_DOT[file.category])} />
         {t.files.categoryOne[file.category] ?? file.category}
@@ -195,7 +196,7 @@ function Header({ file }: { file: FileDetail }) {
       <div className="flex flex-wrap items-center gap-3">
         <FileDownloadSlot fileId={file.id} fileName={file.displayName} size={file.size} storage={file.storage} expectedSha256={file.serverSha256} />
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -226,7 +227,7 @@ function Breadcrumb({ file }: { file: FileDetail }) {
 function TracePanel({ traceId }: { traceId: string }) {
   const t = useT();
   return (
-    <section aria-labelledby="file-trace-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-trace-h" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="file-trace-h" className="text-lg font-bold">
           {t.files.trace.title}
@@ -236,19 +237,19 @@ function TracePanel({ traceId }: { traceId: string }) {
         </Link>
       </div>
       <TraceWaterfall traceId={traceId} />
-    </section>
+    </Card>
   );
 }
 
 function CustodyPanel({ fileId }: { fileId: string }) {
   const t = useT();
   return (
-    <section aria-labelledby="file-custody-h" className="flex flex-col gap-4 rounded-card glass-card tilt-soft p-6">
+    <Card aria-labelledby="file-custody-h" className="flex flex-col gap-4">
       <h2 id="file-custody-h" className="text-lg font-bold">
         {t.files.custody.title}
       </h2>
       <CustodyTimeline fileId={fileId} />
-    </section>
+    </Card>
   );
 }
 
@@ -257,10 +258,10 @@ function Loading() {
   return (
     <div aria-busy="true" className="flex flex-col gap-4">
       <span className="sr-only">{t.files.detail.loading}</span>
-      <div aria-hidden="true" className="h-40 rounded-hero bg-sunken" />
+      <div aria-hidden="true" className="h-40 skeleton rounded-hero glass-card" />
       <div aria-hidden="true" className="grid gap-4 lg:grid-cols-2">
-        <div className="h-56 rounded-card bg-sunken" />
-        <div className="h-56 rounded-card bg-sunken" />
+        <div className="h-56 skeleton rounded-card glass-card" />
+        <div className="h-56 skeleton rounded-card glass-card" />
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { useT } from '@/lib/i18n';
 export function EffectPanel() {
   const t = useT().demo.effect;
   return (
-    <section aria-labelledby="effect-title" data-testid="effect-panel" className="flex flex-col gap-6 rounded-hero border border-border bg-surface-2 p-5">
+    <section aria-labelledby="effect-title" data-testid="effect-panel" className="flex flex-col gap-6 rounded-hero glass-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 id="effect-title" className="text-[22px] font-bold">

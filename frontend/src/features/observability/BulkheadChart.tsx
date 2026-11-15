@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useId, useState } from 'react';
 import { ChartFigure } from '@/components/charts/ChartFigure';
 import { ErrorState } from '@/components/ErrorState';
+import { Card } from '@/components/ui/card';
 import { useGuarantees } from '@/features/guarantees/queries';
 import { decimal, metricOf, seconds } from '@/features/guarantees/sentences';
 import { useT } from '@/lib/i18n';
@@ -104,13 +105,11 @@ export function BulkheadChart({ initialWindow = '15m', headingLevel = 2 }: { ini
   } else if (bulkhead.isError) {
     body = <ErrorState error={bulkhead.error} onRetry={() => void bulkhead.refetch()} />;
   } else {
-    body = (
-      <div aria-hidden="true" className="h-[280px] skeleton rounded-panel bg-surface-2" />
-    );
+    body = <div aria-hidden="true" className="h-[280px] skeleton rounded-panel bg-surface-2" />;
   }
 
   return (
-    <section aria-labelledby={titleId} aria-busy={bulkhead.isPending || bulkhead.isPlaceholderData} className="flex flex-col gap-3">
+    <Card aria-labelledby={titleId} aria-busy={bulkhead.isPending || bulkhead.isPlaceholderData} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex max-w-3xl flex-col gap-1">
           <Heading id={titleId} className="text-[22px] font-bold">
@@ -122,6 +121,6 @@ export function BulkheadChart({ initialWindow = '15m', headingLevel = 2 }: { ini
       </div>
       {bulkhead.isPending && <span className="sr-only">{common.loading}</span>}
       {body}
-    </section>
+    </Card>
   );
 }

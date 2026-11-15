@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/card';
 import { decimal } from '@/features/guarantees/sentences';
 import { useT } from '@/lib/i18n';
 import { formatInt } from '@/lib/i18n/format';
@@ -8,7 +9,7 @@ export function ZoneSplit({ byZone }: { byZone: MeterCounters['byZone'] }) {
   const t = useT();
   const total = byZone.reduce((n, z) => n + z.received, 0) || 1;
   return (
-    <section aria-labelledby="zones-title" className="flex flex-col gap-3 rounded-card glass-card tilt-soft p-5">
+    <Card aria-labelledby="zones-title" className="flex flex-col gap-3 p-5">
       <h3 id="zones-title" className="text-lg font-bold">
         {t.meters.zonesTitle}
       </h3>
@@ -25,6 +26,6 @@ export function ZoneSplit({ byZone }: { byZone: MeterCounters['byZone'] }) {
           </div>
         ))}
       </dl>
-    </section>
+    </Card>
   );
 }
