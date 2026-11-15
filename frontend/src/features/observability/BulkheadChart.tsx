@@ -116,7 +116,6 @@ export function BulkheadChart({ initialWindow = '15m', headingLevel = 2 }: { ini
           <Heading id={titleId} className="text-[22px] font-bold">
             {b.title}
           </Heading>
-          <p className="text-ink-2">{b.lead}</p>
         </div>
         <WindowSelect value={window} windows={SERIES_WINDOWS} onChange={setWindow} label={b.windowLabel} />
       </div>

@@ -52,7 +52,6 @@ function Statistics() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-prose flex-col gap-1">
           <h2 className="text-[22px] font-bold">{t.statistics.screen.title}</h2>
-          <p className="text-ink-2">{t.statistics.screen.lead}</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {periods.data && <PeriodPicker periods={periods.data} value={choice} onChange={choose} />}

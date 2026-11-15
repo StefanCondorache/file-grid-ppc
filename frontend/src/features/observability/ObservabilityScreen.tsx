@@ -40,7 +40,6 @@ export function ObservabilityScreen() {
           <h2 id="matrix-title" className="text-[22px] font-bold">
             {t.matrixTitle}
           </h2>
-          <p className="text-ink-2">{t.matrixLead}</p>
         </div>
         <WindowSelect value={matrixWindow} windows={MATRIX_WINDOWS} onChange={setWindow} />
       </div>

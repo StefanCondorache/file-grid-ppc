@@ -1,7 +1,6 @@
 /** Business guarantees, alerts, storage health and observability (slice 6e). Numbers arrive pre-formatted. */
 export const monitoring = {
   boardTitle: 'Cele 4 garanții, acum',
-  boardLead: 'Calculate de server din jurnalul operațiilor și actualizate live.',
   boardEmpty: 'Serverul nu a trimis încă starea garanțiilor.',
   categories: {
     meter_readings: 'Citiri contoare',
@@ -79,7 +78,6 @@ export const monitoring = {
     acknowledgeFailed: (guarantee: string) => `Alerta ${guarantee} nu a putut fi confirmată. Încearcă din nou.`,
     acknowledgeFailedShort: 'Confirmarea nu a reușit.',
     listTitle: 'Alerte',
-    listLead: 'Fiecare garanție care iese din OK ridică o alertă. Confirmarea arată cine a văzut-o și când.',
     caption: 'Alertele garanțiilor, cele mai noi primele',
     columns: { raisedAt: 'Ridicată la', guarantee: 'Garanția', state: 'Stare', cause: 'Cauza', trace: 'Urmă', acknowledged: 'Confirmare' },
     states: { at_risk: 'În pericol', violated: 'Încălcat', resolved: 'Rezolvată' },
@@ -90,8 +88,6 @@ export const monitoring = {
   /** Observabilitate (SC-07, FE-09): the category × storage matrix and its window. */
   observability: {
     matrixTitle: 'Categorie × storage',
-    matrixLead:
-      'Latența p50 / p95 / p99, debitul și rata de erori ale operațiilor de stocare, măsurate de server pentru fiecare categorie pe fiecare storage.',
     caption: (window: string) => `Latență, debit și erori pe categorie și storage, ${window}`,
     corner: 'Categorie',
     windowLabel: 'Interval',
@@ -104,7 +100,7 @@ export const monitoring = {
     errors: (pct: string) => `${pct} erori`,
     missing: '—',
     overThreshold: 'Peste prag',
-    thresholdNote: (pct: string) => `Peste prag: rata de erori peste ${pct}. Celulele fără trafic nu au fost folosite în interval.`,
+    thresholdNote: (pct: string) => `Peste prag: rata de erori peste ${pct}.`,
     updatedAt: (time: string) => `Actualizat la ${time}`,
     polling: (seconds: string) => `se actualizează la fiecare ${seconds}`,
     paused: 'Actualizări live în pauză: valorile sunt înghețate',
@@ -114,7 +110,6 @@ export const monitoring = {
   /** The bulkhead chart (FE-10, BA-44): p95 per category on one axis, plus the compartments. */
   bulkhead: {
     title: 'Izolare pe categorii (bulkhead)',
-    lead: 'Latența p95 a fiecărei categorii pe aceeași axă: o furtună pe o categorie nu le încetinește pe celelalte.',
     chartTitle: (window: string) => `Latența p95 pe categorie, ${window}`,
     yAxis: 'p95 (secunde)',
     windowLabel: 'Interval grafic',

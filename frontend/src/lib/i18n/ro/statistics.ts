@@ -53,7 +53,6 @@ export const statistics = {
   /** The `/statistics` screen (SC-08). */
   screen: {
     title: 'Ce ne spun datele',
-    lead: 'Răspunsuri pentru decizii, nu doar grafice. Fiecare bloc are o interpretare și o recomandare.',
     refresh: 'Actualizează',
   },
   /** The two labelled periods S2 compares (FE-12: chosen from a list, never free dates). */
@@ -69,7 +68,6 @@ export const statistics = {
   insight: { interpretation: 'Interpretare', recommendation: 'Recomandare' },
   /** S1 · the chart, its tag and its table. */
   fit: {
-    eyebrow: 'S1',
     title: 'Ce storage se potrivește fiecărei categorii?',
     caption: 'p95 la scriere pe fiecare storage, în ultimele 7 zile',
     note: (operations: string) => `Bare mai scurte = mai bine; fiecare categorie are scara ei. Măsurat pe ${operations}.`,
@@ -91,7 +89,6 @@ export const statistics = {
   },
   /** S2 · the dumbbell chart, its legend and its table. */
   comparison: {
-    eyebrow: 'S2',
     title: 'Zi normală vs. zi de vârf',
     caption: (axisMax: string) => `Timp de scriere (p95) pe categorie · axa 0–${axisMax}`,
     legend: 'Legendă',
@@ -104,7 +101,7 @@ export const statistics = {
     notMeasured: 'nemăsurat',
     noDelta: 'nu se poate calcula',
     waiting: 'Alegeți perioadele de comparat.',
-    waitingBody: 'S2 compară o zi normală cu o zi de vârf. Pornirea unei furtuni din camera de demo înregistrează o perioadă de vârf.',
+    waitingBody: 'Pornirea unei furtuni din Camera de control înregistrează o perioadă de vârf.',
     empty: 'Nu există măsurători ale timpului de scriere în perioadele alese.',
     metric: { p95Ms: 'p95 la scriere', opsPerS: 'Operații/s', errorRate: 'Rata de erori', volume: 'Volum' },
     readings: { one: 'o citire', few: '# citiri', other: '# de citiri' },
@@ -112,7 +109,6 @@ export const statistics = {
   },
   /** S3 · the region map, the meter anomalies and the map's table. */
   grid: {
-    eyebrow: 'S3',
     title: 'Ce spun datele despre rețea',
     caption: `Avarii pe zone, în ${LAST_DAY}`,
     /** The map's accessible name, every region with its count: "Avarii pe zone: Muntenia 38, Dobrogea 23, Banat 14". */
