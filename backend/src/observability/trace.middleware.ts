@@ -39,7 +39,10 @@ export function traceMiddleware(logger: Logger): RequestHandler {
     const traceId = isValidTraceId(incoming) ? incoming : newTraceId();
     response.setHeader(TRACE_HEADER, traceId);
     const run = (trace: Trace): void => {
+      // Without the query string: search terms may name people.
       const path = request.originalUrl.split('?')[0] ?? request.originalUrl;
+      trace.attributes.method = request.method;
+      trace.attributes.path = path;
       // AsyncResource.bind keeps the trace current inside the event callbacks.
       response.once(
         'finish',

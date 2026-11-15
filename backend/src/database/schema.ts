@@ -188,6 +188,8 @@ export interface SpanRow {
   status: 'ok' | 'error';
   storage: StorageName | null;
   errorCode: string | null;
+  /** Allow-listed, non-personal attributes (algorithm, keyId, partNumber...); absent on old rows. */
+  attributes?: Record<string, string | number | boolean>;
 }
 
 export interface OperationsTable {

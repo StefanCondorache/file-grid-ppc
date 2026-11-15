@@ -5,6 +5,7 @@ import { BulkheadModule } from './bulkhead/bulkhead.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
+import { DocsModule } from './docs/docs.module';
 import { EventsModule } from './events/events.module';
 import { FilesModule } from './files/files.module';
 import { GuaranteesModule } from './guarantees/guarantees.module';
@@ -42,6 +43,7 @@ import { UploadsModule } from './uploads/uploads.module';
     GuaranteesModule,
     StatisticsModule,
     DemoModule,
+    DocsModule,
   ],
 })
 export class AppModule {}

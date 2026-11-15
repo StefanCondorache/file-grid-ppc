@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Category, StorageName } from '../common/domain';
 import { DB, type Db } from '../database/database';
 import type { SpanRow } from '../database/schema';
-import { currentTrace } from './trace-context';
+import { type SpanAttributes, type SpanRecord, currentTrace } from './trace-context';
 
 export interface OperationSummary {
   readonly operation: string;
@@ -14,6 +14,45 @@ export interface OperationSummary {
 }
 
 const STORAGE_NAMES = new Set(['s3', 'ftp', 'db']);
+
+/**
+ * The span attributes a trace may show. Everything else stays in memory: no metadata, no personal
+ * data, no query strings ever reach the operations table.
+ */
+const SHOWN_ATTRIBUTES = new Set([
+  'method',
+  'path',
+  'uploadId',
+  'partNumber',
+  'category',
+  'storage',
+  'encrypted',
+  'sizeBytes',
+  'algorithm',
+  'keyId',
+  'action',
+  'outcome',
+]);
+
+function shown(attrs: SpanAttributes): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (!SHOWN_ATTRIBUTES.has(key)) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+const round = (ms: number): number => Math.round(ms * 100) / 100;
+
+function storageOf(attrs: SpanAttributes): StorageName | null {
+  const storage = attrs.storage;
+  return typeof storage === 'string' && STORAGE_NAMES.has(storage)
+    ? (storage as StorageName)
+    : null;
+}
 
 /**
  * Persists one row per traced operation (upload complete, download, meter batch...) with the spans
@@ -29,22 +68,31 @@ export class OperationsService {
   async record(summary: OperationSummary): Promise<void> {
     const trace = currentTrace();
     if (!trace) return;
-    const spans: SpanRow[] = trace.spans.map((span, index) => {
-      const storage = span.attrs.storage;
-      return {
-        spanId: String(index + 1),
-        parentSpanId: null,
-        name: span.name,
-        startOffsetMs: Math.round(span.startMs * 100) / 100,
-        durationMs: Math.round(span.durationMs * 100) / 100,
-        status: span.status,
-        storage:
-          typeof storage === 'string' && STORAGE_NAMES.has(storage)
-            ? (storage as StorageName)
-            : null,
-        errorCode: span.error ?? null,
-      };
-    });
+    // The root span is the request itself (API); every recorded step is its child, in the order
+    // the steps finished (policy, encryption, storage, audit...).
+    const root: SpanRow = {
+      spanId: '1',
+      parentSpanId: null,
+      name: 'api',
+      startOffsetMs: 0,
+      durationMs: round(trace.elapsedMs()),
+      status: summary.status,
+      storage: summary.storage ?? null,
+      errorCode: null,
+      attributes: shown(trace.attributes),
+    };
+    const steps = trace.spans.map((span: SpanRecord, index): SpanRow => ({
+      spanId: String(index + 2),
+      parentSpanId: '1',
+      name: span.name,
+      startOffsetMs: round(Math.max(0, span.startMs)),
+      durationMs: round(span.durationMs),
+      status: span.status,
+      storage: storageOf(span.attrs),
+      errorCode: span.error ?? null,
+      attributes: shown(span.attrs),
+    }));
+    const spans = [root, ...steps];
     try {
       await this.db
         .insertInto('operations')
@@ -56,7 +104,7 @@ export class OperationsService {
           file_id: summary.fileId ?? null,
           status: summary.status,
           started_at: new Date(Date.now() - trace.elapsedMs()),
-          duration_ms: Math.round(trace.elapsedMs() * 100) / 100,
+          duration_ms: root.durationMs,
           size_bytes: summary.sizeBytes ?? null,
           spans: JSON.stringify(spans),
         })

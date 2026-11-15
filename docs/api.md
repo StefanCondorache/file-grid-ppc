@@ -119,8 +119,9 @@ Seed policies:
 2. **`PUT /uploads/{id}/parts/{n}`**, with `n` starting at 1. The raw `application/octet-stream` body is
    streamed to storage and never parsed. It takes an optional `X-Part-SHA256` header.
    - Size: every part is `chunkSize`, except the last one.
-   - Answer: `200 { partNumber, size, sha256, alreadyReceived }`. Sending a part again with the same
-     hash is free and returns `alreadyReceived: true`.
+   - Answer: `200 { partNumber, size, sha256, alreadyReceived, traceId }`. Sending a part again with the
+     same hash is free and returns `alreadyReceived: true`. Every part is an operation of its own
+     (`upload.part`, also when it is refused): `traceId` (the same as `X-Trace-Id`) opens its trace.
    - Errors: `422 PART_CHECKSUM_MISMATCH`, `PART_SIZE_MISMATCH`, `PART_NUMBER_OUT_OF_RANGE`,
      `413 PART_TOO_LARGE`, `409 UPLOAD_NOT_OPEN` or `UPLOAD_COMPLETED`, and
      `503 STORAGE_UNAVAILABLE` or `CATEGORY_BUSY` (retry after `Retry-After`).
@@ -137,6 +138,11 @@ Seed policies:
      `503 STORAGE_UNAVAILABLE`.
    - **Hash mismatch:** the answer is `verdict: "mismatch"` with `fileId: null`, and no file is kept.
 5. **`DELETE /uploads/{id}`** returns `204` and drops the staged parts.
+6. **Abandoned uploads:** a session expires `UPLOAD_SESSION_TTL_HOURS` (24) after its last part. Every
+   `UPLOAD_SWEEP_INTERVAL_S` (300) each replica marks expired sessions `expired` and drops their staged parts
+   (and those of aborted sessions); a part whose storage is down is kept for the next sweep. A part sent
+   again with the same `X-Part-SHA256` is answered `alreadyReceived` only after its body has been read, so a
+   retrying client over HTTP/2 is not cut off mid-body.
 6. **`GET` or `HEAD /ping`** returns `204`, as a connectivity probe for the resume logic.
 
 How the server handles an upload:
@@ -166,8 +172,14 @@ How the server handles an upload:
 - **Download headers:** `Content-Disposition: attachment` with a sanitised `filename*`, `nosniff`,
   `X-File-SHA256` and an `ETag` taken from the hash.
 - **Integrity on download:** files up to 8 MiB are verified completely before the first byte is sent, so
-  corruption answers `409 FILE_CORRUPT` with both hashes. Larger files are streamed, and the connection is
+  corruption answers `409 FILE_CORRUPT` with both hashes and `fallbackAvailable: false` (each file is stored
+  once, on the primary or on the fallback, so there is no second copy to restore from). Larger files are streamed, and the connection is
   cut (never ended cleanly) if the hash turns out wrong. In both cases the file is marked `corrupt`.
+- **Byte ranges (`Range: bytes=a-b`, `bytes=a-`, `bytes=-n`):** a single range of a plain file answers
+  `206` with `Content-Range: bytes a-b/size` and only those bytes (`Accept-Ranges: bytes`). `416
+  RANGE_NOT_SATISFIABLE` with `Content-Range: bytes */size` when it is malformed or starts past the end. Several ranges, or an `If-Range` that no
+  longer matches the `ETag`, get the whole file (`200`). Encrypted files (`Accept-Ranges: none`) ignore
+  `Range`: they are decrypted and verified whole. Only a range from byte 0 is a custody event (`download`).
 - **What never leaves the backend:** storage URLs, keys and FTP paths.
 - **Personal data:** for connection documents the name and CNP are stored sealed with the KEK. Only the
   masked values appear in `metadata`: `applicantNameMasked` ("I*** P***") and `cnpMasked`
@@ -210,10 +222,32 @@ All of these need `view_statistics`.
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /storage-health` | session | `{ data: [{ storage, status: ok|degraded|down, latencyMs, lastCheckAt, circuitState }] }`, from the health monitor (every 5 s) |
-| `GET /metrics/bulkhead` | `view_observability` | `{ data: [{ category, active, queued }] }` for this replica |
-| `GET /traces/{traceId}` | session | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, name, startOffsetMs, durationMs, status, storage, errorCode }] }` |
+| `GET /metrics/bulkhead?window=5m\|15m\|1h` | `view_observability` | `{ window, stepS, series: [{ category, points: [{ t, p95Ms, opsPerS }] }], data: [{ category, active, queued }] }`. `series` is the bulkhead proof chart: 30 points per category on one time axis (a point every 10, 30 or 120 s; default `15m`), p95 latency and operations per second of every traced operation of the category, all replicas (from the operations log). `p95Ms` is `null` and `opsPerS` 0 for a point without traffic. `data` is the live state of this replica's compartments |
+| `GET /metrics/matrix?window=5m\|1h\|24h` | `view_observability` | `{ window, generatedAt, cells: [{ category, storage, requests, noTraffic, p50Ms, p95Ms, p99Ms, throughputBps, opsPerS, errorRate }] }`: the 12 category x storage cells (default `5m`) from the operations log. A cell without traffic has `noTraffic: true`, `requests: 0` and `null` for every measure |
+| `GET /traces/{traceId}` | view capability of the operation's category | `{ traceId, operation, category, fileId, storage, startedAt, durationMs, status, spans: [{ spanId, parentSpanId, name, startOffsetMs, durationMs, status, storage, errorCode, attributes }] }`. A role that may not see the category gets the same `404 NOT_FOUND` as for an unknown id (like `GET /files/{id}`). See "Trace spans" below |
 | `GET /healthz`, `GET /readyz` | probes | `/healthz` is 200 while the process lives. `/readyz` answers `{ status, database }`: **200** `ready`, or `degraded` when a storage or the DB is down after the start, as the README requires. It answers **503** (with `Retry-After`) only while `starting` (the database has not been reached, migrated and seeded yet) and while `stopping` (SIGTERM, see below) |
 | `GET /metrics` | Prometheus | Text exposition |
+
+### Trace spans
+
+`operation` is `upload.part`, `upload.complete`, `file.download`, `file.verify` or `meter.batch`. The first
+span is always `api` (spanId `1`, `startOffsetMs` 0, the whole request; its `attributes` hold `method`,
+`path` without the query string, and `uploadId`/`partNumber` for uploads). Every other span is its child
+(`parentSpanId: "1"`), in the order the steps finished:
+
+| Span | When | `attributes` |
+|---|---|---|
+| `policy` | upload create and complete | |
+| `encryption` | the policy encrypts at rest (`connection_documents`) | `algorithm` (`AES-256-GCM`), `keyId`, `sizeBytes`. It is interleaved with `storage.put` (chunk by chunk), so it starts with it and its `durationMs` is the time spent in the cipher |
+| `storage.put`, `storage.get` | every write or read | `storage`, `category`, `encrypted`, `sizeBytes` |
+| `hash.verify` | `POST /files/{id}/verification` | `storage`, `category` |
+| `audit` | the audit record of the operation (upload, download, verify) | `action`, `outcome` |
+| `confirm` | the DB transaction that makes an upload visible (it contains `audit`) | |
+
+The trace of a connection document's upload thus reads `api → policy → encryption → storage.put → audit →
+confirm`, each with its duration. Only these allow-listed attributes are stored: no metadata, no personal
+data, no query strings. A download is recorded once its bytes are sent, so its trace can appear a few
+milliseconds after the response ends.
 
 ## Audit, guarantees, alerts and the live stream
 
@@ -223,7 +257,37 @@ All of these need `view_statistics`.
 | `GET /guarantees` | session | `{ data: [{ category, state: ok\|at_risk\|violated, causeCode, causeFacts, metrics: [{ key, value, unit, threshold, comparator }], updatedAt }] }`, the four business guarantees with the `GUARANTEE_*` thresholds |
 | `GET /alerts?state=active\|resolved\|all&page=&pageSize=` | session | `{ data: [{ id, category, state, raisedAt, resolvedAt, causeCode, causeFacts, traceId, acknowledgedAt, acknowledgedBy }], meta }`. The leader replica evaluates the guarantees every `GUARANTEE_EVAL_INTERVAL_S` and records the transitions |
 | `POST /alerts/{id}/acknowledge` | session | The alert, acknowledged (idempotent, audited as `alert_ack`) |
-| `GET /stream` | session | Server-Sent Events: `meters.counters`, `guarantees.status`, `alert.raised`, `alert.updated`, `storage.health`, `policy.updated`, `simulator.status`, `demo.storm` and a `ping`, filtered by the active role. Streams end when the session does and when the replica shuts down; `EventSource` reconnects |
+| `GET /stream` | session | Server-Sent Events, see below. `503 STREAM_BUSY` (with `Retry-After`) when `STREAM_MAX_CLIENTS` streams are open on the replica |
+
+### The live stream (`GET /stream`)
+
+`Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`. The first
+line is `retry: 3000`. Every event has a monotonic `id:` and a named `event:`; `data:` is one JSON object.
+There is no replay (`Last-Event-ID` is ignored): events are snapshots or hints, and a client refetches over
+REST after it (re)connects. A stream ends when its session does and when the replica shuts down; `EventSource`
+reconnects by itself. Each event goes only to the streams whose active role may see it:
+
+| Event | Who gets it | `data` |
+|---|---|---|
+| `ping` | every stream, every `STREAM_PING_S` (20 s) | `{ serverTime }` |
+| `meters.counters` | `view_meters`, every `STREAM_COUNTERS_INTERVAL_S` (2 s) | `MeterCounters`, as `GET /meters/counters` |
+| `guarantees.status` | every stream, after each evaluation | `{ items }`: the `data` of `GET /guarantees` |
+| `alert.raised`, `alert.updated` | every stream | one alert, as in `GET /alerts` |
+| `storage.health` | every stream, when a storage changes state | `{ items }`: the `data` of `GET /storage-health` |
+| `file.created` | roles that see the category | `{ fileId, category, zone, severity, substation, origin, createdAt, availableAt }` |
+| `file.integrity` | roles that see the category | `{ fileId, category, state: verified\|server_verified\|corrupt, traceId }` |
+| `upload.verified` | the uploader only | `{ uploadId, fileId, verdict: match\|mismatch, serverSha256, availableAfterMs }` |
+| `policy.updated` | every stream | `{ category, version }` |
+| `simulator.status` | `view_meters` | the simulator status, as `GET /meters/simulator` |
+| `demo.storm` | every stream | `{ category: "meter_readings", factor, state: started\|stopped, endsAt }` |
+
+The schemas of every payload are in `GET /docs-json` (`x-sse-events` of `/stream`), checked against real
+events by `backend/test/docs.e2e-spec.ts`.
+
+**Background requests do not keep a session alive.** `GET /stream`, `GET /auth/me` and the GETs a screen polls
+(`/storage-health`, `/meters/counters`, `/guarantees`, `/alerts`, `/metrics/bulkhead`, `/metrics/matrix`)
+never re-issue the cookie, so an open tab does not extend the 30 min idle window. Only `POST /auth/refresh`
+and real activity do.
 
 ## Demo controls (demo mode only: 404 when `FILEGRID_DEMO_MODE=false`; admin, audited)
 
@@ -291,8 +355,19 @@ zone or storage, so `rate()` and `increase()` see the first failure.
 - **Identifiers:** category and storage ids are the team identifiers from the README (`fault_records`,
   `s3`, ...), not `fault` or `S3`. The UI shows the labels (S3, FTP, PostgreSQL). The metadata `kind`
   values stay `fault`, `connection` and `drone`.
-- **Not implemented yet:** `GET /api/docs-json` (Swagger). The live stream, the audit trail, guarantees,
-  alerts, `GET /metrics/matrix` and single-range downloads (`206`, `If-Range`, `416`) are implemented.
+- **Machine-readable contract:** `GET /api/v1/docs-json` (no session) serves the OpenAPI 3 document of the
+  real API (`backend/src/docs/openapi.json`). It started from the proposal and was corrected to the backend:
+  `backend/test/docs.e2e-spec.ts` fails when a Nest route is missing from it (or it lists one Nest does not
+  have), when a real answer or live event does not match its schema, or when a `$ref` dangles. The frontend
+  generates its types from it: `API_SPEC=https://<host>/api/v1/docs-json npm run gen:api` in `frontend/`.
+- **What the document changes compared with the proposal:** the category and storage ids above; `UserRef.role`
+  and a few measures are nullable; `DemoStatus` is `{ demoMode, simulator, storm, storages }`; storms answer
+  the simulator status (`201` on start); a storage is stopped with `POST /demo/storages/{storage}/{stop|start}`
+  (no body); `POST /demo/corruptions` answers `201 { fileId, storage, corruptedAt }`; `GET
+  /statistics/period-comparison` takes `a` and `b`; `POST /meter-readings` (simulator, `X-API-Key`) is
+  documented. Proposal parameters the backend does not implement were removed: `storage` and `uploaderId` on
+  `GET /files`; `from`, `to` and `excludeGenerated` on `GET /meter-readings`; `periodId` and
+  `excludeGenerated` on `GET /statistics/storage-fit` and `/grid-insights`; `lastEventId` on `GET /stream`.
 - **Extra endpoints:** `maxConcurrency` on policies and `POST /demo/storages/{storage}/{action}`.
 
 ## Answers to `docs/api/HANDOFF-backend.md`
@@ -335,6 +410,7 @@ Optional:
 - `DEMO_USERS_PASSWORD` (default: `ADMIN_PASSWORD`)
 - `SIMULATOR_URL` (default `http://filegrid-simulator.filegrid.svc:8080`)
 - `SESSION_TTL_MINUTES` (480) and `SESSION_IDLE_MINUTES` (30)
+- `UPLOAD_SESSION_TTL_HOURS` (24) and `UPLOAD_SWEEP_INTERVAL_S` (300), see "Resumable upload"
 - `COOKIE_SECURE` (default `true`)
 - `FILEGRID_STORAGE_DRIVER=memory` (no S3/FTP; for local runs)
 - `LOG_LEVEL`

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import type { Category, Role } from '../common/domain';
 import type { Database } from '../database/schema';
-import { currentClientIp, currentTraceId } from '../observability/trace-context';
+import { currentClientIp, currentTraceId, span } from '../observability/trace-context';
 
 /** Audit actions; the names match the frontend's AuditAction enum (plus storage_stop/start). */
 export const AUDIT_ACTIONS = [
@@ -47,6 +47,12 @@ const CLIENT_IP_MAX = 64;
 @Injectable()
 export class AuditService {
   async record(executor: Kysely<Database>, entry: AuditEntry): Promise<void> {
+    await span('audit', { action: entry.action, outcome: entry.outcome }, () =>
+      this.insert(executor, entry),
+    );
+  }
+
+  private async insert(executor: Kysely<Database>, entry: AuditEntry): Promise<void> {
     await executor
       .insertInto('audit_log')
       .values({

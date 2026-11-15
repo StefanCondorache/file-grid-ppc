@@ -13,7 +13,7 @@ import { EventBus } from '../events/event-bus.service';
 import { KEYRING, ObjectStoreService } from '../object-store/object-store.service';
 import { UPLOAD_DURATION, UPLOADS_TOTAL } from '../observability/app-metrics';
 import { OperationsService } from '../observability/operations.service';
-import { currentTraceId, span } from '../observability/trace-context';
+import { annotate, currentTraceId, span } from '../observability/trace-context';
 import { PoliciesService } from '../policies/policies.service';
 import { HashingStream, IntegrityError } from '../storage/base';
 import type { CompleteUpload } from './upload.schemas';
@@ -65,6 +65,7 @@ export class UploadAssembler {
     body: CompleteUpload,
   ): Promise<CompleteOutcome> {
     const session = await this.uploads.owned(principal, uploadId);
+    annotate({ uploadId });
     if (session.status === 'completed' && session.result)
       return { kind: 'done', result: session.result };
     if (!['open', 'verifying'].includes(session.status)) this.uploads.requireOpen(session);

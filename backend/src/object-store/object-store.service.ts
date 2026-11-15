@@ -3,7 +3,8 @@ import { AppError, categoryBusy, retryAfter } from '../common/app-error';
 import type { Category, StorageName } from '../common/domain';
 import { decryptStream, encryptStream } from '../crypto/envelope';
 import type { Keyring } from '../crypto/keys';
-import { span } from '../observability/trace-context';
+import { performance } from 'node:perf_hooks';
+import { recordSpan, span } from '../observability/trace-context';
 import {
   HashingStream,
   ObjectNotFound,
@@ -17,6 +18,20 @@ import type { StorageRegistry } from '../storage/registry';
 import { STORAGE_REGISTRY } from '../storage/storage.module';
 
 export const KEYRING = Symbol('KEYRING');
+
+/** The FGE1 cipher (src/crypto/envelope.ts), as the trace names it. */
+const ENCRYPTION_ALGORITHM = 'AES-256-GCM';
+
+/** Adds the time spent waiting on `source` to `clock.ms` (the stream itself is untouched). */
+async function* timed<T>(source: AsyncIterable<T>, clock: { ms: number }): AsyncGenerator<T> {
+  let mark = performance.now();
+  for await (const chunk of source) {
+    clock.ms += performance.now() - mark;
+    yield chunk;
+    mark = performance.now();
+  }
+  clock.ms += performance.now() - mark;
+}
 
 export interface Placement {
   readonly primary: StorageName;
@@ -249,11 +264,13 @@ export class ObjectStoreService {
     );
   }
 
-  async delete(category: Category, storage: StorageName, key: string): Promise<void> {
+  /** Deletes a stored object; true when it is gone (or was), false when the storage failed. */
+  async delete(category: Category, storage: StorageName, key: string): Promise<boolean> {
     try {
       await withCategory(category, () => this.registry.get(storage).delete(key));
+      return true;
     } catch (error) {
-      if (error instanceof ObjectNotFound) return;
+      if (error instanceof ObjectNotFound) return true;
       this.logger.warn({
         message: 'could not delete a stored object (left for cleanup)',
         category,
@@ -261,6 +278,7 @@ export class ObjectStoreService {
         operation: 'delete',
         error: error instanceof Error ? error.message : String(error),
       });
+      return false;
     }
   }
 
@@ -293,12 +311,35 @@ export class ObjectStoreService {
     const keyring = encrypted ? this.requireKeyring() : null;
     return span('storage.put', { storage, category, encrypted }, async (attrs) => {
       const plain = new HashingStream(source());
-      const bytes = keyring ? encryptStream(plain, keyring.primary) : plain;
-      const stored = await withCategory(category, () =>
-        this.registry.get(storage).putStream(key, bytes),
-      );
-      attrs.sizeBytes = plain.size;
-      return { stored, plain: { size: plain.size, sha256: plain.sha256 } };
+      // Encryption runs chunk by chunk inside the write: its time is the time spent in the cipher,
+      // that is the encrypted stream's time minus the time spent waiting for plain bytes.
+      const started = performance.now();
+      const input = { ms: 0 };
+      const output = { ms: 0 };
+      const bytes = keyring
+        ? timed(encryptStream(timed(plain, input), keyring.primary), output)
+        : plain;
+      let failure: unknown;
+      try {
+        const stored = await withCategory(category, () =>
+          this.registry.get(storage).putStream(key, bytes),
+        );
+        attrs.sizeBytes = plain.size;
+        return { stored, plain: { size: plain.size, sha256: plain.sha256 } };
+      } catch (error) {
+        failure = error;
+        throw error;
+      } finally {
+        // Also when the write failed: the trace then shows how far the encryption got.
+        if (keyring) {
+          const attributes = {
+            algorithm: ENCRYPTION_ALGORITHM,
+            keyId: keyring.primary.keyId,
+            sizeBytes: plain.size,
+          };
+          recordSpan('encryption', started, Math.max(0, output.ms - input.ms), attributes, failure);
+        }
+      }
     });
   }
 

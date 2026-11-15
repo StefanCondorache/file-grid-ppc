@@ -102,22 +102,27 @@ export class DownloadService {
       ? await this.sendVerified(row, response)
       : await this.sendStreamed(row, response);
     DOWNLOADS_TOTAL.labels(row.category, outcome).inc();
-    await this.operations.record({
-      operation: 'file.download',
-      category: row.category,
-      storage: row.storage,
-      fileId: row.id,
-      sizeBytes: Number(row.size_bytes),
-      status: outcome === 'success' ? 'ok' : 'error',
-    });
-    if (outcome === 'success') {
-      await this.audit.record(this.db, {
-        actor: principal.username,
-        actingAs: principal.activeRole === principal.role ? null : principal.activeRole,
-        action: 'download',
-        outcome: 'success',
+    // Audit first, so the trace of the download shows its audit step; the operation is recorded
+    // even when the audit insert fails (its span then says error).
+    try {
+      if (outcome === 'success') {
+        await this.audit.record(this.db, {
+          actor: principal.username,
+          actingAs: principal.activeRole === principal.role ? null : principal.activeRole,
+          action: 'download',
+          outcome: 'success',
+          category: row.category,
+          fileId: row.id,
+        });
+      }
+    } finally {
+      await this.operations.record({
+        operation: 'file.download',
         category: row.category,
+        storage: row.storage,
         fileId: row.id,
+        sizeBytes: Number(row.size_bytes),
+        status: outcome === 'success' ? 'ok' : 'error',
       });
     }
   }
@@ -268,24 +273,27 @@ export class DownloadService {
       response.off('close', onClose);
     }
     DOWNLOADS_TOTAL.labels(row.category, outcome).inc();
-    await this.operations.record({
-      operation: 'file.download',
-      category: row.category,
-      storage: row.storage,
-      fileId: row.id,
-      sizeBytes: length,
-      status: outcome === 'success' ? 'ok' : 'error',
-    });
     // A player seeks with many ranges: only the first one (from byte 0) is a custody event.
-    if (outcome === 'success' && range.start === 0) {
-      await this.audit.record(this.db, {
-        actor: principal.username,
-        actingAs: principal.activeRole === principal.role ? null : principal.activeRole,
-        action: 'download',
-        outcome: 'success',
+    try {
+      if (outcome === 'success' && range.start === 0) {
+        await this.audit.record(this.db, {
+          actor: principal.username,
+          actingAs: principal.activeRole === principal.role ? null : principal.activeRole,
+          action: 'download',
+          outcome: 'success',
+          category: row.category,
+          fileId: row.id,
+          details: `range ${range.start}-${range.end}`,
+        });
+      }
+    } finally {
+      await this.operations.record({
+        operation: 'file.download',
         category: row.category,
+        storage: row.storage,
         fileId: row.id,
-        details: `range ${range.start}-${range.end}`,
+        sizeBytes: length,
+        status: outcome === 'success' ? 'ok' : 'error',
       });
     }
   }
@@ -313,6 +321,9 @@ export class DownloadService {
         expectedSha256: row.sha256,
         actualSha256: actual,
         storage: row.storage,
+        // Each file is stored once (on the primary, or on the fallback when the primary was down),
+        // so there is no second copy to restore from.
+        fallbackAvailable: false,
       },
     );
   }

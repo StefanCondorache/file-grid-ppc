@@ -71,6 +71,8 @@ const envSchema = z.object({
   DEMO_USERS_PASSWORD: z.string().min(8, 'must be at least 8 characters').optional(),
   SIMULATOR_URL: z.string().url().default('http://filegrid-simulator.filegrid.svc:8080'),
   UPLOAD_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+  // How often expired upload sessions lose their staged parts (abandoned uploads).
+  UPLOAD_SWEEP_INTERVAL_S: z.coerce.number().min(0.5).max(86_400).default(300),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   // Live stream (GET /stream, ADR-0008).
   STREAM_PING_S: z.coerce.number().min(0.1).max(300).default(20),
@@ -121,6 +123,7 @@ export interface AppConfig {
   readonly demoUsersPassword: string;
   readonly simulatorUrl: string;
   readonly uploadSessionTtlHours: number;
+  readonly uploadSweepIntervalMs: number;
   readonly logLevel: LogLevel;
   readonly stream: {
     readonly pingMs: number;
@@ -216,6 +219,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     demoUsersPassword: e.DEMO_USERS_PASSWORD ?? e.ADMIN_PASSWORD,
     simulatorUrl: e.SIMULATOR_URL,
     uploadSessionTtlHours: e.UPLOAD_SESSION_TTL_HOURS,
+    uploadSweepIntervalMs: Math.round(e.UPLOAD_SWEEP_INTERVAL_S * 1000),
     logLevel: e.LOG_LEVEL,
     stream: {
       pingMs: Math.round(e.STREAM_PING_S * 1000),

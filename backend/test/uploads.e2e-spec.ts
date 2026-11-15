@@ -480,6 +480,8 @@ describe('uploads, downloads and files', () => {
     expect(content.body).toMatchObject({
       code: 'FILE_CORRUPT',
       expectedSha256: done.body.serverSha256,
+      // One copy per file (no replica): the UI offers "notify the storage team", not a restore.
+      fallbackAvailable: false,
     });
     expect(verification.body.state).toBe('corrupt');
     const db = testDb();

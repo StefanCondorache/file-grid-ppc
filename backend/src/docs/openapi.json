@@ -1,0 +1,4540 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FileGrid PPC API",
+    "version": "1.0.0",
+    "description": "The real REST API of the NestJS backend, served by it at `GET /api/v1/docs-json`. It started as the\nfrontend's proposal (docs/api/openapi.frontend-proposal.yaml) and was corrected to what the backend answers;\nbackend/test/docs.e2e-spec.ts checks that every Nest route is here (and only those), that real answers and\nlive events match these schemas, and that every $ref resolves. Prose contract: docs/api.md.\nGenerate the frontend types from it: `API_SPEC=https://<host>/api/v1/docs-json npm run gen:api`.\n\nConventions (apply to every operation, not repeated per path):\n- Base path `/api/v1` on the same origin as the UI (ADR-0002). This document: `GET /api/v1/docs-json` (no session).\n- Auth: httpOnly cookie `__Host-fg_session` (`Secure; HttpOnly; SameSite=Strict; Path=/`) set by `POST /auth/login` (ADR-0006).\n- CSRF: every non-GET/HEAD request carries `X-Requested-With: filegrid`; NestJS also checks `Origin`\n  (or `Sec-Fetch-Site: same-origin`) and answers 403 `CSRF_REJECTED` otherwise. No CORS.\n- Every response, including errors and 202s, carries `X-Trace-Id`; every error body uses `Error`.\n- Timestamps are ISO 8601 UTC (`date-time`); IDs are opaque strings (never parse them).\n- Lists return `{ data, meta }` with offset pagination (`page`, `pageSize`) and `meta.total` + `meta.hasMore`;\n  small fixed lists return `{ data }` only.\n- No storage URL, bucket, object key, FTP path, host or credential ever appears in a body, header or error;\n  storage is the id `s3` | `ftp` | `db` (BA-00c).\n- Personal data (connection documents) is masked by default; clear values only from `POST /files/{fileId}/reveal`.\n- Role checks per the FE-01 matrix; foreign or invisible objects answer 404 (not 403).\n- Error `code` values are UPPER_SNAKE and stable; `message` is Romanian and safe to show.\n"
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth"
+    },
+    {
+      "name": "policies"
+    },
+    {
+      "name": "uploads"
+    },
+    {
+      "name": "files"
+    },
+    {
+      "name": "audit"
+    },
+    {
+      "name": "meters"
+    },
+    {
+      "name": "monitoring"
+    },
+    {
+      "name": "statistics"
+    },
+    {
+      "name": "demo"
+    },
+    {
+      "name": "stream"
+    },
+    {
+      "name": "system"
+    }
+  ],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth_login",
+        "summary": "Log in; sets the session cookie",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in. `Set-Cookie` carries `__Host-fg_session`.",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidCredentials"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/login-options": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "auth_loginOptions",
+        "summary": "Whether the login form asks for a password (public, cacheable for 5 s)",
+        "description": "`passwordless` is true only when the backend runs with `FILEGRID_PASSWORDLESS_LOGIN=true` and demo mode\non (temporary, for the demo). The login page then shows only the role dropdown and sends `{username}`.\n",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth_logout",
+        "summary": "Invalidate the session and clear the cookie",
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/NoContent"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "auth_me",
+        "summary": "Current user, active role, capabilities, demo mode and session expiry",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth_refresh",
+        "summary": "Extend the session (\"Rămân conectat\"); idle timeout restarts, absolute timeout unchanged",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/policies": {
+      "get": {
+        "tags": ["policies"],
+        "operationId": "policies_list",
+        "summary": "All category policies with their current version",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/policies/{category}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CategoryPath"
+        }
+      ],
+      "get": {
+        "tags": ["policies"],
+        "operationId": "policies_get",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["policies"],
+        "operationId": "policies_update",
+        "summary": "Update a policy from the version the admin edited (optimistic concurrency); admin only",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; returns the new version. Uploads already started keep their policy snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`POLICY_VERSION_CONFLICT`: someone saved first; body carries the current policy.",
+            "headers": {
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyConflictError"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/policies/{category}/versions": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CategoryPath"
+        }
+      ],
+      "get": {
+        "tags": ["policies"],
+        "operationId": "policies_versions",
+        "summary": "Version history, newest first",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyVersionListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/uploads": {
+      "post": {
+        "tags": ["uploads"],
+        "operationId": "uploads_create",
+        "summary": "Start an upload; authorised once here for the real user and the active role (BA-65)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay of the same `Idempotency-Key` (header `Idempotent-Replayed: true`); same body as 201.",
+            "headers": {
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["true"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Upload created.",
+            "headers": {
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          }
+        }
+      }
+    },
+    "/uploads/{uploadId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UploadIdPath"
+        }
+      ],
+      "get": {
+        "tags": ["uploads"],
+        "operationId": "uploads_status",
+        "summary": "Received parts and status; the resume source of truth (BA-12); carries the result once finished",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["uploads"],
+        "operationId": "uploads_cancel",
+        "summary": "Cancel; aborts multipart / purges staged parts. Idempotent (BA-14)",
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/NoContent"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/uploads/{uploadId}/parts/{partNumber}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UploadIdPath"
+        },
+        {
+          "name": "partNumber",
+          "in": "path",
+          "required": true,
+          "description": "1-based",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        }
+      ],
+      "put": {
+        "tags": ["uploads"],
+        "operationId": "uploads_putPart",
+        "summary": "Send one part (raw bytes). Same part + same checksum is a no-op (BA-11)",
+        "description": "Exactly `chunkSize` bytes except the last part. `Content-Length` required (no chunked transfer).\nThe server hashes the bytes while streaming them to storage (no body parser, no buffering) and records\nthe part only if the hash equals `X-Part-SHA256`. Same part number with a different checksum before\n`complete` replaces the part.\n",
+        "parameters": [
+          {
+            "name": "X-Part-SHA256",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Sha256"
+            }
+          },
+          {
+            "name": "Content-Length",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 33554432
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Part stored (or already present).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          }
+        }
+      }
+    },
+    "/uploads/{uploadId}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UploadIdPath"
+        }
+      ],
+      "post": {
+        "tags": ["uploads"],
+        "operationId": "uploads_complete",
+        "summary": "Finish with the client SHA-256; server compares with its own (BA-13). Idempotent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verdict. A mismatch is still 200 with `verdict: mismatch`, `status: failed`, `fileId: null`\n(the file is not made available) so the UI can show both hashes.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Verification still running (large file read-back). `Retry-After` in seconds; poll\n`GET /uploads/{uploadId}` until `result` is set. An SSE `upload.verified` event may arrive earlier.\n",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyingResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`PARTS_MISSING` (with `missingRanges`) or `UPLOAD_NOT_OPEN`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/ping": {
+      "head": {
+        "tags": ["system"],
+        "operationId": "system_pingHead",
+        "summary": "Connectivity probe for the upload engine; no auth, no-store",
+        "security": [],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/NoContent"
+          }
+        }
+      },
+      "get": {
+        "tags": ["system"],
+        "operationId": "system_ping",
+        "security": [],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/NoContent"
+          }
+        }
+      }
+    },
+    "/files": {
+      "get": {
+        "tags": ["files"],
+        "operationId": "files_list",
+        "summary": "Search/list files visible to the active role (BA-16)",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Category"
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Zone"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Text search on display name and non-personal metadata (request number allowed; never name/CNP)",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "integrity",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/IntegrityState"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Origin"
+            }
+          },
+          {
+            "name": "excludeGenerated",
+            "in": "query",
+            "description": "\"Ascunde datele generate\": excludes origin simulator/storm/seed",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["-createdAt", "createdAt", "-size", "size"],
+              "default": "-createdAt"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/files/{fileId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileIdPath"
+        }
+      ],
+      "get": {
+        "tags": ["files"],
+        "operationId": "files_get",
+        "summary": "File detail incl. meter readings (BA-17, BA-33); personal data masked",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/files/{fileId}/content": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileIdPath"
+        }
+      ],
+      "get": {
+        "tags": ["files"],
+        "operationId": "files_download",
+        "summary": "Download through the API only (BA-18, N7); works as a plain link with the cookie",
+        "description": "Streams from storage. Headers: `Content-Disposition: attachment` (sanitised `filename` + `filename*`),\n`Content-Type: application/octet-stream`, `X-Content-Type-Options: nosniff`,\n`Content-Security-Policy: default-src 'none'; sandbox`, `ETag` derived from our SHA-256,\n`Cache-Control: no-store` for connection documents. Never a redirect, never a storage URL.\n",
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "bytes=0-1048575"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whole file.",
+            "headers": {
+              "X-File-SHA256": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sha256"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["bytes"]
+                }
+              },
+              "X-Trace-Id": {
+                "$ref": "#/components/headers/XTraceId"
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial content.",
+            "headers": {
+              "X-File-SHA256": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sha256"
+                }
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`FILE_CORRUPT`: detected before streaming; body has `expectedSha256`, `actualSha256`, `storage` and `fallbackAvailable: false` (each file is stored once, so there is no copy to restore: the UI shows \"notify the storage team\").",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "416": {
+            "$ref": "#/components/responses/RangeNotSatisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          }
+        }
+      }
+    },
+    "/files/{fileId}/verification": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileIdPath"
+        }
+      ],
+      "post": {
+        "tags": ["files"],
+        "operationId": "files_verify",
+        "summary": "Server-side re-verification (FE-04 fallback for large files); audited as a custody event",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/files/{fileId}/custody": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileIdPath"
+        }
+      ],
+      "get": {
+        "tags": ["files"],
+        "operationId": "files_custody",
+        "summary": "Chain-of-custody events, oldest first (BA-19)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustodyEventListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/files/{fileId}/reveal": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileIdPath"
+        }
+      ],
+      "post": {
+        "tags": ["files"],
+        "operationId": "files_revealPii",
+        "summary": "Reveal personal data for one connection document; auditor only, reason required, audited (BA-21)",
+        "description": "`Cache-Control: no-store, private`. Calling again before `expiresAt` extends and is audited again.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevealRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clear values, valid until `expiresAt`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevealResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/traces/{traceId}": {
+      "parameters": [
+        {
+          "name": "traceId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": ["files"],
+        "operationId": "traces_get",
+        "summary": "One operation's spans from the operation log (BA-20, D5)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/audit-events": {
+      "get": {
+        "tags": ["audit"],
+        "operationId": "audit_list",
+        "summary": "Audit trail; auditor and admin only",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Username of the actor (userId is accepted as the same filter)"
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AuditAction"
+            }
+          },
+          {
+            "name": "fileId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/meter-readings": {
+      "get": {
+        "tags": ["meters"],
+        "operationId": "meters_listReadings",
+        "summary": "Meter readings as a table; each row links to the normal file detail (BA-30, BA-33)",
+        "parameters": [
+          {
+            "name": "meterId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Zone"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Origin"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK, newest first. `meta.total` may be an estimate (`meta.totalIsEstimate`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeterReadingListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "post": {
+        "tags": ["meters"],
+        "operationId": "meters_ingest",
+        "summary": "Ingest a batch of meter readings (idempotent on readingId)",
+        "security": [
+          {
+            "meterApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeterBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeterBatchResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          }
+        }
+      }
+    },
+    "/meters/counters": {
+      "get": {
+        "tags": ["meters"],
+        "operationId": "meters_counters",
+        "summary": "Received / unique / duplicates rejected / lost, readings per second (BA-32)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeterCounters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meters/simulator": {
+      "get": {
+        "tags": ["meters"],
+        "operationId": "meters_simulatorStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SimulatorUnavailable"
+          }
+        }
+      },
+      "put": {
+        "tags": ["meters"],
+        "operationId": "meters_simulatorUpdate",
+        "summary": "Set normal / peak / custom rate; admin + demo mode only, audited (BA-31)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "503": {
+            "$ref": "#/components/responses/SimulatorUnavailable"
+          }
+        }
+      }
+    },
+    "/guarantees": {
+      "get": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_guarantees",
+        "summary": "Status of the 4 business guarantees; computed by the backend (thresholds live there)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuaranteeListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts": {
+      "get": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_alerts",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "resolved", "all"],
+              "default": "active"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/alerts/{alertId}/acknowledge": {
+      "parameters": [
+        {
+          "name": "alertId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_acknowledgeAlert",
+        "summary": "Acknowledge (who/when recorded). Idempotent",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/storage-health": {
+      "get": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_storageHealth",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageHealthListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/matrix": {
+      "get": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_matrix",
+        "summary": "Category × storage latency p50/p95/p99, throughput, error rate from the operation log (BA-43). Polled every 5 s",
+        "parameters": [
+          {
+            "name": "window",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["5m", "1h", "24h"],
+              "default": "5m"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsMatrix"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/bulkhead": {
+      "get": {
+        "tags": ["monitoring"],
+        "operationId": "monitoring_bulkhead",
+        "summary": "Per-category latency time series on one shared axis (BA-44). Polled every 5 s",
+        "parameters": [
+          {
+            "name": "window",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["5m", "15m", "1h"],
+              "default": "15m"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkheadSeries"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/statistics/periods": {
+      "get": {
+        "tags": ["statistics"],
+        "operationId": "statistics_periods",
+        "summary": "Labelled normal/peak periods (seed days and each storm run)",
+        "responses": {
+          "200": {
+            "description": "OK, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/statistics/storage-fit": {
+      "get": {
+        "tags": ["statistics"],
+        "operationId": "statistics_storageFit",
+        "summary": "S1 — measured performance per category × storage and a recommendation",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageFit"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/statistics/period-comparison": {
+      "get": {
+        "tags": ["statistics"],
+        "operationId": "statistics_periodComparison",
+        "summary": "S2 — the same metrics for two labelled periods (default last normal vs most recent peak)",
+        "parameters": [
+          {
+            "name": "a",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "A period id from GET /statistics/periods"
+          },
+          {
+            "name": "b",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodComparison"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/statistics/grid-insights": {
+      "get": {
+        "tags": ["statistics"],
+        "operationId": "statistics_gridInsights",
+        "summary": "S3 — faults by zone, consumption by hour and zone, meter anomalies",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GridInsights"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/status": {
+      "get": {
+        "tags": ["demo"],
+        "operationId": "demo_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/acting-role": {
+      "post": {
+        "tags": ["demo"],
+        "operationId": "demo_setActingRole",
+        "summary": "Act as another role (admin, demo mode, allow-listed, TTL, audited with real_user/acting_as)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActingRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new `me`. Clients reconnect the stream (it is filtered by the active role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["demo"],
+        "operationId": "demo_clearActingRole",
+        "summary": "Return to the real role",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/storms": {
+      "post": {
+        "tags": ["demo"],
+        "operationId": "demo_startStorm",
+        "summary": "Start a 10× storm for one category; records a labelled peak period; server caps factor and duration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StormRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Storm started: the simulator status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "503": {
+            "$ref": "#/components/responses/SimulatorUnavailable"
+          }
+        }
+      }
+    },
+    "/demo/storms/{category}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CategoryPath"
+        }
+      ],
+      "delete": {
+        "tags": ["demo"],
+        "operationId": "demo_stopStorm",
+        "responses": {
+          "200": {
+            "description": "Back to the normal rate: the simulator status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/SimulatorUnavailable"
+          }
+        }
+      }
+    },
+    "/demo/corruptions": {
+      "post": {
+        "tags": ["demo"],
+        "operationId": "demo_corruptFile",
+        "summary": "Alter the stored bytes of one file (stored hash kept); audited (BA-62, OQ-11)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorruptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorruptionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream": {
+      "get": {
+        "tags": ["stream"],
+        "operationId": "stream_subscribe",
+        "summary": "Server-Sent Events for the active role",
+        "description": "`Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`.\nFirst line `retry: 3000`. Every event has a monotonic `id:`; there is no replay (`Last-Event-ID` is ignored). A `ping` event every 20 s. Events are filtered by the session's active role and\nthe stream closes when the session ends. `data:` is one JSON object; the schema per `event:` name is in\n`x-sse-events` (all schemas are also in `components.schemas`). Events are snapshots or hints; clients refetch over REST after (re)connecting.\n",
+        "x-sse-events": {
+          "ping": "#/components/schemas/PingEvent",
+          "meters.counters": "#/components/schemas/MeterCounters",
+          "guarantees.status": "#/components/schemas/GuaranteesStatusEvent",
+          "alert.raised": "#/components/schemas/Alert",
+          "alert.updated": "#/components/schemas/Alert",
+          "storage.health": "#/components/schemas/StorageHealthEvent",
+          "file.created": "#/components/schemas/FileCreatedEvent",
+          "file.integrity": "#/components/schemas/FileIntegrityEvent",
+          "upload.verified": "#/components/schemas/UploadVerifiedEvent",
+          "policy.updated": "#/components/schemas/PolicyUpdatedEvent",
+          "simulator.status": "#/components/schemas/SimulatorStatus",
+          "demo.storm": "#/components/schemas/DemoStormEvent"
+        },
+        "responses": {
+          "200": {
+            "description": "Event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "description": "`STREAM_BUSY`: STREAM_MAX_CLIENTS live streams are open on this replica (with `Retry-After`), or the replica is stopping",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/storages/{storage}/{action}": {
+      "parameters": [
+        {
+          "name": "storage",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": ["s3", "ftp"]
+          },
+          "description": "db is refused (422): PostgreSQL also holds the metadata"
+        },
+        {
+          "name": "action",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": ["stop", "start"]
+          }
+        }
+      ],
+      "post": {
+        "tags": ["demo"],
+        "operationId": "demo_setStorage",
+        "summary": "Stop or start one storage through the k8s API (demo mode, admin, audited)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageControlResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-fg_session"
+      },
+      "meterApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "METER_API_KEY, for the simulator and smart meters"
+      }
+    },
+    "headers": {
+      "XTraceId": {
+        "description": "Trace ID of this request; shown in the UI and resolvable via `GET /traces/{traceId}`",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "parameters": {
+      "CategoryPath": {
+        "name": "category",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Category"
+        }
+      },
+      "UploadIdPath": {
+        "name": "uploadId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FileIdPath": {
+        "name": "fileId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Client-generated UUID, persisted before the call",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "PageSize": {
+        "name": "pageSize",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      }
+    },
+    "responses": {
+      "NoContent": {
+        "description": "No content",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        }
+      },
+      "InvalidCredentials": {
+        "description": "`INVALID_CREDENTIALS` (never says which field was wrong)",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "`UNAUTHENTICATED`: no or expired session",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "`FORBIDDEN`, `CSRF_REJECTED`, `DEMO_MODE_OFF`",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "`NOT_FOUND`, `UPLOAD_NOT_FOUND` (also for objects the caller may not see)",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "`UPLOAD_NOT_OPEN`, `UPLOAD_COMPLETED`, `IDEMPOTENCY_KEY_REUSED`, `STORM_ALREADY_RUNNING`",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "`FILE_TOO_LARGE`, `PART_TOO_LARGE`",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ValidationFailed": {
+        "description": "`VALIDATION_ERROR` (with `fieldErrors`), `TYPE_NOT_ALLOWED`, `PART_CHECKSUM_MISMATCH`, `PART_SIZE_MISMATCH`, `PART_NUMBER_OUT_OF_RANGE`, `PART_COUNT_MISMATCH`, `REASON_TOO_SHORT`",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RangeNotSatisfiable": {
+        "description": "`RANGE_NOT_SATISFIABLE`",
+        "headers": {
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "`RATE_LIMITED`",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "StorageUnavailable": {
+        "description": "`STORAGE_UNAVAILABLE`: the target storage is down; `storage` names it; other categories are unaffected",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-Trace-Id": {
+            "$ref": "#/components/headers/XTraceId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SimulatorUnavailable": {
+        "description": "The simulator is unreachable (SIMULATOR_UNAVAILABLE); retry later",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Category": {
+        "type": "string",
+        "enum": ["meter_readings", "fault_records", "connection_documents", "drone_videos"],
+        "description": "Team ids shared by the API, metrics and dashboards: meter_readings = citiri contoare, fault_records = înregistrări de avarie, connection_documents = documente de racordare, drone_videos = video inspecții dronă"
+      },
+      "UploadCategory": {
+        "type": "string",
+        "enum": ["fault_records", "connection_documents", "drone_videos"],
+        "description": "Categories uploaded from the UI (meter readings arrive from the simulator)"
+      },
+      "StorageLabel": {
+        "type": "string",
+        "enum": ["s3", "ftp", "db"],
+        "description": "A storage id only (db = PostgreSQL), never a URL, bucket, host or path."
+      },
+      "Role": {
+        "type": "string",
+        "enum": ["teren", "dispecerat", "racordari", "auditor", "admin"]
+      },
+      "Capability": {
+        "type": "string",
+        "enum": [
+          "upload_drone",
+          "upload_fault",
+          "upload_connection",
+          "view_drone",
+          "view_fault",
+          "view_connection",
+          "reveal_pii",
+          "view_meters",
+          "view_observability",
+          "view_statistics",
+          "view_audit",
+          "edit_policies",
+          "demo_controls"
+        ]
+      },
+      "Zone": {
+        "type": "string",
+        "enum": ["muntenia", "banat", "dobrogea"]
+      },
+      "Origin": {
+        "type": "string",
+        "enum": ["manual", "simulator", "storm", "seed"]
+      },
+      "IntegrityState": {
+        "type": "string",
+        "enum": ["verified", "server_verified", "unverified", "corrupt"]
+      },
+      "GuaranteeState": {
+        "type": "string",
+        "enum": ["ok", "at_risk", "violated"]
+      },
+      "StorageStatus": {
+        "type": "string",
+        "enum": ["ok", "degraded", "down"]
+      },
+      "UploadState": {
+        "type": "string",
+        "enum": ["open", "verifying", "completed", "failed", "aborted", "expired"]
+      },
+      "AuditAction": {
+        "type": "string",
+        "enum": [
+          "login",
+          "logout",
+          "role_switch",
+          "upload",
+          "download",
+          "verify",
+          "reveal_pii",
+          "policy_update",
+          "storm_start",
+          "storm_stop",
+          "file_corrupted",
+          "alert_ack",
+          "simulator_rate"
+        ]
+      },
+      "Sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "Lowercase hex SHA-256"
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message", "traceId"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "PART_CHECKSUM_MISMATCH"
+          },
+          "message": {
+            "type": "string",
+            "description": "Romanian, safe to show",
+            "example": "Suma de control a părții nu coincide."
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "fieldErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "nullable": true
+          },
+          "storage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLabel"
+              }
+            ],
+            "nullable": true
+          },
+          "missingRanges": {
+            "$ref": "#/components/schemas/PartRanges"
+          },
+          "expectedSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "actualSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "fallbackAvailable": {
+            "type": "boolean",
+            "description": "FILE_CORRUPT only: whether a second copy exists to restore from (always false: one copy per file)"
+          }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "required": ["field", "code", "message"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "metadata.cnp"
+          },
+          "code": {
+            "type": "string",
+            "example": "invalid_format"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyConflictError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "required": ["currentPolicy"],
+            "properties": {
+              "currentPolicy": {
+                "$ref": "#/components/schemas/Policy"
+              }
+            }
+          }
+        ]
+      },
+      "PageMeta": {
+        "type": "object",
+        "required": ["page", "pageSize", "total", "hasMore"],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "totalIsEstimate": {
+            "type": "boolean",
+            "default": false
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserRef": {
+        "type": "object",
+        "required": ["id", "username", "displayName", "role"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "Interpretation": {
+        "type": "object",
+        "required": ["facts"],
+        "description": "OQ-7. Either the backend sends Romanian `text` + `recommendation`, or null and the UI templates them from `facts`.",
+        "properties": {
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "recommendation": {
+            "type": "string",
+            "nullable": true
+          },
+          "facts": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username"],
+        "description": "`password` is required unless `GET /auth/login-options` answers `passwordless: true`.",
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 200
+          }
+        }
+      },
+      "LoginOptions": {
+        "type": "object",
+        "required": ["passwordless"],
+        "properties": {
+          "passwordless": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "required": [
+          "user",
+          "realUser",
+          "activeRole",
+          "roles",
+          "capabilities",
+          "demoMode",
+          "expiresAt",
+          "idleExpiresAt",
+          "serverTime"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "realUser": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "activeRole": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          },
+          "demoMode": {
+            "type": "boolean"
+          },
+          "actingRoleExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Absolute session expiry"
+          },
+          "idleExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Idle expiry; the UI warns 2 min before the earlier of the two"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Policy": {
+        "type": "object",
+        "required": [
+          "category",
+          "version",
+          "primaryStorage",
+          "encryptionAtRest",
+          "encryptionLocked",
+          "chunkSize",
+          "maxParallel",
+          "maxFileSize",
+          "allowedTypes",
+          "retentionDays",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "primaryStorage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "fallbackStorage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLabel"
+              }
+            ],
+            "nullable": true
+          },
+          "encryptionAtRest": {
+            "type": "boolean"
+          },
+          "encryptionLocked": {
+            "type": "boolean",
+            "description": "true for connection documents (always encrypted)"
+          },
+          "encryptionAlgorithm": {
+            "type": "string",
+            "nullable": true,
+            "example": "AES-256-GCM"
+          },
+          "chunkSize": {
+            "type": "integer",
+            "minimum": 5242880,
+            "maximum": 33554432,
+            "description": "Bytes; 5–32 MiB (ADR-0005)"
+          },
+          "maxParallel": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "maxFileSize": {
+            "type": "integer",
+            "description": "Bytes"
+          },
+          "allowedTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "example": "video/mp4"
+            }
+          },
+          "retentionDays": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        }
+      },
+      "PolicyUpdateRequest": {
+        "type": "object",
+        "required": [
+          "baseVersion",
+          "primaryStorage",
+          "encryptionAtRest",
+          "chunkSize",
+          "maxParallel",
+          "maxFileSize",
+          "allowedTypes",
+          "retentionDays"
+        ],
+        "properties": {
+          "baseVersion": {
+            "type": "integer",
+            "description": "The version the admin edited; stale → 409"
+          },
+          "primaryStorage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "fallbackStorage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLabel"
+              }
+            ],
+            "nullable": true
+          },
+          "encryptionAtRest": {
+            "type": "boolean"
+          },
+          "chunkSize": {
+            "type": "integer",
+            "minimum": 1048576,
+            "maximum": 33554432
+          },
+          "maxParallel": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "maxFileSize": {
+            "type": "integer"
+          },
+          "allowedTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50
+          },
+          "retentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 36500
+          },
+          "maxConcurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 256,
+            "description": "Server-side bulkhead for the category; unchanged when omitted"
+          }
+        }
+      },
+      "PolicyChange": {
+        "type": "object",
+        "required": ["field", "from", "to"],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PolicyVersion": {
+        "type": "object",
+        "required": ["version", "policy", "changedAt", "changedBy", "changes"],
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolicyChange"
+            }
+          }
+        }
+      },
+      "PolicyListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Policy"
+            }
+          }
+        }
+      },
+      "PolicyVersionListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolicyVersion"
+            }
+          }
+        }
+      },
+      "FaultMetadata": {
+        "type": "object",
+        "required": ["kind", "zone", "substation", "eventTime", "severity"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["fault"]
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          },
+          "substation": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "eventTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          }
+        }
+      },
+      "ConnectionMetadataInput": {
+        "type": "object",
+        "required": ["kind", "requestNumber", "documentType", "applicantName", "cnp"],
+        "description": "Sent once at upload start; never echoed back in clear (personal data).",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["connection"]
+          },
+          "requestNumber": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "documentType": {
+            "type": "string",
+            "enum": ["cerere", "act_identitate", "aviz"]
+          },
+          "applicantName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "cnp": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{12}$"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          }
+        }
+      },
+      "ConnectionMetadataMasked": {
+        "type": "object",
+        "required": ["kind", "requestNumber", "documentType", "applicantNameMasked", "cnpMasked"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["connection"]
+          },
+          "requestNumber": {
+            "type": "string"
+          },
+          "documentType": {
+            "type": "string",
+            "enum": ["cerere", "act_identitate", "aviz"]
+          },
+          "applicantNameMasked": {
+            "type": "string",
+            "example": "I*** P***"
+          },
+          "cnpMasked": {
+            "type": "string",
+            "example": "1********123"
+          }
+        }
+      },
+      "DroneMetadata": {
+        "type": "object",
+        "required": ["kind", "lineSection", "zone", "inspectionDate"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["drone"]
+          },
+          "lineSection": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          },
+          "inspectionDate": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "MeterReadingFields": {
+        "type": "object",
+        "required": ["kind", "meterId", "zone", "readingTime", "kwh", "sequence"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["meter"]
+          },
+          "meterId": {
+            "type": "string"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          },
+          "readingTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kwh": {
+            "type": "number",
+            "format": "double"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PartRanges": {
+        "type": "array",
+        "description": "Inclusive 1-based part-number ranges, e.g. [[1,41],[43,43]]",
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "CreateUploadRequest": {
+        "type": "object",
+        "required": ["category", "fileName", "fileSize", "mimeType", "metadata"],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/UploadCategory"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "fileSize": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Bytes; a hint, the server counts real bytes"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "lastModified": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "requestedChunkSize": {
+            "type": "integer",
+            "nullable": true
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FaultMetadata"
+              },
+              {
+                "$ref": "#/components/schemas/ConnectionMetadataInput"
+              },
+              {
+                "$ref": "#/components/schemas/DroneMetadata"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "fault": "#/components/schemas/FaultMetadata",
+                "connection": "#/components/schemas/ConnectionMetadataInput",
+                "drone": "#/components/schemas/DroneMetadata"
+              }
+            }
+          }
+        }
+      },
+      "UploadSession": {
+        "type": "object",
+        "required": [
+          "uploadId",
+          "status",
+          "chunkSize",
+          "partCount",
+          "maxParallel",
+          "policyVersion",
+          "maxFileSize",
+          "expiresAt",
+          "displayName",
+          "receivedRanges"
+        ],
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UploadState"
+          },
+          "chunkSize": {
+            "type": "integer",
+            "description": "Authoritative; fixed for this upload"
+          },
+          "partCount": {
+            "type": "integer"
+          },
+          "maxParallel": {
+            "type": "integer"
+          },
+          "policyVersion": {
+            "type": "integer"
+          },
+          "maxFileSize": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Refreshed by each part (suggested 24 h inactivity)"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display-safe name (no personal data)"
+          },
+          "receivedRanges": {
+            "$ref": "#/components/schemas/PartRanges"
+          }
+        }
+      },
+      "UploadStatus": {
+        "type": "object",
+        "required": [
+          "uploadId",
+          "status",
+          "fileSize",
+          "chunkSize",
+          "partCount",
+          "receivedRanges",
+          "receivedBytes",
+          "policyVersion",
+          "expiresAt",
+          "startedAsRole"
+        ],
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UploadState"
+          },
+          "fileSize": {
+            "type": "integer"
+          },
+          "chunkSize": {
+            "type": "integer"
+          },
+          "partCount": {
+            "type": "integer"
+          },
+          "receivedRanges": {
+            "$ref": "#/components/schemas/PartRanges"
+          },
+          "receivedBytes": {
+            "type": "integer"
+          },
+          "policyVersion": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAsRole": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CompleteResult"
+              }
+            ],
+            "nullable": true
+          },
+          "error": {
+            "type": "object",
+            "nullable": true,
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PartReceipt": {
+        "type": "object",
+        "required": ["partNumber", "size", "sha256", "alreadyReceived", "traceId"],
+        "properties": {
+          "partNumber": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "alreadyReceived": {
+            "type": "boolean"
+          },
+          "traceId": {
+            "type": "string",
+            "description": "The trace of this part (the same as X-Trace-Id): GET /traces/{traceId}"
+          }
+        }
+      },
+      "CompleteRequest": {
+        "type": "object",
+        "required": ["sha256", "partCount"],
+        "properties": {
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "partCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "VerifyingResponse": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["verifying"]
+          }
+        }
+      },
+      "CompleteResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "verdict",
+          "fileId",
+          "clientSha256",
+          "serverSha256",
+          "size",
+          "storage",
+          "usedFallback",
+          "policyVersion",
+          "encryptedAtRest",
+          "traceId"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["completed", "failed"]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["match", "mismatch"]
+          },
+          "fileId": {
+            "type": "string",
+            "nullable": true,
+            "description": "null on mismatch (file not available)"
+          },
+          "clientSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "serverSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "usedFallback": {
+            "type": "boolean"
+          },
+          "policyVersion": {
+            "type": "integer"
+          },
+          "encryptedAtRest": {
+            "type": "boolean"
+          },
+          "availableAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Faults only"
+          },
+          "availableAfterMs": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Faults only: upload-complete → listable (\"în 1,2 s\")"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "FileSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "category",
+          "size",
+          "mimeType",
+          "createdAt",
+          "uploadedBy",
+          "origin",
+          "storage",
+          "usedFallback",
+          "integrity",
+          "encryptedAtRest",
+          "policyVersion"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display-safe; never contains personal data"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uploadedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ],
+            "nullable": true,
+            "description": "null for simulator readings"
+          },
+          "zone": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Zone"
+              }
+            ],
+            "nullable": true
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "usedFallback": {
+            "type": "boolean"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/IntegrityState"
+          },
+          "encryptedAtRest": {
+            "type": "boolean"
+          },
+          "policyVersion": {
+            "type": "integer"
+          }
+        }
+      },
+      "FileDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FileSummary"
+          },
+          {
+            "type": "object",
+            "required": ["serverSha256", "policyName", "metadata", "uploadTraceId"],
+            "properties": {
+              "clientSha256": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Sha256"
+                  }
+                ],
+                "nullable": true,
+                "description": "null for simulator readings"
+              },
+              "serverSha256": {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              "policyName": {
+                "type": "string"
+              },
+              "encryptionAlgorithm": {
+                "type": "string",
+                "nullable": true
+              },
+              "availableAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "availableAfterMs": {
+                "type": "integer",
+                "nullable": true
+              },
+              "uploadTraceId": {
+                "type": "string"
+              },
+              "lastVerifiedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "metadata": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FaultMetadata"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConnectionMetadataMasked"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DroneMetadata"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MeterReadingFields"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "fault": "#/components/schemas/FaultMetadata",
+                    "connection": "#/components/schemas/ConnectionMetadataMasked",
+                    "drone": "#/components/schemas/DroneMetadata",
+                    "meter": "#/components/schemas/MeterReadingFields"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "FileListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileSummary"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "VerificationResult": {
+        "type": "object",
+        "required": ["fileId", "state", "expectedSha256", "storage", "verifiedAt", "traceId"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["server_verified", "corrupt"]
+          },
+          "expectedSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "actualSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "CustodyEvent": {
+        "type": "object",
+        "required": ["id", "type", "at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "created",
+              "upload_started",
+              "upload_resumed",
+              "upload_completed",
+              "hash_verified",
+              "policy_applied",
+              "stored",
+              "fallback_used",
+              "downloaded",
+              "verified",
+              "corruption_detected",
+              "pii_revealed",
+              "demo_corrupted"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ],
+            "nullable": true
+          },
+          "actingAs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ],
+            "nullable": true
+          },
+          "demo": {
+            "type": "boolean",
+            "default": false
+          },
+          "storage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLabel"
+              }
+            ],
+            "nullable": true
+          },
+          "policyVersion": {
+            "type": "integer",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "For pii_revealed"
+          },
+          "traceId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CustodyEventListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustodyEvent"
+            }
+          }
+        }
+      },
+      "Span": {
+        "type": "object",
+        "required": [
+          "spanId",
+          "name",
+          "startOffsetMs",
+          "durationMs",
+          "status",
+          "parentSpanId",
+          "attributes"
+        ],
+        "properties": {
+          "spanId": {
+            "type": "string"
+          },
+          "parentSpanId": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "The step: api (the whole request, always first), policy, encryption, storage.put, storage.get, hash.verify, audit, confirm. Never a path, key or host"
+          },
+          "startOffsetMs": {
+            "type": "number"
+          },
+          "durationMs": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "error"]
+          },
+          "storage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLabel"
+              }
+            ],
+            "nullable": true
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Allow-listed, non-personal attributes: method, path (no query), uploadId, partNumber, category, storage, encrypted, sizeBytes, algorithm, keyId, action, outcome (see docs/api.md, \"Trace spans\")"
+          }
+        }
+      },
+      "Trace": {
+        "type": "object",
+        "required": ["traceId", "operation", "startedAt", "durationMs", "status", "spans"],
+        "properties": {
+          "traceId": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "example": "upload.complete"
+          },
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Category"
+              }
+            ],
+            "nullable": true
+          },
+          "fileId": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMs": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "error"]
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            }
+          }
+        }
+      },
+      "RevealRequest": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        }
+      },
+      "RevealResult": {
+        "type": "object",
+        "required": ["fileId", "applicantName", "cnp", "expiresAt", "auditEventId"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "cnp": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Suggested now + 60 s"
+          },
+          "auditEventId": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "at", "actor", "demo", "action", "traceId"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/ActorRef"
+          },
+          "actingAs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ],
+            "nullable": true
+          },
+          "demo": {
+            "type": "boolean"
+          },
+          "action": {
+            "$ref": "#/components/schemas/AuditAction"
+          },
+          "fileId": {
+            "type": "string",
+            "nullable": true
+          },
+          "fileDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "type": "string",
+            "nullable": true,
+            "description": "Non-personal summary, e.g. chunkSize 8 MiB → 16 MiB"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEventListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "MeterReading": {
+        "type": "object",
+        "required": [
+          "fileId",
+          "meterId",
+          "zone",
+          "readingTime",
+          "kwh",
+          "sequence",
+          "receivedAt",
+          "storage",
+          "origin"
+        ],
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "description": "Opens the normal file detail and download"
+          },
+          "meterId": {
+            "type": "string"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          },
+          "readingTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kwh": {
+            "type": "number",
+            "format": "double"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          }
+        }
+      },
+      "MeterReadingListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeterReading"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "MeterCounters": {
+        "type": "object",
+        "required": ["received", "unique", "duplicatesRejected", "lost", "ratePerS", "at"],
+        "properties": {
+          "received": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unique": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicatesRejected": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lost": {
+            "type": "integer",
+            "format": "int64",
+            "description": "sent - acked - queued as the simulator reports it; null while the simulator is unreachable. Must stay 0",
+            "nullable": true
+          },
+          "ratePerS": {
+            "type": "number"
+          },
+          "byZone": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["zone", "received", "ratePerS"],
+              "properties": {
+                "zone": {
+                  "$ref": "#/components/schemas/Zone"
+                },
+                "received": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "ratePerS": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimulatorStatus": {
+        "type": "object",
+        "required": ["mode", "ratePerS", "normalRatePerS", "peakRatePerS"],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["normal", "peak", "custom", "stopped"]
+          },
+          "ratePerS": {
+            "type": "number"
+          },
+          "normalRatePerS": {
+            "type": "number"
+          },
+          "peakRatePerS": {
+            "type": "number"
+          },
+          "queueDepth": {
+            "type": "integer"
+          },
+          "stormEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sentUnique": {
+            "type": "integer"
+          },
+          "ackedUnique": {
+            "type": "integer"
+          }
+        }
+      },
+      "SimulatorUpdate": {
+        "type": "object",
+        "required": ["mode"],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["normal", "peak", "custom", "stopped"]
+          },
+          "ratePerS": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "description": "Required when mode = custom; server-capped",
+            "maximum": 1000
+          },
+          "durationS": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600,
+            "description": "Peak mode only: back to normal after this many seconds"
+          }
+        }
+      },
+      "GuaranteeMetric": {
+        "type": "object",
+        "required": ["key", "value"],
+        "description": "Keys: received, unique, duplicatesRejected, lost (meter); uploadToAvailableP95Ms (fault); encryptedPct, unmaskEventsToday, lastAuditCheckAt (connection); transfersCompleted, transfersResumed, transfersFailed, successRate (drone)",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string",
+            "description": "Numeric values as decimal strings; timestamps ISO; null while there is no data in the window",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string",
+            "nullable": true,
+            "example": "ms"
+          },
+          "threshold": {
+            "type": "string",
+            "nullable": true
+          },
+          "comparator": {
+            "type": "string",
+            "nullable": true,
+            "enum": ["lt", "lte", "eq", "gte", "gt"]
+          }
+        }
+      },
+      "GuaranteeStatus": {
+        "type": "object",
+        "required": ["category", "state", "metrics", "updatedAt"],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GuaranteeState"
+          },
+          "causeCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuaranteeMetric"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GuaranteeListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuaranteeStatus"
+            }
+          }
+        }
+      },
+      "Alert": {
+        "type": "object",
+        "required": ["id", "category", "state", "raisedAt", "causeCode"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["at_risk", "violated", "resolved"]
+          },
+          "raisedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "causeCode": {
+            "type": "string",
+            "example": "FAULT_P95_ABOVE_TARGET"
+          },
+          "causeFacts": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Values the UI uses to build the Romanian sentence"
+          },
+          "traceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "acknowledgedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "acknowledgedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "AlertListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "StorageHealth": {
+        "type": "object",
+        "required": ["storage", "status", "lastCheckAt", "circuitState"],
+        "properties": {
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StorageStatus"
+          },
+          "latencyMs": {
+            "type": "number",
+            "nullable": true
+          },
+          "lastCheckAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "circuitState": {
+            "type": "string",
+            "enum": ["closed", "open", "half_open"]
+          }
+        }
+      },
+      "StorageHealthListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageHealth"
+            }
+          }
+        }
+      },
+      "MetricsCell": {
+        "type": "object",
+        "required": ["category", "storage", "requests", "noTraffic"],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "noTraffic": {
+            "type": "boolean"
+          },
+          "p50Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "p95Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "p99Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "throughputBps": {
+            "type": "number",
+            "nullable": true
+          },
+          "opsPerS": {
+            "type": "number",
+            "nullable": true
+          },
+          "errorRate": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "sparkline": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "nullable": true
+            },
+            "description": "Optional p95 per step for the cell sparkline"
+          }
+        }
+      },
+      "MetricsMatrix": {
+        "type": "object",
+        "required": ["window", "generatedAt", "cells"],
+        "properties": {
+          "window": {
+            "type": "string",
+            "enum": ["5m", "1h", "24h"]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricsCell"
+            }
+          }
+        }
+      },
+      "BulkheadPoint": {
+        "type": "object",
+        "required": ["t"],
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "p95Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "opsPerS": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "BulkheadSeries": {
+        "type": "object",
+        "required": ["window", "stepS", "series"],
+        "properties": {
+          "window": {
+            "type": "string",
+            "enum": ["5m", "15m", "1h"]
+          },
+          "stepS": {
+            "type": "integer"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["category", "points"],
+              "properties": {
+                "category": {
+                  "$ref": "#/components/schemas/Category"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BulkheadPoint"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Period": {
+        "type": "object",
+        "required": ["id", "label", "kind", "origin", "start", "end"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "example": "Furtună 14 nov 15:20"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["normal", "peak"]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "null while a storm is running"
+          }
+        }
+      },
+      "PeriodListResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Period"
+            }
+          }
+        }
+      },
+      "StoragePerformance": {
+        "type": "object",
+        "required": ["storage", "samples"],
+        "properties": {
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "samples": {
+            "type": "integer"
+          },
+          "p50Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "p95Ms": {
+            "type": "number",
+            "nullable": true
+          },
+          "throughputBps": {
+            "type": "number",
+            "nullable": true
+          },
+          "errorRate": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "StorageFit": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "periodId": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["category", "storages", "recommendedStorage", "interpretation"],
+              "properties": {
+                "category": {
+                  "$ref": "#/components/schemas/Category"
+                },
+                "storages": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoragePerformance"
+                  }
+                },
+                "recommendedStorage": {
+                  "$ref": "#/components/schemas/StorageLabel"
+                },
+                "interpretation": {
+                  "$ref": "#/components/schemas/Interpretation"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PeriodComparison": {
+        "type": "object",
+        "required": ["periodA", "periodB", "rows", "interpretation"],
+        "properties": {
+          "periodA": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "periodB": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["category", "metric", "a", "b"],
+              "properties": {
+                "category": {
+                  "$ref": "#/components/schemas/Category"
+                },
+                "metric": {
+                  "type": "string",
+                  "enum": ["p95Ms", "opsPerS", "errorRate", "volume"]
+                },
+                "a": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "b": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "deltaPct": {
+                  "type": "number",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "interpretation": {
+            "$ref": "#/components/schemas/Interpretation"
+          }
+        }
+      },
+      "GridInsights": {
+        "type": "object",
+        "required": ["faultsByZone", "consumptionByHourZone", "anomalies", "interpretation"],
+        "properties": {
+          "faultsByZone": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["zone", "count"],
+              "properties": {
+                "zone": {
+                  "$ref": "#/components/schemas/Zone"
+                },
+                "county": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "OQ-6; null when granularity is the 3 regions"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "consumptionByHourZone": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["zone", "hour", "avgKwh"],
+              "properties": {
+                "zone": {
+                  "$ref": "#/components/schemas/Zone"
+                },
+                "hour": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "avgKwh": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "anomalies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["meterId", "zone", "type", "detectedAt"],
+              "properties": {
+                "meterId": {
+                  "type": "string"
+                },
+                "zone": {
+                  "$ref": "#/components/schemas/Zone"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["zero", "negative", "spike", "silent"]
+                },
+                "detectedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "value": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "fileId": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "interpretation": {
+            "$ref": "#/components/schemas/Interpretation"
+          }
+        }
+      },
+      "Storm": {
+        "type": "object",
+        "required": ["category", "endsAt"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["meter_readings"]
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "DemoStatus": {
+        "type": "object",
+        "required": ["demoMode", "simulator", "storm", "storages"],
+        "properties": {
+          "demoMode": {
+            "type": "boolean"
+          },
+          "simulator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimulatorStatus"
+              }
+            ],
+            "nullable": true,
+            "description": "null while the simulator is unreachable"
+          },
+          "storm": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Storm"
+              }
+            ],
+            "nullable": true,
+            "description": "The running meter storm, null when none"
+          },
+          "storages": {
+            "type": "object",
+            "required": ["s3", "ftp", "db"],
+            "properties": {
+              "s3": {
+                "$ref": "#/components/schemas/DemoStorageState"
+              },
+              "ftp": {
+                "$ref": "#/components/schemas/DemoStorageState"
+              },
+              "db": {
+                "$ref": "#/components/schemas/DemoStorageState"
+              }
+            }
+          }
+        }
+      },
+      "StormRequest": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["meter_readings"],
+            "default": "meter_readings"
+          },
+          "durationS": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 3600,
+            "default": 300
+          }
+        }
+      },
+      "CorruptionRequest": {
+        "type": "object",
+        "required": ["fileId"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          }
+        }
+      },
+      "CorruptionResult": {
+        "type": "object",
+        "required": ["fileId", "storage", "corruptedAt"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "corruptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ActingRoleRequest": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          }
+        }
+      },
+      "PingEvent": {
+        "type": "object",
+        "required": ["serverTime"],
+        "properties": {
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GuaranteesStatusEvent": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuaranteeStatus"
+            }
+          }
+        }
+      },
+      "StorageHealthEvent": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageHealth"
+            }
+          }
+        }
+      },
+      "FileCreatedEvent": {
+        "type": "object",
+        "required": ["fileId", "category", "origin", "createdAt"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "zone": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Zone"
+              }
+            ],
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true,
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "substation": {
+            "type": "string",
+            "nullable": true
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "availableAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "FileIntegrityEvent": {
+        "type": "object",
+        "required": ["fileId", "state"],
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/IntegrityState"
+          },
+          "traceId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UploadVerifiedEvent": {
+        "type": "object",
+        "required": ["uploadId", "verdict"],
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "fileId": {
+            "type": "string",
+            "nullable": true
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["match", "mismatch"]
+          },
+          "serverSha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "availableAfterMs": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "PolicyUpdatedEvent": {
+        "type": "object",
+        "required": ["category", "version"],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "DemoStormEvent": {
+        "type": "object",
+        "required": ["category", "factor", "state"],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "factor": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["started", "stopped"]
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "MeterReadingInput": {
+        "type": "object",
+        "required": ["readingId", "meterId", "zone", "readingTime", "kwh", "sequence"],
+        "properties": {
+          "readingId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:._-]{1,80}$",
+            "description": "Idempotency key: a reading sent twice is stored once"
+          },
+          "meterId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]{1,64}$"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          },
+          "readingTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kwh": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["simulator", "storm", "seed"],
+            "default": "simulator"
+          }
+        }
+      },
+      "MeterBatch": {
+        "type": "object",
+        "required": ["readings"],
+        "properties": {
+          "readings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/MeterReadingInput"
+            }
+          }
+        }
+      },
+      "MeterBatchResult": {
+        "type": "object",
+        "required": ["received", "stored", "duplicates", "traceId"],
+        "properties": {
+          "received": {
+            "type": "integer"
+          },
+          "stored": {
+            "type": "integer"
+          },
+          "duplicates": {
+            "type": "integer",
+            "description": "Already stored before (retries); acknowledged, never stored twice"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "DemoStorageState": {
+        "type": "object",
+        "required": ["up", "latencyMs", "circuit", "lastCheckAt"],
+        "properties": {
+          "up": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "null before the first health probe"
+          },
+          "latencyMs": {
+            "type": "number",
+            "nullable": true
+          },
+          "circuit": {
+            "type": "string",
+            "enum": ["closed", "open", "half_open"]
+          },
+          "lastCheckAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "StorageControlResult": {
+        "type": "object",
+        "required": ["storage", "running", "replicas"],
+        "properties": {
+          "storage": {
+            "$ref": "#/components/schemas/StorageLabel"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "replicas": {
+            "type": "integer",
+            "enum": [0, 1]
+          }
+        }
+      },
+      "ActorRef": {
+        "type": "object",
+        "required": ["id", "username", "displayName", "role"],
+        "description": "Who did something, known by username; role is null when it is not known (the file uploader and custody events, a removed user, a system actor)",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}

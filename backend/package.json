@@ -15,6 +15,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
+    "seed:demo": "node scripts/seed-demo.ts",
     "lint": "oxlint --type-aware src/ test/",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
